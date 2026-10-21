@@ -1,14 +1,23 @@
-"""Meta tools: save, quit, restart_run."""
+"""Meta tools: save, quit, restart_run.
+
+During chargen, quit and restart_run are no-ops to prevent the model
+from accidentally quitting the game or ending the episode.
+"""
 
 import time
 
 from game.controller import press
 from game.screens import close_screen
+from memory.state import get_state
 from tools import Tool, ToolResult, register
 
 
 def _wait_for_render(seconds: float = 0.3) -> None:
     time.sleep(seconds)
+
+
+def _in_chargen() -> bool:
+    return get_state().phase == "chargen"
 
 
 class SaveTool(Tool):
@@ -20,7 +29,6 @@ class SaveTool(Tool):
     def execute(self) -> ToolResult:
         press("escape")
         _wait_for_render()
-        # In Qud's escape menu, 's' = save
         press("s")
         _wait_for_render()
         press("enter")
@@ -29,14 +37,18 @@ class SaveTool(Tool):
 
 class QuitTool(Tool):
     name = "quit"
-    description = "Quit to the main menu."
+    description = (
+        "Quit to the main menu. Only works during play, not during "
+        "character creation (no-op in chargen to prevent accidental quit)."
+    )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
 
     def execute(self) -> ToolResult:
+        if _in_chargen():
+            return ToolResult(text="Quit is not available during character creation. Use 'back' instead.")
         press("escape")
         _wait_for_render()
-        # In Qud's escape menu, 'q' = quit to menu
         press("q")
         _wait_for_render()
         press("enter")
@@ -46,14 +58,15 @@ class QuitTool(Tool):
 class RestartRunTool(Tool):
     name = "restart_run"
     description = (
-        "End the current run and start a new one. Signals the run manager "
-        "to begin a new episode."
+        "End the current run and start a new one. Only works during play, "
+        "not during character creation (no-op in chargen)."
     )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
 
     def execute(self) -> ToolResult:
-        # Signal the run manager via a module-level flag
+        if _in_chargen():
+            return ToolResult(text="Restart is not available during character creation. Keep going with chargen.")
         from run.manager import signal_restart
         signal_restart()
         return ToolResult(text="Signaled restart. The current episode will end.")

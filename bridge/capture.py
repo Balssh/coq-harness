@@ -1,67 +1,75 @@
-"""Screen capture via Windows Graphics Capture (WGC), by window title.
+"""Screen capture via Windows Graphics Capture (WGC), by window HWND.
 
 WGC captures the window even when fully occluded or off-screen.
 The latest frame is kept in memory; grab() returns it as PNG bytes.
+
+Uses windows-capture v2 API (WindowsCapture + start_free_threaded).
 """
 
 import io
 import threading
-import time
 
 import numpy as np
 import windows_capture
+import win32gui
 from PIL import Image
 
 
 class WindowCapture:
-    """Continuously captures a window by title using WGC."""
+    """Continuously captures a window by HWND using WGC."""
 
     def __init__(self, window_title: str) -> None:
         self.window_title = window_title
+        self._hwnd = win32gui.FindWindow(None, window_title)
+        if not self._hwnd:
+            raise RuntimeError(f"Window not found: {window_title!r}")
+
         self._lock = threading.Lock()
         self._latest_frame: np.ndarray | None = None  # HxWx4 BGRA
         self._frame_event = threading.Event()
-        self._running = False
-        self._capture_thread: threading.Thread | None = None
         self._error: str | None = None
+        self._capture: windows_capture.WindowsCapture | None = None
+        self._control: windows_capture.CaptureControl | None = None
 
     def start(self) -> None:
-        """Start the WGC capture session in a background thread."""
-        self._running = True
-        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self._capture_thread.start()
+        """Start the WGC capture session."""
+        self._capture = windows_capture.WindowsCapture(
+            window_hwnd=self._hwnd,
+            cursor_capture=False,
+            draw_border=False,
+        )
+        self._capture.frame_handler = self._on_frame
+        self._capture.closed_handler = self._on_closed
+        self._control = self._capture.start_free_threaded()
+
         # Wait for first frame (or error)
         self._frame_event.wait(timeout=10.0)
         if self._error:
             raise RuntimeError(f"WGC capture failed: {self._error}")
+        if self._latest_frame is None:
+            raise RuntimeError("WGC capture started but no frame received within 10s")
 
     def stop(self) -> None:
-        self._running = False
-        if self._capture_thread:
-            self._capture_thread.join(timeout=5.0)
+        if self._control is not None:
+            try:
+                self._control.stop()
+            except Exception:
+                pass
 
-    def _capture_loop(self) -> None:
-        try:
-            capture = windows_capture.WindowsGraphicsCapture(
-                window_name=self.window_title,
-            )
-            capture.start(self._on_frame)
-            while self._running:
-                time.sleep(0.1)
-            capture.stop()
-        except Exception as exc:
-            self._error = str(exc)
-            self._frame_event.set()
+    def _on_frame(self, frame, _ctrl) -> None:
+        """WGC callback — called on WGC's thread with a new frame.
 
-    def _on_frame(self, frame) -> None:
-        """WGC callback — called on WGC's thread with a new frame."""
-        # frame.buffer is a flat BGRA byte array; frame.width/height give dims
-        arr = np.frombuffer(frame.buffer, dtype=np.uint8).reshape(
-            frame.height, frame.width, 4
-        )
+        frame.frame_buffer is a numpy array HxWx4 BGRA uint8.
+        """
+        arr = frame.frame_buffer.copy()
         with self._lock:
-            self._latest_frame = arr.copy()
+            self._latest_frame = arr
         self._frame_event.set()
+
+    def _on_closed(self) -> None:
+        if self._latest_frame is None and self._error is None:
+            self._error = "Capture closed before first frame"
+            self._frame_event.set()
 
     def get_frame(self) -> np.ndarray:
         """Return the latest frame as HxWx4 BGRA numpy array.

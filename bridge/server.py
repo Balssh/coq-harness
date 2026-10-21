@@ -94,11 +94,23 @@ class BridgeServer:
         )
         print(f"[bridge] Log region: {log_region}, threshold: {diff_threshold}")
 
+    def _ensure_window(self) -> None:
+        """Re-find the window if the cached HWND is no longer valid."""
+        if not win32gui.IsWindow(self.hwnd):
+            new_hwnd = win32gui.FindWindow(None, self.window_title)
+            if new_hwnd:
+                print(f"[bridge] Window re-found: HWND {self.hwnd} -> {new_hwnd}")
+                self.hwnd = new_hwnd
+                self.input.hwnd = new_hwnd
+            else:
+                raise RuntimeError(f"Window not found: {self.window_title!r}")
+
     def handle_connection(self, conn: socket.socket, addr: tuple) -> None:
         """Handle one client connection (sequential command processing)."""
         print(f"[bridge] Client connected: {addr}")
         try:
             while True:
+                self._ensure_window()
                 payload = _recv_message(conn)
                 request = json.loads(payload.decode("utf-8"))
                 action = request.get("action", "")
@@ -193,6 +205,34 @@ class BridgeServer:
             self.capture.stop()
             sock.close()
 
+    def connect(self, host: str, port: int) -> None:
+        """Connect to a WSL relay instead of listening.
+
+        Used when the Windows firewall blocks inbound connections from WSL.
+        The bridge initiates an outbound connection to the relay, which then
+        pipes data between the bridge and the WSL harness.
+
+        Reconnects automatically if the relay or harness disconnects.
+        """
+        import time as _time
+        while True:
+            try:
+                print(f"[bridge] Connecting to relay at {host}:{port} ...")
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect((host, port))
+                print(f"[bridge] Connected to relay at {host}:{port}")
+                self.handle_connection(sock, (host, port))
+            except KeyboardInterrupt:
+                print("\n[bridge] Shutting down")
+                break
+            except (ConnectionError, socket.error, OSError) as exc:
+                print(f"[bridge] Connection lost: {exc}, retrying in 2s ...")
+                _time.sleep(2)
+            else:
+                print("[bridge] Client disconnected, waiting for relay ...")
+                _time.sleep(1)
+        self.capture.stop()
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -213,6 +253,13 @@ def main() -> None:
     )
     parser.add_argument("--diff-threshold", type=int, default=50)
     parser.add_argument("--poll-interval", type=float, default=0.05)
+    parser.add_argument(
+        "--connect",
+        type=str,
+        default=None,
+        metavar="HOST:PORT",
+        help="Connect to WSL relay at HOST:PORT instead of listening (for firewall workaround)",
+    )
     args = parser.parse_args()
 
     log_region = tuple(args.log_region)
@@ -222,7 +269,11 @@ def main() -> None:
         diff_threshold=args.diff_threshold,
         poll_interval=args.poll_interval,
     )
-    server.serve(host=args.host, port=args.port)
+    if args.connect:
+        host, port_str = args.connect.rsplit(":", 1)
+        server.connect(host, int(port_str))
+    else:
+        server.serve(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

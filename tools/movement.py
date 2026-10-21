@@ -81,10 +81,14 @@ class GoStairsTool(Tool):
     advances_turn = True
 
     def execute(self, direction: str) -> ToolResult:
-        # In Qud, '<' and '>' take stairs
-        key = "<" if direction == "up" else ">"
-        press(key)
-        return ToolResult(text=f"Went {direction} the stairs.")
+        # In Qud, '<' (shift+comma) goes up, '>' (shift+period) goes down
+        from game.controller import chord
+        if direction == "up":
+            chord(["shift", ","])
+            return ToolResult(text="Went up the stairs.")
+        else:
+            chord(["shift", "."])
+            return ToolResult(text="Went down the stairs.")
 
 
 class WaitTool(Tool):

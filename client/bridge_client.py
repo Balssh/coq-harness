@@ -29,7 +29,7 @@ class BridgeClient:
         self,
         host: str = "localhost",
         port: int = 9090,
-        timeout: float = 5.0,
+        timeout: float = 30.0,
     ) -> None:
         self.host = host
         self.port = port
@@ -124,7 +124,14 @@ class BridgeClient:
     def wait_for_change(self, timeout: float = 3.0) -> bool:
         """Block until the log region changes or timeout. Returns True if changed."""
         self._send_request({"action": "wait_for_change", "timeout": timeout})
-        result = self._recv_json()
+        # Use a longer socket timeout so the bridge has time to respond
+        sock = self._ensure_connected()
+        old_timeout = sock.gettimeout()
+        sock.settimeout(timeout + 5.0)
+        try:
+            result = self._recv_json()
+        finally:
+            sock.settimeout(old_timeout)
         return bool(result.get("changed", False))
 
     def __enter__(self) -> "BridgeClient":
@@ -153,7 +160,7 @@ def get_client() -> BridgeClient:
 def init_client(
     host: str = "localhost",
     port: int = 9090,
-    timeout: float = 5.0,
+    timeout: float = 30.0,
 ) -> BridgeClient:
     """Initialize and connect the singleton bridge client."""
     global _client

@@ -1,6 +1,12 @@
-"""Chargen tools: select, confirm, back, name_random.
+"""Chargen tools: select, confirm, next, back.
 
 Used during character creation. No turn clock — chargen has its own flow.
+
+Key bindings (verified in-game):
+- Arrow keys: navigate options within a screen
+- Enter (confirm): select the highlighted option
+- Num 9 (next): proceed to the next chargen screen (shown as [Num 9] Next)
+- Escape (back): go back to the previous screen
 """
 
 from game.controller import press
@@ -32,13 +38,33 @@ class SelectTool(Tool):
 
 class ConfirmTool(Tool):
     name = "confirm"
-    description = "Confirm the current selection (Enter). Used during character creation."
+    description = (
+        "Confirm the current selection (Enter). "
+        "Use this to select highlighted options, accept names, "
+        "and start the game from the starting-location screen."
+    )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
 
     def execute(self) -> ToolResult:
         press("enter")
         return ToolResult(text="Confirmed.")
+
+
+class NextTool(Tool):
+    name = "next"
+    description = (
+        "Proceed to the next character-creation screen (Num 9). "
+        "The bottom of the screen shows '[Num 9] Next' — use this to advance "
+        "between screens (e.g. Attributes → Customize → Starting Location). "
+        "Do NOT use this to select an option; use 'confirm' for that."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = False
+
+    def execute(self) -> ToolResult:
+        press("num_9")
+        return ToolResult(text="Advanced to next screen.")
 
 
 class BackTool(Tool):
@@ -52,23 +78,7 @@ class BackTool(Tool):
         return ToolResult(text="Went back.")
 
 
-class NameRandomTool(Tool):
-    name = "name_random"
-    description = (
-        "Accept a randomly generated character name. No typing needed. "
-        "Used at the end of character creation."
-    )
-    parameters = {"type": "object", "properties": {}}
-    advances_turn = False
-
-    def execute(self) -> ToolResult:
-        # In Qud chargen, there's usually a "random name" button or you just
-        # press Enter/tab to accept the random name
-        press("tab")
-        return ToolResult(text="Accepted random name.")
-
-
 register(SelectTool())
 register(ConfirmTool())
+register(NextTool())
 register(BackTool())
-register(NameRandomTool())

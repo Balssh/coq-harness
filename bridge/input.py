@@ -67,6 +67,19 @@ for _d in range(10):
 for _i in range(1, 13):
     VK[f"f{_i}"] = (win32con.VK_F1 + _i - 1, False)
 
+# Punctuation / OEM keys (raw VK codes — win32con doesn't export these)
+VK["."]  = (0xBE, False)   # . >   (VK_OEM_PERIOD)
+VK[","]  = (0xBC, False)   # , <   (VK_OEM_COMMA)
+VK[";"]  = (0xBA, False)   # ; :   (VK_OEM_1)
+VK["/"]  = (0xBF, False)   # / ?   (VK_OEM_2)
+VK["`"]  = (0xC0, False)   # ` ~   (VK_OEM_3)
+VK["["]  = (0xDB, False)   # [ {   (VK_OEM_4)
+VK["\\"] = (0xDC, False)   # \ |   (VK_OEM_5)
+VK["]"]  = (0xDD, False)   # ] }   (VK_OEM_6)
+VK["'"]  = (0xDE, False)   # ' "   (VK_OEM_7)
+VK["-"]  = (0xBD, False)   # - _   (VK_OEM_MINUS)
+VK["="]  = (0xBB, False)   # = +   (VK_OEM_PLUS)
+
 
 def _vk(name: str) -> tuple[int, bool]:
     if name not in VK:
@@ -129,13 +142,14 @@ _KEYEVENTF_EXTENDEDKEY = 0x0001
 
 
 def _send_input_key(vk: int, extended: bool, down: bool) -> None:
-    flags = _KEYEVENTF_SCANCODE
+    flags = 0
     if extended:
         flags |= _KEYEVENTF_EXTENDEDKEY
     if not down:
         flags |= _KEYEVENTF_KEYUP
     scan = win32api.MapVirtualKey(vk, 0)
-    ki = KEYBDINPUT(wVk=0, wScan=scan, dwFlags=flags, time=0, dwExtraInfo=None)
+    # Set both wVk and wScan — some engines check one or the other
+    ki = KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=flags, time=0, dwExtraInfo=None)
     inp = INPUT(type=_INPUT_KEYBOARD, union=_INPUT_UNION(ki=ki))
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
 
@@ -144,18 +158,36 @@ def _send_input_key(vk: int, extended: bool, down: bool) -> None:
 # Focus management for SendInput fallback
 # ---------------------------------------------------------------------------
 
+_ASFW_ANY = 0xFFFFFFFF
+
+# Functions missing from this pywin32 build — call via ctypes
+_GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
+_GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+_GetWindowThreadProcessId.restype = wintypes.DWORD
+
+_AttachThreadInput = ctypes.windll.user32.AttachThreadInput
+_AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+_AttachThreadInput.restype = wintypes.BOOL
+
+def _get_window_thread_id(hwnd: int) -> int:
+    pid = wintypes.DWORD()
+    return _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+
 def _force_foreground(hwnd: int) -> int:
     """Force the target window to the foreground. Returns previous foreground HWND."""
     prev = win32gui.GetForegroundWindow()
     if prev == hwnd:
         return prev
+    # Allow our process to steal foreground
+    ctypes.windll.user32.AllowSetForegroundWindow(_ASFW_ANY)
     # AttachThreadInput trick
     cur_thread = win32api.GetCurrentThreadId()
-    tgt_thread = win32gui.GetWindowThreadProcessId(hwnd, None)[0]
-    win32gui.AttachThreadInput(cur_thread, tgt_thread, True)
+    tgt_thread = _get_window_thread_id(hwnd)
+    _AttachThreadInput(cur_thread, tgt_thread, True)
     win32gui.BringWindowToTop(hwnd)
     win32gui.SetForegroundWindow(hwnd)
-    win32gui.AttachThreadInput(cur_thread, tgt_thread, False)
+    _AttachThreadInput(cur_thread, tgt_thread, False)
+    time.sleep(0.05)  # let the focus settle
     return prev
 
 
@@ -169,26 +201,18 @@ def _restore_foreground(prev_hwnd: int) -> None:
 # ---------------------------------------------------------------------------
 
 class InputInjector:
-    """Sends keys to a specific window by HWND."""
+    """Sends keys to a specific window by HWND.
+
+    Uses SendInput with focus management. PostMessage was tried first
+    but Unity/Qud ignores it (likely Raw Input / DirectInput backend).
+    """
 
     def __init__(self, hwnd: int) -> None:
         self.hwnd = hwnd
-        self._postmessage_ok = True  # optimistic; set False if PostMessage fails
 
     def send_chord(self, keys: list[str]) -> None:
         """Press all keys in order, release in reverse. ~30ms hold time."""
         vks = [_vk(k) for k in keys]
-        if self._postmessage_ok:
-            try:
-                for vk, ext in vks:
-                    _post_key(self.hwnd, vk, ext, down=True)
-                time.sleep(0.03)
-                for vk, ext in reversed(vks):
-                    _post_key(self.hwnd, vk, ext, down=False)
-                return
-            except Exception:
-                self._postmessage_ok = False
-        # Fallback: SendInput with focus management
         prev = _force_foreground(self.hwnd)
         try:
             for vk, ext in vks:
@@ -196,29 +220,22 @@ class InputInjector:
             time.sleep(0.03)
             for vk, ext in reversed(vks):
                 _send_input_key(vk, ext, down=False)
+            time.sleep(0.05)  # let the game process
         finally:
             _restore_foreground(prev)
 
     def key_down(self, key: str) -> None:
         vk, ext = _vk(key)
-        if self._postmessage_ok:
-            try:
-                _post_key(self.hwnd, vk, ext, down=True)
-                return
-            except Exception:
-                self._postmessage_ok = False
         prev = _force_foreground(self.hwnd)
-        _send_input_key(vk, ext, down=True)
-        _restore_foreground(prev)
+        try:
+            _send_input_key(vk, ext, down=True)
+        finally:
+            _restore_foreground(prev)
 
     def key_up(self, key: str) -> None:
         vk, ext = _vk(key)
-        if self._postmessage_ok:
-            try:
-                _post_key(self.hwnd, vk, ext, down=False)
-                return
-            except Exception:
-                self._postmessage_ok = False
         prev = _force_foreground(self.hwnd)
-        _send_input_key(vk, ext, down=False)
-        _restore_foreground(prev)
+        try:
+            _send_input_key(vk, ext, down=False)
+        finally:
+            _restore_foreground(prev)
