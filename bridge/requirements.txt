@@ -1,0 +1,6 @@
+# Windows-side bridge dependencies
+# Install on Windows: uv pip install -r bridge/requirements.txt
+pywin32>=306
+windows-capture>=0.3
+numpy>=1.24
+pillow>=10.0

@@ -1,0 +1,33 @@
+[project]
+name = "coq-harness"
+version = "0.1.0"
+description = "Harness that lets Mistral Large 4 play Caves of Qud from screenshots"
+requires-python = ">=3.10"
+dependencies = [
+    "pillow>=10.0",
+    "pydantic>=2.0",
+    "mistralai>=1.0",
+    "jsonschema>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+coq-harness = "main:main"
+coq-replay = "logging.replay:main"
+
+[tool.setuptools]
+packages = [
+    "client",
+    "game",
+    "tools",
+    "perception",
+    "memory",
+    "agent",
+    "loop",
+    "run",
+    "logging",
+]
