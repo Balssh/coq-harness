@@ -165,7 +165,7 @@ loop/
 - `tools/` (for tool execution)
 - `perception/` (for capture)
 - `memory/` (for state, transcript, journal)
-- `logging/recorder.py` (for recording)
+- `recording/recorder.py` (for recording)
 - `run/manager.py` (for episode lifecycle signals)
 
 ## Open Items

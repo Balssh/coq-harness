@@ -47,7 +47,7 @@ This is **not RL training**. It's an exploratory agent-capability demo: can the 
 7. `agent/`: prompts (`system_base.md` with distilled Qud manual — verify keys in-game via Esc→k, wiki is outdated; `system_creation.md`; `system_play.md`; few-shot), `schemas.py` (pydantic JSON output), `llm.py` (retry-on-invalid, fallback `wait`), `decide.py`
 8. `loop/`: `turn.py`, `phases.py` (creation → play), `watchdog.py` (stuck detection, budgets)
 9. `run/`: `manager.py` (episode lifecycle, death → new run), `creation.py` (model-led chargen, budget + same-screen watchdog)
-10. `logging/`: `recorder.py` + replay viewer (non-negotiable for debugging)
+10. `recording/`: `recorder.py` + replay viewer (non-negotiable for debugging)
 
 **Core principle**: tools are semantic, harness owns mechanics, model owns cognition. ML4 never emits raw keys — only validated symbolic tool calls.
 

@@ -153,7 +153,7 @@ run/
 - `agent/` (decide, prompts)
 - `tools/` (chargen tools: select, confirm, back, name_random)
 - `memory/` (state, transcript, journal)
-- `logging/recorder.py`
+- `recording/recorder.py`
 - `client/bridge_client.py` (wait_for_game)
 
 ## Open Items

@@ -6,7 +6,7 @@ Record everything that happens during an episode, and provide a way to replay it
 The replay viewer is **non-negotiable for debugging** — without it, you're blind
 to what the model actually did and why.
 
-## Recorder (`logging/recorder.py`)
+## Recorder (`recording/recorder.py`)
 
 ### What Gets Recorded
 
@@ -82,14 +82,14 @@ The recorder is a singleton, started at episode begin and stopped at episode end
 The turn loop calls recorder methods at each step. Tools can call
 `recorder.capture("label")` for intermediate frames.
 
-## Replay Viewer (`logging/replay.py` + `logging/viewer/`)
+## Replay Viewer (`recording/replay.py` + `recording/viewer/`)
 
 A single-page HTML/JS app served by a tiny local HTTP server.
 
 ### Usage
 
 ```bash
-python -m logging.replay runs/2026-10-20_episode-3/
+python -m recording.replay runs/2026-10-20_episode-3/
 ```
 
 ### Features
@@ -112,7 +112,7 @@ python -m logging.replay runs/2026-10-20_episode-3/
 ### File Layout
 
 ```
-logging/
+recording/
   __init__.py
   recorder.py          # Recorder class
   replay.py            # CLI entry point

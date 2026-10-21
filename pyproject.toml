@@ -17,7 +17,7 @@ dev = [
 
 [project.scripts]
 coq-harness = "main:main"
-coq-replay = "logging.replay:main"
+coq-replay = "recording.replay:main"
 
 [tool.setuptools]
 packages = [
@@ -29,5 +29,5 @@ packages = [
     "agent",
     "loop",
     "run",
-    "logging",
+    "recording",
 ]
