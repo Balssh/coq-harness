@@ -5,11 +5,18 @@ that can survive the early game. You have limited steps — don't overthink it.
 
 ## RECOMMENDED: Use Presets (Exact Flow)
 
-The fastest path is a **preset character**. Here is the exact verified flow:
+The fastest path is a **preset character** (one confirm skips the entire
+custom chargen tree). Recommended presets for episode 1:
+- **Marsh Taur** (Mutant Marauder) — tutorial character, 22 Str melee bruiser
+- **Praetorian Prime** (True Kin) — 22 Str/21 Toughness, rifle + slugs
+- **Gunwing** (Mutant Gunslinger) — 22 Agi ranged, kills from a distance
 
-1. **Main Menu** → `confirm()` — selects "New Game"
-2. **Game Mode** → `confirm()` — selects "Classic"
-3. **Character Type** → `confirm()` — selects "Preset [A]" (a pre-built character)
+Here is the exact verified flow:
+
+1. **Title screen** → report `"screen": "title"` → `confirm()` — selects "New Game"
+   (New Game is the DEFAULT cursor — just press Enter)
+2. **Mode select** → report `"screen": "mode_select"` → `confirm()` — selects "Classic"
+3. **Character Type** → report `"screen": "chargen"` → `confirm()` — selects a preset
 4. **Attributes screen** → `next()` — proceeds past the attributes summary
 5. **Customize screen (Name: <random>)** → `confirm()` — activates the name field
 6. **"Enter name:" prompt** → `confirm()` — accepts the random name
@@ -20,18 +27,25 @@ The fastest path is a **preset character**. Here is the exact verified flow:
 
 ### Critical Rules
 
-- **`confirm()` (Enter)** selects the highlighted option. Use it on menus,
-  the character-type screen, the name field, and the starting-location screen.
+- **`confirm()` (Enter)** selects the highlighted option. Use it on the title
+  screen (New Game), mode select (Classic), character-type screen, name field,
+  and starting-location screen.
 - **`next()` (Num 9)** advances to the next chargen screen. The bottom of the
   screen shows "[Num 9] Next". Use it on the Attributes and Customize screens.
 - **Do NOT press `confirm()` repeatedly on the same screen** — it will toggle
   the name field on/off without progressing.
 - **Do NOT use `select(left/right)` to switch tabs** — the tabs are not
   navigable with arrow keys during preset chargen. Use `next()` instead.
-- **Do NOT use `quit` or `restart_run`** — they are disabled during chargen.
-  If you see the main menu, use `confirm()` to select "New Game".
+- **Do NOT use `quit`, `restart_run`, or `abandon`** — they are disabled during
+  chargen. If you see the main menu (screen = "title"), use `confirm()` to
+  select "New Game".
+- If you see the **mode select** screen (screen = "mode_select"), press
+  `confirm()` to select Classic (the default).
 - The name is already randomly generated. You just need to `confirm()` twice
   on the name screen (once to activate, once to accept), then `next()`.
+- **If the screen doesn't match expectations** after a `confirm()`, don't spam
+  confirm — report the actual screen (`"title"`, `"mode_select"`, `"chargen"`,
+  or `"unknown"`) and let the watchdog handle it.
 
 ## Chargen Tools
 

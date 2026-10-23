@@ -1,4 +1,5 @@
-"""Interaction tools: get, drop, equip, unequip, quaff, eat, talk, trade.
+"""Interaction tools: get, drop, equip, unequip, quaff, eat, talk, trade,
+interact, choose_option.
 
 Menu-based tools follow the pattern:
   1. Open the relevant screen
@@ -6,12 +7,12 @@ Menu-based tools follow the pattern:
   3. Press the slot letter
   4. Handle sub-menus (model drives follow-up via screenshot)
 
-Keybindings are placeholders — verify in-game via Esc -> k.
+Keybindings verified against the Caves of Qud research brief (post-1.0).
 """
 
 import time
 
-from game.controller import press
+from game.controller import chord, press
 from game.screens import close_screen, open_screen
 from tools import Tool, ToolResult, register
 
@@ -202,42 +203,136 @@ class EatTool(Tool):
         return ToolResult(text=f"Ate item in slot {slot}.")
 
 
+class InteractTool(Tool):
+    name = "interact"
+    description = (
+        "Interact with something in an adjacent tile (Space + direction). "
+        "Opens a context menu with actions like: talk/chat, open, take, "
+        "butcher, harvest, etc. You must be adjacent to the target. "
+        "After calling this, look at the screenshot — a context menu or "
+        "dialogue will appear. Use choose_option to pick from numbered menus."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "direction": {
+                "type": "string",
+                "enum": ["up", "down", "left", "right",
+                          "up_left", "up_right", "down_left", "down_right"],
+                "description": "Direction of the thing to interact with",
+            }
+        },
+        "required": ["direction"],
+    }
+    advances_turn = True
+
+    def execute(self, direction: str) -> ToolResult:
+        # Space + direction = interact context menu in Qud
+        press("space")
+        time.sleep(0.1)
+        press(direction)
+        _wait_for_render()
+        return ToolResult(
+            text=f"Opened interaction menu toward {direction}. "
+                 "Look at the screenshot for available actions."
+        )
+
+
 class TalkTool(Tool):
     name = "talk"
     description = (
-        "Initiate conversation with an adjacent NPC. You must be next to "
-        "a creature to talk. Dialogue choices are handled via the screenshot."
+        "Initiate conversation with an adjacent NPC via the interact menu "
+        "(Space + direction). You must be next to a creature. After this, "
+        "a dialogue screen appears — use choose_option to pick responses "
+        "by their number."
     )
-    parameters = {"type": "object", "properties": {}}
+    parameters = {
+        "type": "object",
+        "properties": {
+            "direction": {
+                "type": "string",
+                "enum": ["up", "down", "left", "right",
+                          "up_left", "up_right", "down_left", "down_right"],
+                "description": "Direction of the NPC to talk to",
+            }
+        },
+        "required": ["direction"],
+    }
     advances_turn = True
 
-    def execute(self) -> ToolResult:
-        # In Qud, Ctrl+d or just 'd' in some contexts initiates conversation
-        # Actually, talking is done by pressing 'c' (chat) when adjacent
-        press("c")
+    def execute(self, direction: str) -> ToolResult:
+        # Open interact menu then the model picks "chat" from the context menu
+        press("space")
+        time.sleep(0.1)
+        press(direction)
         _wait_for_render()
         return ToolResult(
-            text="Initiated conversation. If a dialogue menu appeared, "
-                 "look at the screenshot and select a response."
+            text=f"Opened interaction menu toward {direction}. "
+                 "If a context menu appeared, use choose_option or send_keys "
+                 "to select 'Chat' or the talk option. "
+                 "If a dialogue screen appeared, use choose_option to respond."
         )
 
 
 class TradeTool(Tool):
     name = "trade"
     description = (
-        "Initiate trade with an adjacent NPC. Starts a conversation and "
-        "selects the trade option."
+        "Open trade with an adjacent NPC. Talks to them and selects the "
+        "trade option. From an open conversation, you can also press Tab "
+        "to open trade directly."
     )
-    parameters = {"type": "object", "properties": {}}
+    parameters = {
+        "type": "object",
+        "properties": {
+            "direction": {
+                "type": "string",
+                "enum": ["up", "down", "left", "right",
+                          "up_left", "up_right", "down_left", "down_right"],
+                "description": "Direction of the NPC to trade with",
+            }
+        },
+        "required": ["direction"],
+    }
     advances_turn = True
 
-    def execute(self) -> ToolResult:
-        press("c")
+    def execute(self, direction: str) -> ToolResult:
+        press("space")
+        time.sleep(0.1)
+        press(direction)
         _wait_for_render()
         return ToolResult(
-            text="Initiated conversation for trade. If a dialogue menu appeared "
-                 "with a trade option, select it."
+            text=f"Opened interaction menu toward {direction}. "
+                 "Select the trade option from the context menu, or if already "
+                 "in dialogue, the trade option / Tab key."
         )
+
+
+class ChooseOptionTool(Tool):
+    name = "choose_option"
+    description = (
+        "Select a numbered option in a dialogue or menu. Qud's post-1.0 UI "
+        "uses digit keys for dialogue choices — press the number shown next "
+        "to the option. Use this whenever you see numbered choices "
+        "(dialogue responses, context menus, etc.)."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "option": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9,
+                "description": "The option number to select (1-9)",
+            }
+        },
+        "required": ["option"],
+    }
+    advances_turn = False
+
+    def execute(self, option: int) -> ToolResult:
+        press(str(option))
+        _wait_for_render()
+        return ToolResult(text=f"Selected option {option}.")
 
 
 register(GetTool())
@@ -246,5 +341,7 @@ register(EquipTool())
 register(UnequipTool())
 register(QuaffTool())
 register(EatTool())
+register(InteractTool())
 register(TalkTool())
 register(TradeTool())
+register(ChooseOptionTool())

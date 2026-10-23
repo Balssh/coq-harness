@@ -118,7 +118,8 @@ class LookTool(Tool):
     advances_turn = False
 
     def execute(self) -> ToolResult:
-        press("l")  # 'l' = look in Qud
+        # 'L' (Shift+L) = look in Qud
+        chord(["shift", "l"])
         _wait_for_render()
         img = capture_region("viewport")
         return ToolResult(
@@ -145,10 +146,64 @@ class AltOverlayTool(Tool):
         return ToolResult(image=image_to_png_bytes(img))
 
 
+class JournalTool(Tool):
+    name = "journal"
+    description = (
+        "Open the journal screen (Shift+J) and return a screenshot. "
+        "Shows quest log, notes, and lore entries."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = False
+
+    def execute(self) -> ToolResult:
+        open_screen("journal")
+        _wait_for_render()
+        img = capture_region("viewport")
+        close_screen()
+        return ToolResult(image=image_to_png_bytes(img))
+
+
+class AbilitiesTool(Tool):
+    name = "abilities"
+    description = (
+        "Open the abilities screen (Shift+A) and return a screenshot. "
+        "Shows activated abilities, cooldowns, and the message log hotkey (Ctrl+M)."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = False
+
+    def execute(self) -> ToolResult:
+        open_screen("abilities")
+        _wait_for_render()
+        img = capture_region("viewport")
+        close_screen()
+        return ToolResult(image=image_to_png_bytes(img))
+
+
+class MutationsTool(Tool):
+    name = "mutations"
+    description = (
+        "Open the mutations screen (Shift+M) and return a screenshot. "
+        "Shows mutation powers and points available to spend."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = False
+
+    def execute(self) -> ToolResult:
+        open_screen("mutations")
+        _wait_for_render()
+        img = capture_region("viewport")
+        close_screen()
+        return ToolResult(image=image_to_png_bytes(img))
+
+
 register(CharacterSheetTool())
 register(InventoryTool())
 register(SkillsTool())
 register(QuestsTool())
+register(JournalTool())
+register(AbilitiesTool())
+register(MutationsTool())
 register(ReadLogTool())
 register(ReadStatsTool())
 register(LookTool())

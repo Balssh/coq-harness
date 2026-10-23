@@ -4,11 +4,15 @@ from enum import Enum
 
 
 class Phase(Enum):
-    CHARGEN = "chargen"
-    PLAY    = "play"
-    DEATH   = "death"
-    MENU    = "menu"
-    UNKNOWN = "unknown"
+    TITLE       = "title"
+    MODE_SELECT = "mode_select"
+    CHARGEN     = "chargen"
+    PLAY        = "play"
+    MENU        = "menu"
+    DIALOGUE    = "dialogue"
+    TRADE       = "trade"
+    DEATH       = "death"
+    UNKNOWN     = "unknown"
 
 
 _current_phase: Phase = Phase.CHARGEN

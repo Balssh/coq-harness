@@ -8,7 +8,15 @@ class Decision(BaseModel):
     tool: str = Field(description="Tool name to call, e.g. 'move'")
     args: dict = Field(default_factory=dict, description="Tool arguments")
     screen: str = Field(
-        description="Current screen: 'play', 'chargen', 'menu', 'death', or 'unknown'"
+        description=(
+            "Current screen. Report exactly what you see: "
+            "'title' (main menu), 'mode_select' (Classic/Roleplay choice), "
+            "'chargen' (character creation), 'play' (in-game world view), "
+            "'menu' (inventory/equipment/skills/sheet/quests/etc.), "
+            "'dialogue' (talking to an NPC), 'trade' (buying/selling), "
+            "'world_map' (overland map), 'death' (tombstone/ death summary), "
+            "or 'unknown' if you can't tell."
+        )
     )
     goal: str = Field(default="", description="Current high-level goal")
     hp: int | None = Field(default=None, description="Current HP from stats bar")

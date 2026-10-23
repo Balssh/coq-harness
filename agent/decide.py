@@ -41,18 +41,41 @@ def _format_tools() -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(phase: str) -> str:
-    """Build the full system prompt for the given phase."""
+_SCREEN_PROMPTS: dict[str, str] = {
+    "title": "system_title.md",
+    "mode_select": "system_title.md",
+    "dialogue": "system_dialogue.md",
+    "trade": "system_trade.md",
+    "death": "system_death.md",
+    "menu": "system_menu.md",
+}
+
+
+def build_system_prompt(phase: str, screen: str = "") -> str:
+    """Build the full system prompt for the given phase and screen.
+
+    Phase prompts (chargen/play) are always included. Screen-specific
+    add-ons are composed on top when the model reports a specific screen.
+    """
     base = _load_prompt("system_base.md")
     base = base.replace("{TOOLS}", _format_tools())
     fewshot = _load_prompt("fewshot.md")
 
+    parts = [base, fewshot]
+
     if phase == "chargen":
-        creation = _load_prompt("system_creation.md")
-        return f"{base}\n\n{fewshot}\n\n{creation}"
+        parts.append(_load_prompt("system_creation.md"))
     else:
-        play = _load_prompt("system_play.md")
-        return f"{base}\n\n{fewshot}\n\n{play}"
+        parts.append(_load_prompt("system_play.md"))
+
+    # Screen-specific add-on (only in play phase, not chargen)
+    if phase != "chargen" and screen in _SCREEN_PROMPTS:
+        try:
+            parts.append(_load_prompt(_SCREEN_PROMPTS[screen]))
+        except FileNotFoundError:
+            pass
+
+    return "\n\n".join(parts)
 
 
 def decide(
@@ -71,7 +94,7 @@ def decide(
     4. Parse + validate the Decision
     5. Retry on failure (max 3), fallback to `wait`
     """
-    system_prompt = build_system_prompt(phase)
+    system_prompt = build_system_prompt(phase, screen=state.screen)
 
     # In play phase the map is loaded — send cropped regions.
     # Otherwise (chargen, menus, loading) send the full screenshot.
