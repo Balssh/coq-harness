@@ -58,6 +58,7 @@ class Recorder:
             "turn": self._turn,
             "reasoning": decision.reasoning,
             "tool": decision.tool,
+            "key": decision.key,
             "args": decision.args,
             "screen": decision.screen,
             "goal": decision.goal,

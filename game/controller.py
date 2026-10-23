@@ -8,6 +8,15 @@ def press(key: str) -> None:
     get_client().keys([key])
 
 
+def press_seq(keys: list[str], delay: float = 0.08) -> None:
+    """Press keys sequentially within one focus session.
+
+    Unlike calling press() multiple times, this keeps the game window
+    focused across all keys. Use for Space+direction (talk/interact).
+    """
+    get_client().keys_seq(keys, delay=delay)
+
+
 def chord(keys: list[str]) -> None:
     """Press a key combination, e.g. ["shift", "up"]."""
     get_client().keys(keys)

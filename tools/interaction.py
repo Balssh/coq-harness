@@ -12,7 +12,7 @@ Keybindings verified against the Caves of Qud research brief (post-1.0).
 
 import time
 
-from game.controller import chord, press
+from game.controller import chord, press, press_seq
 from game.screens import close_screen, open_screen
 from tools import Tool, ToolResult, register
 
@@ -207,10 +207,14 @@ class InteractTool(Tool):
     name = "interact"
     description = (
         "Interact with something in an adjacent tile (Space + direction). "
-        "Opens a context menu with actions like: talk/chat, open, take, "
-        "butcher, harvest, etc. You must be adjacent to the target. "
-        "After calling this, look at the screenshot — a context menu or "
-        "dialogue will appear. Use choose_option to pick from numbered menus."
+        "Opens a context menu with actions like: chat, open, take, "
+        "butcher, harvest, etc. You MUST be adjacent to the target. "
+        "After calling this, look at the next screenshot: "
+        "(a) If a context menu appeared, select the action you want "
+        "(use choose_option for numbered options, or send_keys for "
+        "letter shortcuts). "
+        "(b) If the log says 'There's nothing you can interact with', "
+        "call close_menu and try a different direction or move closer."
     )
     parameters = {
         "type": "object",
@@ -228,9 +232,8 @@ class InteractTool(Tool):
 
     def execute(self, direction: str) -> ToolResult:
         # Space + direction = interact context menu in Qud
-        press("space")
-        time.sleep(0.1)
-        press(direction)
+        # Send as a sequence within one focus session to avoid focus loss
+        press_seq(["space", direction])
         _wait_for_render()
         return ToolResult(
             text=f"Opened interaction menu toward {direction}. "
@@ -241,10 +244,18 @@ class InteractTool(Tool):
 class TalkTool(Tool):
     name = "talk"
     description = (
-        "Initiate conversation with an adjacent NPC via the interact menu "
-        "(Space + direction). You must be next to a creature. After this, "
-        "a dialogue screen appears — use choose_option to pick responses "
-        "by their number."
+        "Talk to an adjacent NPC. Opens the interaction context menu "
+        "(Space + direction). You MUST be standing next to an NPC — "
+        "use look or alt_overlay first to confirm. "
+        "After calling this, look at the next screenshot: "
+        "(a) If a context menu appeared with options like 'Chat', 'Trade', "
+        "select 'Chat' — usually by pressing the number or letter shown "
+        "next to it (use choose_option or send_keys). "
+        "(b) If the message log says 'There's nothing you can interact "
+        "with', no NPC is there — this is just a log message (history), "
+        "NOT a popup. Move to a different NPC. Do NOT call close_menu for this. "
+        "(c) If a dialogue screen appeared directly, use choose_option "
+        "to pick a numbered response."
     )
     parameters = {
         "type": "object",
@@ -261,16 +272,15 @@ class TalkTool(Tool):
     advances_turn = True
 
     def execute(self, direction: str) -> ToolResult:
-        # Open interact menu then the model picks "chat" from the context menu
-        press("space")
-        time.sleep(0.1)
-        press(direction)
+        # Space + direction = interact context menu in Qud
+        # Send as a sequence within one focus session to avoid focus loss
+        press_seq(["space", direction])
         _wait_for_render()
         return ToolResult(
             text=f"Opened interaction menu toward {direction}. "
-                 "If a context menu appeared, use choose_option or send_keys "
-                 "to select 'Chat' or the talk option. "
-                 "If a dialogue screen appeared, use choose_option to respond."
+                 "Check the next screenshot: if a context menu appeared, "
+                 "select 'Chat' from it. If the log says nothing is there, "
+                 "move to a different NPC (the log message is history, not a popup)."
         )
 
 
@@ -296,9 +306,9 @@ class TradeTool(Tool):
     advances_turn = True
 
     def execute(self, direction: str) -> ToolResult:
-        press("space")
-        time.sleep(0.1)
-        press(direction)
+        # Space + direction = interact context menu in Qud
+        # Send as a sequence within one focus session to avoid focus loss
+        press_seq(["space", direction])
         _wait_for_render()
         return ToolResult(
             text=f"Opened interaction menu toward {direction}. "

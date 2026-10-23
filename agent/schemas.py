@@ -5,7 +5,18 @@ from pydantic import BaseModel, Field
 
 class Decision(BaseModel):
     reasoning: str = Field(description="Brief chain-of-thought about what to do and why")
-    tool: str = Field(description="Tool name to call, e.g. 'move'")
+    tool: str = Field(default="", description="Tool name to call, e.g. 'move'. Leave empty if using 'key' instead.")
+    key: str | None = Field(
+        default=None,
+        description=(
+            "Press a single key directly (alternative to calling a tool). "
+            "Use for: dismissing '>press [Space]' prompts (key='space'), "
+            "selecting a letter/number option in a menu (key='1', key='a'), "
+            "navigating a menu with arrows (key='up', key='down', key='enter', key='escape'). "
+            "Do NOT use for movement or combat — use the 'move' tool instead. "
+            "Raw key presses do NOT advance the turn clock."
+        ),
+    )
     args: dict = Field(default_factory=dict, description="Tool arguments")
     screen: str = Field(
         description=(

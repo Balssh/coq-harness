@@ -171,6 +171,37 @@ def decide(
             })
             continue
 
+        # Validate: either tool or key must be set
+        if decision.key:
+            # Direct key press — validate key name is reasonable
+            valid_keys = {
+                "up", "down", "left", "right",
+                "up_left", "up_right", "down_left", "down_right",
+                "enter", "escape", "space", "tab", "backspace",
+                "shift", "ctrl", "alt",
+                ".", ",", "-", "+", "=", "~", "`",
+                "num_0", "num_1", "num_2", "num_3", "num_4",
+                "num_5", "num_6", "num_7", "num_8", "num_9",
+            }
+            # Also allow single characters (letters, digits)
+            key = decision.key.lower()
+            if key not in valid_keys and not (len(key) == 1 and key.isalnum()):
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({
+                    "role": "user",
+                    "content": f"Invalid key: {decision.key!r}. Use a single key name like 'space', 'escape', 'enter', 'up', 'a', '1', etc.",
+                })
+                continue
+            return decision
+
+        if not decision.tool:
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": "You must set either 'tool' (to call a semantic tool) or 'key' (to press a key directly).",
+            })
+            continue
+
         # Validate tool exists
         tool = get_tool(decision.tool)
         if tool is None:

@@ -64,8 +64,9 @@ def _make_run_dir(episode_num: int) -> Path:
     return run_dir
 
 
-def run_episode(episode_num: int, bridge_host: str = "localhost", bridge_port: int = 9090) -> None:
-    """Run one full episode: chargen -> play -> death -> pause."""
+def run_episode(episode_num: int, bridge_host: str = "localhost", bridge_port: int = 9090, skip_chargen: bool = False) -> None:
+    """Run one full episode: chargen -> play -> death -> pause.
+    If skip_chargen is True, goes straight to play (for continuing an existing game)."""
     from run.creation import run_chargen
 
     # Connect to bridge
@@ -97,18 +98,32 @@ def run_episode(episode_num: int, bridge_host: str = "localhost", bridge_port: i
     get_watchdog().start_episode()
 
     try:
-        # Phase 1: Character creation
-        transition_to(Phase.CHARGEN)
-        update(phase="chargen")
-        chargen_ok = run_chargen()
-        if not chargen_ok:
-            print("[run] Chargen failed after all retries. Ending episode.")
-            recorder.save_meta(episode=episode_num, result="chargen_failed")
-            return
+        if skip_chargen:
+            # Skip chargen — continuing from an existing game in play mode
+            print("[run] Skipping chargen (continuing existing game)")
+            # Clear any lingering menus/dialogs from previous session
+            from game.controller import press
+            press("escape")
+            import time as _time
+            _time.sleep(0.5)
+            press("escape")
+            _time.sleep(0.5)
+            transition_to(Phase.PLAY)
+            update(phase="play", screen="play", turn_count=0)
+        else:
+            # Phase 1: Character creation
+            transition_to(Phase.CHARGEN)
+            update(phase="chargen")
+            chargen_ok = run_chargen()
+            if not chargen_ok:
+                print("[run] Chargen failed after all retries. Ending episode.")
+                recorder.save_meta(episode=episode_num, result="chargen_failed")
+                return
 
-        # Phase 2: Play
-        transition_to(Phase.PLAY)
-        update(phase="play")
+            # Phase 2: Play
+            transition_to(Phase.PLAY)
+            update(phase="play")
+
         _play_loop()
 
     finally:
@@ -177,16 +192,22 @@ def main() -> None:
     parser.add_argument("--host", default="localhost", help="Bridge host (default: localhost)")
     parser.add_argument("--port", type=int, default=9090, help="Bridge port (default: 9090)")
     parser.add_argument("--episode", type=int, default=1, help="Starting episode number")
+    parser.add_argument("--skip-chargen", action="store_true",
+                        help="Skip character creation — continue from current game state")
     args = parser.parse_args()
 
     episode_num = args.episode
     while True:
         try:
-            run_episode(episode_num, bridge_host=args.host, bridge_port=args.port)
+            run_episode(episode_num, bridge_host=args.host, bridge_port=args.port,
+                        skip_chargen=args.skip_chargen)
         except BridgeError as exc:
             print(f"\n[run] Bridge error: {exc}")
             print("[run] Is the bridge running on Windows? Restart it and try again.")
-            input("Press Enter to retry, or Ctrl+C to quit...")
+            try:
+                input("Press Enter to retry, or Ctrl+C to quit...")
+            except (KeyboardInterrupt, EOFError):
+                break
         except KeyboardInterrupt:
             print("\n[run] Interrupted by user.")
             break
@@ -194,11 +215,14 @@ def main() -> None:
             print(f"\n[run] Unexpected error: {exc}")
             import traceback
             traceback.print_exc()
-            input("Press Enter to continue to next episode, or Ctrl+C to quit...")
+            try:
+                input("Press Enter to continue to next episode, or Ctrl+C to quit...")
+            except (KeyboardInterrupt, EOFError):
+                break
 
         print(f"\n--- Episode {episode_num} ended ---")
         try:
             input("Press Enter to start a new episode, or Ctrl+C to quit...")
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             break
         episode_num += 1

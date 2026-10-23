@@ -14,7 +14,10 @@ class MoveTool(Tool):
     name = "move"
     description = (
         "Move one tile in a direction. The game world is a grid; you move "
-        "one tile at a time. Use this to explore, approach enemies, or retreat."
+        "one tile at a time. Use this to explore, approach enemies, or retreat. "
+        "In look mode (after calling 'look'), move() moves the LOOK CURSOR "
+        "instead of your character — move the cursor ONE tile, then stop and "
+        "read the description in the log before moving again."
     )
     parameters = {
         "type": "object",

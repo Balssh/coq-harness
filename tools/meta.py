@@ -182,9 +182,29 @@ class RestartEpisodeTool(Tool):
         )
 
 
+class CloseMenuTool(Tool):
+    name = "close_menu"
+    description = (
+        "Close an open menu or dialog (Escape). Use this when a menu screen, "
+        "dialogue, or context popup is visible on screen. "
+        "Does NOT clear the message log — the log is a scrolling history "
+        "and old messages stay visible. "
+        "Does NOT dismiss '>press [Space]' prompts — use send_keys(['space']) "
+        "for those. Does NOT advance the turn."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = False
+
+    def execute(self) -> ToolResult:
+        press("escape")
+        _wait_for_render(0.2)
+        return ToolResult(text="Pressed Escape — closed any open menu/dialog.")
+
+
 register(SaveTool())
 register(QuitTool())
 register(RestartRunTool())
 register(AbandonTool())
 register(SendKeysTool())
 register(RestartEpisodeTool())
+register(CloseMenuTool())

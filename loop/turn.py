@@ -11,7 +11,7 @@ from memory.journal import get_journal
 from memory.state import get_state, update
 from memory.transcript import get_transcript
 from perception.capture import capture
-from tools import execute_tool, get_tool
+from tools import execute_tool, get_tool, ToolResult
 
 WAIT_TIMEOUT = 3.0
 
@@ -22,6 +22,10 @@ WAIT_TIMEOUT = 3.0
 MAX_CONVERSATION_TURNS = 20
 _conversation: list[dict] = []
 
+# Anti-repeat tracking: consecutive identical actions
+_recent_actions: list[str] = []
+ANTI_REPEAT_THRESHOLD = 3
+
 
 def get_conversation() -> list[dict]:
     return _conversation
@@ -29,6 +33,7 @@ def get_conversation() -> list[dict]:
 
 def clear_conversation() -> None:
     _conversation.clear()
+    _recent_actions.clear()
 
 
 def run_turn(phase: str = "play") -> Decision:
@@ -78,8 +83,17 @@ def run_turn(phase: str = "play") -> Decision:
     if decision.journal_note:
         journal.add(decision.journal_note)
 
-    # 7. Execute tool
-    result = execute_tool(decision.tool, decision.args)
+    # 7. Execute action (tool or direct key press)
+    if decision.key:
+        # Direct key press — no tool, no turn advance
+        from game.controller import press
+        press(decision.key)
+        result = ToolResult(text=f"Pressed key: {decision.key}")
+        tool_advances_turn = False
+    else:
+        result = execute_tool(decision.tool, decision.args)
+        tool = get_tool(decision.tool)
+        tool_advances_turn = tool.advances_turn if tool else False
     recorder.record_tool_result(result)
 
     # Capture intermediate frame after action keys sent
@@ -88,11 +102,10 @@ def run_turn(phase: str = "play") -> Decision:
     else:
         recorder.capture("after-action")
 
-    # 8. Turn clock: wait for log change if tool advances turn
+    # 8. Turn clock: wait for log change if action advances turn
     turn_changed = False
     wait_time = 0.0
-    tool = get_tool(decision.tool)
-    if tool and tool.advances_turn:
+    if tool_advances_turn:
         t0 = time.monotonic()
         turn_changed = client.wait_for_change(timeout=WAIT_TIMEOUT)
         wait_time = time.monotonic() - t0
@@ -117,6 +130,32 @@ def run_turn(phase: str = "play") -> Decision:
         f"Hunger: {decision.hunger or '?'}, "
         f"Location: {decision.location or '?'}"
     )
+
+    # Anti-repeat warning: track consecutive identical actions
+    if decision.key:
+        action_str = f"key:{decision.key}"
+    else:
+        action_str = f"{decision.tool}:{json.dumps(decision.args, sort_keys=True)}"
+    _recent_actions.append(action_str)
+    # Keep only last 10 for analysis
+    if len(_recent_actions) > 10:
+        _recent_actions.pop(0)
+    # Count consecutive repeats of the most recent action
+    repeat_count = 0
+    for a in reversed(_recent_actions):
+        if a == action_str:
+            repeat_count += 1
+        else:
+            break
+    if repeat_count >= ANTI_REPEAT_THRESHOLD:
+        user_parts.append(
+            f"\n*** WARNING: You have called '{action_str}' {repeat_count} times "
+            f"in a row with no progress. STOP repeating this action. "
+            f"If movement is blocked, try a DIFFERENT direction. "
+            f"If talk/interact failed, try a different NPC or use 'look' first. "
+            f"If you are in a menu or dialogue, use the appropriate key or tool to "
+            f"exit. DO NOT repeat the same action again. ***"
+        )
     _conversation.append({
         "role": "assistant",
         "content": json.dumps(decision.model_dump(), ensure_ascii=False),

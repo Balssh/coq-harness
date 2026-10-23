@@ -142,6 +142,17 @@ class BridgeClient:
         self._send_request({"action": "keys", "keys": keys})
         self._recv_json()
 
+    def keys_seq(self, keys: list[str], delay: float = 0.08) -> None:
+        """Send sequential key presses within one focus session.
+
+        Unlike calling keys() multiple times (each does a full
+        force-foreground/restore cycle on the bridge), this sends all
+        keys sequentially while the game window stays focused.
+        Use for Space+direction (talk/interact) and similar sequences.
+        """
+        self._send_request({"action": "keys_seq", "keys": keys, "delay": delay})
+        self._recv_json()
+
     def key_down(self, key: str) -> None:
         self._send_request({"action": "key_down", "key": key})
         self._recv_json()

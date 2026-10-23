@@ -110,9 +110,14 @@ class ReadStatsTool(Tool):
 class LookTool(Tool):
     name = "look"
     description = (
-        "Enter look mode. Returns a screenshot of the viewport. In look mode, "
-        "use move() to move the cursor and inspect tiles. The description "
-        "of the tile under the cursor appears in the message log."
+        "Enter look mode (L key). The cursor starts ON YOUR CHARACTER. "
+        "Call this ONCE — calling it again toggles look mode OFF. "
+        "In look mode, use move(direction) to move the cursor and inspect tiles. "
+        "The description of the tile under the cursor appears in the message log "
+        "(e.g., 'Villager: a traveler', 'a stone wall', 'the way is blocked'). "
+        "Use this BEFORE calling talk or interact to verify what's on the target "
+        "tile. Press close_menu (Escape) to exit look mode. "
+        "Returns a screenshot of the viewport with the look cursor visible."
     )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False

@@ -27,8 +27,10 @@ quests, journal, abilities, or mutations). Menus do NOT advance the turn clock.
 
 ## Tools for Menus
 
+- `close_menu` — close the current menu/dialog (Escape). Use this when done
+  reading any menu, or when an interaction failed and you need to dismiss
+  a popup.
 - `send_keys` — send arrow keys, enter, escape, or letter shortcuts
 - `choose_option(n)` — press a digit for numbered options
 - The dedicated info tools (`inventory`, `character_sheet`, etc.) open these
   screens and return a screenshot for you to read.
-- Press Escape (via `send_keys`) when done — don't leave menus open.

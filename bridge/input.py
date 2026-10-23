@@ -265,3 +265,32 @@ class InputInjector:
             _send_input_key(vk, ext, down=False)
         finally:
             _restore_foreground(prev)
+
+    def send_sequence(self, keys: list[str], delay: float = 0.08) -> None:
+        """Send key presses sequentially within a single focus session.
+
+        Unlike calling send_chord multiple times (which does a full
+        force-foreground/restore cycle per call), this forces foreground
+        once, sends each key press-release with a small delay, then
+        restores foreground. Prevents focus loss between sequential keys
+        like Space + direction (talk/interact).
+        """
+        vks = [_vk(k) for k in keys]
+        prev = _force_foreground(self.hwnd)
+        pressed: list[tuple[int, bool]] = []
+        try:
+            for vk, ext in vks:
+                _send_input_key(vk, ext, down=True)
+                pressed.append((vk, ext))
+                time.sleep(0.03)
+                _send_input_key(vk, ext, down=False)
+                pressed.pop()
+                time.sleep(delay)
+            time.sleep(0.05)  # let the game process
+        finally:
+            for vk, ext in reversed(pressed):
+                try:
+                    _send_input_key(vk, ext, down=False)
+                except Exception:
+                    pass
+            _restore_foreground(prev)

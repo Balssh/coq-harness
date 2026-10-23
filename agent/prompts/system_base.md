@@ -12,6 +12,7 @@ Every turn, you must respond with a single JSON object:
 {
   "reasoning": "Brief chain-of-thought: what you see, what you're thinking, why you chose this action.",
   "tool": "move",
+  "key": null,
   "args": {"direction": "up"},
   "screen": "play",
   "goal": "Explore Joppa and find quests",
@@ -28,7 +29,8 @@ Every turn, you must respond with a single JSON object:
 | Field | Description |
 |-------|-------------|
 | `reasoning` | Your thought process. Be concise but explain your reasoning. |
-| `tool` | The name of the tool to call. Must be one of the available tools. |
+| `tool` | The name of the tool to call. Set to `""` if using `key` instead. |
+| `key` | Press a single key directly (alternative to `tool`). Use for: dismissing ">press [Space]" prompts (`"key": "space"`), selecting a letter/number in a menu (`"key": "1"`, `"key": "a"`), arrow-key menu navigation (`"key": "up"`, `"key": "enter"`, `"key": "escape"`). Do NOT use for movement or combat — use the `move` tool. Raw keys do NOT advance the turn clock. |
 | `args` | Arguments for the tool (object, may be empty `{}`). |
 | `screen` | What screen you're on. Report exactly: `"title"` (main menu), `"mode_select"` (game mode choice), `"chargen"` (character creation), `"play"` (in-game world), `"menu"` (inventory/equipment/skills/sheet/quests/journal/abilities/mutations screens), `"dialogue"` (talking to an NPC), `"trade"` (buying/selling with a merchant), `"world_map"` (overland travel map), `"death"` (tombstone/death summary), or `"unknown"`. |
 | `goal` | Your current high-level goal (e.g., "Find the mayor of Joppa", "Reach level 3"). |
@@ -38,6 +40,10 @@ Every turn, you must respond with a single JSON object:
 | `location` | Where you are (e.g., `"Joppa"`, `"Red Rock cave level 2"`). |
 | `journal_note` | Optional. Set to a string to write a note to your cross-episode journal. Use this to remember important things for future runs (quest details, dangers, build notes, etc.). Set to `null` to skip. |
 
+**Tool vs Key**: Use `tool` for semantic actions (move, talk, get, equip, etc.).
+Use `key` for simple key presses: dismissing prompts, selecting menu options by
+letter/number, navigating menus with arrows. Never use `key` for movement or combat.
+
 ## The Screen
 
 You receive images of the game screen:
@@ -46,6 +52,15 @@ You receive images of the game screen:
   your character (`@`), enemies, items, terrain, etc.
 - **Message log** (always sent): The right-side panel with recent game messages.
   New messages appear when a turn resolves (combat results, item pickups, etc.).
+  **IMPORTANT**: The log is a SCROLLING HISTORY. Old messages stay visible and do
+  NOT disappear. A message like "There's nothing you can interact with" in the
+  log is from a PAST turn — it is NOT a popup. Do NOT try to dismiss log messages.
+- **">press [Space]" prompt**: If you see ">press [Space]" at the bottom of the
+  message log, the game is waiting for input. Usually press Space (`"key": "space"`).
+  **BUT** if you also see numbered dialogue options (1), 2), 3)...) on screen,
+  Space will NOT advance — press a number key instead (`"key": "1"`, `"key": "2"`, etc.)
+  or use `choose_option(n)`. If Space doesn't change the screen after 2 tries,
+  try `"key": "enter"`, then try number keys if options are visible.
 - **Stats bar** (at episode start, every 10 turns, and on request via `read_stats`):
   Bottom strip showing HP, hunger, level, AV, DV, and other stats.
 - **Abilities bar** (same schedule as stats bar): Shows available abilities/commands.
@@ -74,9 +89,24 @@ You receive images of the game screen:
 - Some enemies are much stronger than you — learn to flee.
 
 ### Interaction
-- **Talk/Interact**: stand next to an NPC and use `talk(direction)` or `interact(direction)` to open the context menu (chat, open, take, butcher, etc.).
-- **Dialogue**: when talking to an NPC, options are NUMBERED. Use `choose_option(n)` to pick by number. Press the digit — arrow-key navigation is unreliable.
-- **Trade**: from a conversation, select "Let's Trade" or press Tab. The trade screen has two panes — select items to exchange.
+- **Finding NPCs**: NPCs are colored symbols on the map. Use `alt_overlay` to see
+  names, or `look` to inspect tiles. Blue/purple symbols are usually villagers.
+- **Checking proximity**: use `look` before `talk`/`interact`. The look cursor
+  starts on YOUR character — move it toward the target and read the description
+  in the log to confirm what's on that tile.
+- **Talking**: move adjacent to an NPC, then `talk(direction)` to open the
+  interaction menu. If a context menu appears, select "Chat" from it.
+  If the log says "nothing you can interact with", use `look` to check what's
+  actually on that tile before trying again.
+- **Dialogue**: options are NUMBERED. Use `choose_option(n)` to pick by number.
+  Space does NOT work in dialogue — use number keys or choose_option.
+  Press `close_menu` (Escape) to exit a dialogue when done.
+- **Failed interactions**: if `talk` or `interact` shows "nothing you can interact
+  with" in the log, call `close_menu` immediately — do NOT retry the same direction.
+- **Blocked movement**: if the log says "the way is blocked", DO NOT repeat
+  that direction. Pick a different direction immediately.
+- **Trade**: from a conversation, select "Let's Trade" or press Tab. The trade
+  screen has two panes — select items to exchange.
 - **Pick up**: stand on an item and use `get` (or walk onto it).
 
 ### Items
@@ -106,6 +136,9 @@ You receive images of the game screen:
 - **Thirst**: drink water. Dehydration is deadly. The game auto-drinks when "Thirsty" by default.
 - **HP**: heals slowly when resting. Use `wait_until_healed` for efficient recovery.
 - **Rest**: use `rest` to pass turns and heal.
+- **Sitting**: if your character sits on a cushion/floor, you may be stuck. Check the
+  active effects bar for "sitting". To stand up, set `"key": "s"` (toggles sit/stand).
+  Always stand up before trying to move.
 
 ### World
 - **Joppa**: the starting town. Friendly. Has quests from NPCs (talk to everyone).

@@ -215,6 +215,15 @@ class BridgeServer:
                 self.input.send_chord(keys)
                 _send_json(conn, {"status": "ok"})
 
+            elif action == "keys_seq":
+                keys = request.get("keys", [])
+                if not isinstance(keys, list):
+                    raise ValueError("'keys' must be a list of key names")
+                delay = float(request.get("delay", 0.08))
+                self.differ.reset_baseline()
+                self.input.send_sequence(keys, delay=delay)
+                _send_json(conn, {"status": "ok"})
+
             elif action == "key_down":
                 key = request.get("key", "")
                 self.differ.reset_baseline()
