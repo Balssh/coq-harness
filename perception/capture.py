@@ -7,7 +7,6 @@ from PIL import Image
 from client.bridge_client import get_client
 from perception.regions import (
     LOG_RECENT_HEIGHT,
-    LOG_REGION,
     Perception,
     REGIONS,
 )
@@ -28,17 +27,17 @@ def capture() -> Perception:
     full = _png_to_image(png)
 
     viewport = _crop(full, REGIONS["viewport"])
-    log_full = _crop(full, LOG_REGION)
+    log_full = _crop(full, REGIONS["log"])
     # Crop log to recent lines (bottom of the log region)
     lw, lh = log_full.size
     log = log_full.crop((0, max(0, lh - LOG_RECENT_HEIGHT), lw, lh))
-    stats = _crop(full, REGIONS["stats"])
+    top_status = _crop(full, REGIONS["top_status"])
     abilities = _crop(full, REGIONS["abilities"])
 
     return Perception(
         viewport=viewport,
         log=log,
-        stats=stats,
+        top_status=top_status,
         abilities=abilities,
         full=full,
     )

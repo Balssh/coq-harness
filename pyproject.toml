@@ -19,7 +19,11 @@ dev = [
 coq-harness = "main:main"
 coq-replay = "recording.replay:main"
 
+[tool.uv]
+package = true
+
 [tool.setuptools]
+py-modules = ["main"]
 packages = [
     "client",
     "game",

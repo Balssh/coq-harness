@@ -73,6 +73,10 @@ def decide(
     """
     system_prompt = build_system_prompt(phase)
 
+    # In play phase the map is loaded — send cropped regions.
+    # Otherwise (chargen, menus, loading) send the full screenshot.
+    in_play = state.screen == "play"
+
     # Build the current turn's user message
     turn_text_parts = []
     if transcript:
@@ -88,28 +92,44 @@ def decide(
         f"HP: {state.hp or '?'}/{state.max_hp or '?'}\n"
         f"Hunger: {state.hunger or '(unknown)'}\n"
     )
-    turn_text_parts.append(
-        "\n## Your Turn\n"
-        "Look at the images below (viewport = game world, log = message log).\n"
-        "Respond with a single JSON object as described in the system prompt."
-    )
+    if in_play:
+        turn_text_parts.append(
+            "\n## Your Turn\n"
+            "Look at the images below (viewport = game world, log = message log).\n"
+            "Respond with a single JSON object as described in the system prompt."
+        )
+    else:
+        turn_text_parts.append(
+            "\n## Your Turn\n"
+            "Look at the full game screen image below.\n"
+            "Respond with a single JSON object as described in the system prompt."
+        )
     turn_text = "\n\n".join(turn_text_parts)
 
-    # Determine which images to send
+    # Determine which images to send.
     send_all = state.turn_count == 0 or state.turn_count % 10 == 0
-    images: dict[str, bytes] = {
-        "viewport": image_to_png_bytes(perception.viewport),
-        "log": image_to_png_bytes(perception.log),
-    }
-    labels = {
-        "viewport": "Game Viewport (the tile-based world)",
-        "log": "Message Log (recent game messages)",
-    }
-    if send_all:
-        images["stats"] = image_to_png_bytes(perception.stats)
-        images["abilities"] = image_to_png_bytes(perception.abilities)
-        labels["stats"] = "Stats Bar (HP, hunger, level, AV, DV — bottom of screen)"
-        labels["abilities"] = "Abilities Bar (available commands — bottom of screen)"
+
+    if in_play:
+        images: dict[str, bytes] = {
+            "viewport": image_to_png_bytes(perception.viewport),
+            "log": image_to_png_bytes(perception.log),
+        }
+        labels = {
+            "viewport": "Game Viewport (the tile-based world)",
+            "log": "Message Log (recent game messages)",
+        }
+        if send_all:
+            images["top_status"] = image_to_png_bytes(perception.top_status)
+            images["abilities"] = image_to_png_bytes(perception.abilities)
+            labels["top_status"] = "Top Status Bar (HP, level, XP, temperature, time, date)"
+            labels["abilities"] = "Abilities Bar (ability icons with hotkeys — bottom of screen)"
+    else:
+        images = {
+            "full": image_to_png_bytes(perception.full),
+        }
+        labels = {
+            "full": "Full Game Screen",
+        }
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation)
