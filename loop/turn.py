@@ -15,7 +15,11 @@ from tools import execute_tool, get_tool
 
 WAIT_TIMEOUT = 3.0
 
-# Conversation context (grows unbounded for the demo)
+# Conversation context — bounded to prevent unbounded token growth.
+# Each turn adds 2 messages (assistant + user). We keep the most recent
+# MAX_CONVERSATION_TURNS pairs, which is enough for short-term continuity
+# while the transcript + journal provide longer-term context.
+MAX_CONVERSATION_TURNS = 20
 _conversation: list[dict] = []
 
 
@@ -121,5 +125,10 @@ def run_turn(phase: str = "play") -> Decision:
         "role": "user",
         "content": "\n".join(user_parts),
     })
+
+    # Trim conversation to bounded window (keep most recent N turn-pairs)
+    max_messages = MAX_CONVERSATION_TURNS * 2
+    if len(_conversation) > max_messages:
+        _conversation[:] = _conversation[-max_messages:]
 
     return decision

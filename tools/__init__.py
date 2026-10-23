@@ -97,3 +97,4 @@ def image_to_png_bytes(img: Image.Image) -> bytes:
 
 # Import all tool modules to trigger registration
 from tools import movement, interaction, info, meta, chargen  # noqa: E402, F401
+

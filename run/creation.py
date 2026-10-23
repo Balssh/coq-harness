@@ -72,6 +72,10 @@ def _chargen_turn() -> str:
                    f"Tool result: {result.text}",
     })
 
+    # Bounded conversation — keep last 40 messages (20 turn-pairs)
+    if len(_chargen_conversation) > 40:
+        _chargen_conversation[:] = _chargen_conversation[-40:]
+
     return decision.screen
 
 
@@ -122,17 +126,29 @@ def _chargen_loop() -> bool:
 
 
 def _quit_to_menu_and_restart() -> None:
-    """Quit to main menu and start a new game (for chargen retry)."""
+    """Quit to main menu and start a new game (for chargen retry).
+
+    Sequence: Esc -> Save and Quit (or Abandon) -> title -> New Game (Enter)
+    -> mode select -> Classic (Enter) -> preset/chargen screen.
+    """
     from game.controller import press
     import time
 
     print("[chargen] Quitting to menu...")
     press("escape")
     time.sleep(0.5)
-    press("q")  # quit to menu
+    # In the Esc menu, navigate to "Save and Quit" or "Quit to Menu"
+    # The exact menu position varies — try the common path
+    press("q")  # 'q' often = quit in Qud's menu
     time.sleep(0.5)
     press("enter")
     time.sleep(1.0)
-    # Now at main menu — select "New Game"
+    # Confirm quit if asked
+    press("enter")
+    time.sleep(1.5)
+    # Now at main menu — New Game is the default cursor, press Enter
+    press("enter")
+    time.sleep(1.0)
+    # Mode select — Classic is default, press Enter
     press("enter")
     time.sleep(1.0)

@@ -1,8 +1,9 @@
-"""Movement tools: move, rest, go_stairs, auto_explore, wait."""
+"""Movement tools: move, rest, go_stairs, auto_explore, wait,
+wait_until_healed, move_to_zone_edge."""
 
 import time
 
-from game.controller import press
+from game.controller import chord, press
 from tools import Tool, ToolResult, register
 
 _DIRECTIONS = ["up", "down", "left", "right",
@@ -81,13 +82,13 @@ class GoStairsTool(Tool):
     advances_turn = True
 
     def execute(self, direction: str) -> ToolResult:
-        # In Qud, '<' (shift+comma) goes up, '>' (shift+period) goes down
-        from game.controller import chord
+        # In Qud: '-' goes up (<), '+' (shift+=) goes down (>)
         if direction == "up":
-            chord(["shift", ","])
+            press("-")
             return ToolResult(text="Went up the stairs.")
         else:
-            chord(["shift", "."])
+            from game.controller import chord
+            chord(["shift", "="])
             return ToolResult(text="Went down the stairs.")
 
 
@@ -108,33 +109,80 @@ class WaitTool(Tool):
 class AutoExploreTool(Tool):
     name = "auto_explore"
     description = (
-        "Automatically explore the current level. The harness will move you "
-        "to unexplored adjacent tiles until none remain or you are interrupted. "
-        "Use when you want to systematically discover the area."
+        "Trigger Qud's built-in auto-explore (bound key). The game moves you "
+        "automatically, exploring unvisited tiles. Auto-explore stops when it "
+        "spots a hostile, finds something interesting, or finishes. It advances "
+        "MANY turns at once — the message log will show why it stopped "
+        "(e.g. 'Autoexplore interrupted: hostile spotted'). Use this to "
+        "systematically clear a level instead of moving tile by tile."
     )
     parameters = {"type": "object", "properties": {}}
     advances_turn = True
 
     def execute(self) -> ToolResult:
-        # Harness-side exploration loop.
-        # For now, a simple implementation: move in a spiral-ish pattern.
-        # A more sophisticated version would track visited tiles via screenshots.
-        # This is a placeholder that does a basic sweep.
-        from client.bridge_client import get_client
-        client = get_client()
+        # Qud's auto-explore is bound to a key the player sets; the default
+        # binding in modern Qud is typically 'e' but is remappable. We send
+        # the explore command via the game's autoact system.
+        # The exact key varies — this sends the most common default.
+        # TODO: verify in-game and update. Common defaults: 'e' or a function key.
+        press("e")
+        return ToolResult(
+            text="Triggered auto-explore. The game will explore automatically. "
+                 "Check the message log for the stop reason when it finishes."
+        )
 
-        # Simple sweep: try each direction, wait for change, continue
-        # This is intentionally simple — the model can interrupt by calling
-        # another tool on the next turn.
-        pattern = ["up", "right", "down", "left"] * 3  # rough sweep
-        moved = 0
-        for direction in pattern:
-            press(direction)
-            changed = client.wait_for_change(timeout=2.0)
-            if changed:
-                moved += 1
-            # If no change, we probably hit a wall — try next direction
-        return ToolResult(text=f"Auto-explored: moved {moved} tiles in a sweep pattern.")
+
+class WaitUntilHealedTool(Tool):
+    name = "wait_until_healed"
+    description = (
+        "Rest until fully healed (or nearly so). Uses Qud's 'wait until healed' "
+        "command (~ key). Advances many turns at once. The game stops resting "
+        "when you are healed or when something interrupts you (enemy approaches, "
+        "etc.). Use this to recover HP safely between fights."
+    )
+    parameters = {"type": "object", "properties": {}}
+    advances_turn = True
+
+    def execute(self) -> ToolResult:
+        # '~' is shift+` (backtick) in Qud = wait until healed
+        chord(["shift", "`"])
+        return ToolResult(
+            text="Waiting until healed. The game will rest until HP is recovered "
+                 "or something interrupts."
+        )
+
+
+class MoveToZoneEdgeTool(Tool):
+    name = "move_to_zone_edge"
+    description = (
+        "Travel to the edge of the current zone in a cardinal direction. "
+        "Uses Shift+Enter + direction — the game auto-pathfinds you to that "
+        "edge and loads the adjacent zone. This is the overland travel "
+        "primitive: chain calls to walk between nearby zones (e.g. Joppa to "
+        "the desert to Red Rock). Only N/S/E/W — no diagonals."
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "direction": {
+                "type": "string",
+                "enum": ["up", "down", "left", "right"],
+                "description": "Cardinal direction toward the zone edge",
+            }
+        },
+        "required": ["direction"],
+    }
+    advances_turn = True
+
+    def execute(self, direction: str) -> ToolResult:
+        # Shift+Enter + direction = travel to zone edge
+        chord(["shift", "enter"])
+        time.sleep(0.1)
+        press(direction)
+        return ToolResult(
+            text=f"Traveling to the {direction} zone edge. "
+                 "This may take many turns — the game auto-pathfinds."
+        )
 
 
 register(MoveTool())
@@ -142,3 +190,5 @@ register(RestTool())
 register(GoStairsTool())
 register(WaitTool())
 register(AutoExploreTool())
+register(WaitUntilHealedTool())
+register(MoveToZoneEdgeTool())
