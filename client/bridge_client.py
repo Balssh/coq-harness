@@ -8,6 +8,8 @@ import json
 import socket
 import struct
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
 
 class BridgeError(Exception):
     """Raised on any bridge communication failure."""
@@ -43,10 +45,17 @@ class BridgeClient:
             self._sock = socket.create_connection(
                 (self.host, self.port), timeout=self.timeout
             )
+            # Length-prefixed request/response — don't let Nagle batch them
+            self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except (ConnectionRefusedError, OSError, socket.timeout) as exc:
             raise BridgeError(
                 f"Cannot connect to bridge at {self.host}:{self.port}: {exc}"
             ) from exc
+
+    def reconnect(self) -> None:
+        """Drop the current connection (if any) and connect again."""
+        self.close()
+        self.connect()
 
     def close(self) -> None:
         if self._sock is not None:
@@ -89,6 +98,26 @@ class BridgeClient:
             raise BridgeError(f"Bridge error: {obj['error']}")
         return obj
 
+    def _recv_binary(self, what: str) -> bytes:
+        """Receive a payload that should be raw bytes (PNG).
+
+        The bridge answers grab/grab_region with raw PNG bytes, but on
+        failure it sends a JSON error object instead. Detect that and raise
+        instead of returning JSON bytes masquerading as an image.
+        """
+        payload = self._recv_response()
+        if payload.startswith(_PNG_MAGIC):
+            return payload
+        try:
+            obj = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise BridgeError(
+                f"Bridge returned a malformed {what} payload ({len(payload)} bytes)"
+            ) from None
+        if isinstance(obj, dict) and "error" in obj:
+            raise BridgeError(f"Bridge error: {obj['error']}")
+        raise BridgeError(f"Bridge returned an unexpected {what} payload: {payload[:200]!r}")
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -101,12 +130,12 @@ class BridgeClient:
     def grab(self) -> bytes:
         """Full window frame as PNG bytes."""
         self._send_request({"action": "grab"})
-        return self._recv_response()
+        return self._recv_binary("grab")
 
     def grab_region(self, x: int, y: int, w: int, h: int) -> bytes:
         """Cropped region as PNG bytes. (x, y) = top-left in window coords."""
         self._send_request({"action": "grab_region", "x": x, "y": y, "w": w, "h": h})
-        return self._recv_response()
+        return self._recv_binary("grab_region")
 
     def keys(self, keys: list[str]) -> None:
         """Send a key chord, e.g. ["shift", "up"]."""

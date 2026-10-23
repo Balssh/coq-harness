@@ -1,7 +1,10 @@
 """Input injection for the Qud window.
 
-PostMessage-first (zero focus steal), with a SendInput fallback that
-temporarily attaches to the foreground thread.
+SendInput with temporary focus attach. PostMessage(WM_KEYDOWN) was tried
+first but Unity/Qud ignores it (Raw Input / DirectInput backend), so input
+goes through SendInput, which requires the window to be foreground for the
+moment of the keystroke. The previous foreground window is restored after
+every chord.
 """
 
 import ctypes
@@ -174,7 +177,13 @@ def _get_window_thread_id(hwnd: int) -> int:
     return _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
 
 def _force_foreground(hwnd: int) -> int:
-    """Force the target window to the foreground. Returns previous foreground HWND."""
+    """Force the target window to the foreground. Returns previous foreground HWND.
+
+    Raises RuntimeError if the window is gone or the focus switch fails —
+    sending input to the wrong window is worse than failing loudly.
+    """
+    if not win32gui.IsWindow(hwnd):
+        raise RuntimeError(f"Window no longer exists (HWND={hwnd})")
     prev = win32gui.GetForegroundWindow()
     if prev == hwnd:
         return prev
@@ -188,12 +197,17 @@ def _force_foreground(hwnd: int) -> int:
     win32gui.SetForegroundWindow(hwnd)
     _AttachThreadInput(cur_thread, tgt_thread, False)
     time.sleep(0.05)  # let the focus settle
+    if win32gui.GetForegroundWindow() != hwnd:
+        raise RuntimeError(f"Failed to focus window (HWND={hwnd})")
     return prev
 
 
 def _restore_foreground(prev_hwnd: int) -> None:
-    if prev_hwnd:
-        win32gui.SetForegroundWindow(prev_hwnd)
+    if prev_hwnd and win32gui.IsWindow(prev_hwnd):
+        try:
+            win32gui.SetForegroundWindow(prev_hwnd)
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -211,17 +225,29 @@ class InputInjector:
         self.hwnd = hwnd
 
     def send_chord(self, keys: list[str]) -> None:
-        """Press all keys in order, release in reverse. ~30ms hold time."""
+        """Press all keys in order, release in reverse. ~30ms hold time.
+
+        Never leaves keys held: if anything fails mid-chord, all keys that
+        are still down are released before the exception propagates.
+        """
         vks = [_vk(k) for k in keys]
         prev = _force_foreground(self.hwnd)
+        pressed: list[tuple[int, bool]] = []
         try:
             for vk, ext in vks:
                 _send_input_key(vk, ext, down=True)
+                pressed.append((vk, ext))
             time.sleep(0.03)
             for vk, ext in reversed(vks):
                 _send_input_key(vk, ext, down=False)
+                pressed.pop()
             time.sleep(0.05)  # let the game process
         finally:
+            for vk, ext in reversed(pressed):
+                try:
+                    _send_input_key(vk, ext, down=False)
+                except Exception:
+                    pass
             _restore_foreground(prev)
 
     def key_down(self, key: str) -> None:

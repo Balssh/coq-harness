@@ -7,8 +7,18 @@ Protocol:
   [4 bytes: uint32 big-endian payload length][payload bytes]
 
   Requests are JSON with an "action" field.
-  Responses to grab/grab_region are raw PNG bytes.
+  Responses to grab/grab_region are raw PNG bytes (or a JSON error object).
   All other responses are JSON.
+
+Reliability:
+- The bridge can start before the Qud window exists; the window is attached
+  lazily on the first request that needs it, and re-attached if the window
+  is re-created (new HWND).
+- A failed request (bad JSON, missing window, capture error) returns a JSON
+  error and keeps the session alive. Only a dead socket ends a session.
+- Commands are serialized with a lock: input is global and the frame-differ
+  baseline is shared, so concurrent connections must not interleave
+  keys/wait_for_change.
 """
 
 import argparse
@@ -70,121 +80,166 @@ class BridgeServer:
     ) -> None:
         self.window_title = window_title
         self.log_region = log_region
+        self.diff_threshold = diff_threshold
+        self.poll_interval = poll_interval
         self._start_time = time.monotonic()
 
-        # Find the window
-        self.hwnd = win32gui.FindWindow(None, window_title)
-        if not self.hwnd:
-            raise RuntimeError(f"Window not found: {window_title!r}")
+        # Serializes command dispatch. Input is global and the differ
+        # baseline is shared state, so commands must not interleave.
+        self._cmd_lock = threading.Lock()
 
-        print(f"[bridge] Found window {window_title!r} (HWND={self.hwnd})")
+        # Window/capture/input are attached lazily: the bridge may start
+        # before Qud is launched.
+        self.hwnd: int | None = None
+        self.capture: WindowCapture | None = None
+        self.input: InputInjector | None = None
+        self.differ: FrameDiffer | None = None
 
-        # Start capture
-        self.capture = WindowCapture(window_title)
-        self.capture.start()
-        print("[bridge] WGC capture started")
+        hwnd = win32gui.FindWindow(None, window_title)
+        if hwnd:
+            self._attach_window(hwnd)
+        else:
+            print(f"[bridge] Window {window_title!r} not found yet; will attach on first request")
 
-        # Set up input + frame diff
-        self.input = InputInjector(self.hwnd)
+    # ------------------------------------------------------------------
+    # Window / capture lifecycle
+    # ------------------------------------------------------------------
+
+    def _attach_window(self, hwnd: int) -> None:
+        """(Re)create capture, input, and differ for the given HWND."""
+        self.hwnd = hwnd
+        capture = WindowCapture(self.window_title, hwnd=hwnd)
+        capture.start()
+        old_capture = self.capture
+        self.capture = capture
+        self.input = InputInjector(hwnd)
+        region = self.log_region if self.log_region != (0, 0, 0, 0) else (0, 0, 1, 1)
         self.differ = FrameDiffer(
-            self.capture,
-            region=log_region if log_region != (0, 0, 0, 0) else (0, 0, 1, 1),
-            threshold=diff_threshold,
-            poll_interval=poll_interval,
+            capture,
+            region=region,
+            threshold=self.diff_threshold,
+            poll_interval=self.poll_interval,
         )
-        print(f"[bridge] Log region: {log_region}, threshold: {diff_threshold}")
+        if old_capture is not None:
+            old_capture.stop()
+        print(f"[bridge] Capture attached (HWND={hwnd}, log region: {self.log_region})")
 
     def _ensure_window(self) -> None:
-        """Re-find the window if the cached HWND is no longer valid."""
-        if not win32gui.IsWindow(self.hwnd):
-            new_hwnd = win32gui.FindWindow(None, self.window_title)
-            if new_hwnd:
-                print(f"[bridge] Window re-found: HWND {self.hwnd} -> {new_hwnd}")
-                self.hwnd = new_hwnd
-                self.input.hwnd = new_hwnd
-            else:
-                raise RuntimeError(f"Window not found: {self.window_title!r}")
+        """Make sure the window is attached and the HWND is still valid.
+
+        Raises RuntimeError if the window cannot be found — callers turn
+        that into a JSON error response without dropping the session.
+        """
+        if self.capture is not None and self.hwnd and win32gui.IsWindow(self.hwnd):
+            return
+        new_hwnd = win32gui.FindWindow(None, self.window_title)
+        if not new_hwnd:
+            raise RuntimeError(f"Window not found: {self.window_title!r}")
+        if self.capture is None:
+            print(f"[bridge] Found window {self.window_title!r} (HWND={new_hwnd})")
+        else:
+            print(f"[bridge] Window re-found: HWND {self.hwnd} -> {new_hwnd}")
+        self._attach_window(new_hwnd)
+
+    # ------------------------------------------------------------------
+    # Request dispatch
+    # ------------------------------------------------------------------
 
     def handle_connection(self, conn: socket.socket, addr: tuple) -> None:
         """Handle one client connection (sequential command processing)."""
         print(f"[bridge] Client connected: {addr}")
         try:
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+        try:
             while True:
-                self._ensure_window()
+                # A dead socket ends the session; anything else does not.
                 payload = _recv_message(conn)
-                request = json.loads(payload.decode("utf-8"))
-                action = request.get("action", "")
-
-                if action == "ping":
-                    _send_json(conn, {
-                        "status": "ok",
-                        "uptime": round(time.monotonic() - self._start_time, 3),
-                    })
-
-                elif action == "grab":
+                try:
+                    self._handle_request(conn, payload)
+                except Exception as exc:
+                    # Per-request failure: report it, keep the session alive.
+                    print(f"[bridge] Request failed for {addr}: {exc}")
                     try:
-                        png = self.capture.grab_png()
-                        _send_message(conn, png)
-                    except Exception as exc:
                         _send_error(conn, str(exc))
-
-                elif action == "grab_region":
-                    try:
-                        x = int(request["x"])
-                        y = int(request["y"])
-                        w = int(request["w"])
-                        h = int(request["h"])
-                        png = self.capture.grab_region_png(x, y, w, h)
-                        _send_message(conn, png)
-                    except Exception as exc:
-                        _send_error(conn, str(exc))
-
-                elif action == "keys":
-                    keys = request.get("keys", [])
-                    try:
-                        self.differ.reset_baseline()
-                        self.input.send_chord(keys)
-                        _send_json(conn, {"status": "ok"})
-                    except Exception as exc:
-                        _send_error(conn, str(exc))
-
-                elif action == "key_down":
-                    key = request.get("key", "")
-                    try:
-                        self.differ.reset_baseline()
-                        self.input.key_down(key)
-                        _send_json(conn, {"status": "ok"})
-                    except Exception as exc:
-                        _send_error(conn, str(exc))
-
-                elif action == "key_up":
-                    key = request.get("key", "")
-                    try:
-                        self.input.key_up(key)
-                        _send_json(conn, {"status": "ok"})
-                    except Exception as exc:
-                        _send_error(conn, str(exc))
-
-                elif action == "wait_for_change":
-                    timeout = float(request.get("timeout", 3.0))
-                    try:
-                        changed, elapsed = self.differ.wait_for_change(timeout)
-                        _send_json(conn, {
-                            "changed": changed,
-                            "elapsed": round(elapsed, 3),
-                        })
-                    except Exception as exc:
-                        _send_error(conn, str(exc))
-
-                else:
-                    _send_error(conn, f"Unknown action: {action!r}")
-
+                    except OSError:
+                        raise ConnectionError("Client disconnected")
         except (ConnectionError, socket.error):
             print(f"[bridge] Client disconnected: {addr}")
-        except Exception as exc:
-            print(f"[bridge] Error handling {addr}: {exc}")
         finally:
             conn.close()
+
+    def _handle_request(self, conn: socket.socket, payload: bytes) -> None:
+        try:
+            request = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"Malformed request: {exc}") from exc
+        if not isinstance(request, dict):
+            raise ValueError("Request must be a JSON object")
+        action = request.get("action", "")
+
+        if action == "ping":
+            # ping never requires the game window — the harness polls it
+            # while waiting for Qud to be launched.
+            _send_json(conn, {
+                "status": "ok",
+                "uptime": round(time.monotonic() - self._start_time, 3),
+                "capture_alive": self.capture.is_alive if self.capture else False,
+                "frame_age": self.capture.frame_age if self.capture else None,
+            })
+            return
+
+        # All other actions need the game window and must not interleave.
+        with self._cmd_lock:
+            self._ensure_window()
+            assert self.capture is not None and self.input is not None and self.differ is not None
+
+            if action == "grab":
+                png = self.capture.grab_png()
+                _send_message(conn, png)
+
+            elif action == "grab_region":
+                x = int(request["x"])
+                y = int(request["y"])
+                w = int(request["w"])
+                h = int(request["h"])
+                png = self.capture.grab_region_png(x, y, w, h)
+                _send_message(conn, png)
+
+            elif action == "keys":
+                keys = request.get("keys", [])
+                if not isinstance(keys, list):
+                    raise ValueError("'keys' must be a list of key names")
+                self.differ.reset_baseline()
+                self.input.send_chord(keys)
+                _send_json(conn, {"status": "ok"})
+
+            elif action == "key_down":
+                key = request.get("key", "")
+                self.differ.reset_baseline()
+                self.input.key_down(key)
+                _send_json(conn, {"status": "ok"})
+
+            elif action == "key_up":
+                key = request.get("key", "")
+                self.input.key_up(key)
+                _send_json(conn, {"status": "ok"})
+
+            elif action == "wait_for_change":
+                timeout = float(request.get("timeout", 3.0))
+                changed, elapsed = self.differ.wait_for_change(timeout)
+                _send_json(conn, {
+                    "changed": changed,
+                    "elapsed": round(elapsed, 3),
+                })
+
+            else:
+                _send_error(conn, f"Unknown action: {action!r}")
+
+    # ------------------------------------------------------------------
+    # Serving
+    # ------------------------------------------------------------------
 
     def serve(self, host: str = "0.0.0.0", port: int = 9090) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -194,7 +249,12 @@ class BridgeServer:
         print(f"[bridge] Listening on {host}:{port}")
         try:
             while True:
-                conn, addr = sock.accept()
+                try:
+                    conn, addr = sock.accept()
+                except OSError as exc:
+                    print(f"[bridge] Accept failed: {exc}, continuing ...")
+                    time.sleep(0.5)
+                    continue
                 t = threading.Thread(
                     target=self.handle_connection, args=(conn, addr), daemon=True
                 )
@@ -202,7 +262,8 @@ class BridgeServer:
         except KeyboardInterrupt:
             print("\n[bridge] Shutting down")
         finally:
-            self.capture.stop()
+            if self.capture is not None:
+                self.capture.stop()
             sock.close()
 
     def connect(self, host: str, port: int) -> None:
@@ -231,7 +292,8 @@ class BridgeServer:
             else:
                 print("[bridge] Client disconnected, waiting for relay ...")
                 _time.sleep(1)
-        self.capture.stop()
+        if self.capture is not None:
+            self.capture.stop()
 
 
 # ---------------------------------------------------------------------------
