@@ -20,7 +20,6 @@ class Watchdog:
 
     # Stuck detection
     SAME_SCREEN_TURNS = 20
-    TIMEOUT_STREAK    = 5
 
     # Chargen budgets
     CHARGEN_MAX_STEPS    = 100
@@ -30,7 +29,7 @@ class Watchdog:
     def __init__(self) -> None:
         self.last_screen: str = ""
         self.same_screen_count: int = 0
-        self.timeout_streak: int = 0
+        self.no_log_streak: int = 0
         self.episode_start_time: float = 0.0
         self.episode_start_turn: int = 0
         # Chargen tracking
@@ -43,7 +42,7 @@ class Watchdog:
         self.episode_start_time = time.monotonic()
         self.episode_start_turn = 0
         self.same_screen_count = 0
-        self.timeout_streak = 0
+        self.no_log_streak = 0
         self.last_screen = ""
 
     def start_chargen(self) -> None:
@@ -64,14 +63,12 @@ class Watchdog:
             print(f"[watchdog] Stuck: same screen '{screen}' for {self.same_screen_count} turns")
             return WatchdogAction.END_EPISODE
 
-        # Timeout streak
+        # Track consecutive no-log-change turns (informational, not a failure
+        # — the message log does not always update, e.g., bumping into a wall)
         if not turn_changed:
-            self.timeout_streak += 1
+            self.no_log_streak += 1
         else:
-            self.timeout_streak = 0
-        if self.timeout_streak >= self.TIMEOUT_STREAK:
-            print(f"[watchdog] Game not responding: {self.timeout_streak} consecutive timeouts")
-            return WatchdogAction.END_EPISODE
+            self.no_log_streak = 0
 
         # Turn budget
         if turn_count - self.episode_start_turn >= self.MAX_TURNS:
@@ -116,7 +113,7 @@ class Watchdog:
     def reset(self) -> None:
         self.last_screen = ""
         self.same_screen_count = 0
-        self.timeout_streak = 0
+        self.no_log_streak = 0
         self.chargen_step_count = 0
         self.chargen_no_progress = 0
         self.chargen_last_screen = ""

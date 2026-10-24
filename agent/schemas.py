@@ -7,6 +7,17 @@ class Decision(BaseModel):
     reasoning: str = Field(description="Brief chain-of-thought about what to do and why")
     tool: str = Field(description="Tool name to call, e.g. 'move'")
     args: dict = Field(default_factory=dict, description="Tool arguments")
+    wait_for_turn: bool = Field(
+        default=False,
+        description=(
+            "Set to true if this action should advance the turn clock. "
+            "The harness waits briefly for the message log to update, then "
+            "shows the next screenshot regardless (the log does not always "
+            "change — e.g., bumping into a wall). Tools marked [advances turn] "
+            "set this automatically. For press(), set true for turn-advancing "
+            "keys, false for info-only actions."
+        ),
+    )
     screen: str = Field(
         description=(
             "Current screen. Report exactly what you see: "
@@ -14,7 +25,7 @@ class Decision(BaseModel):
             "'chargen' (character creation), 'play' (in-game world view), "
             "'menu' (inventory/equipment/skills/sheet/quests/etc.), "
             "'dialogue' (talking to an NPC), 'trade' (buying/selling), "
-            "'world_map' (overland map), 'death' (tombstone/ death summary), "
+            "'world_map' (overland map), 'death' (tombstone/death summary), "
             "or 'unknown' if you can't tell."
         )
     )
@@ -35,10 +46,8 @@ def parse_decision(raw: str) -> Decision | None:
     """Parse a JSON string into a Decision. Returns None on failure."""
     import json
     try:
-        # Handle potential markdown code fences
         text = raw.strip()
         if text.startswith("```"):
-            # Extract JSON from code fence
             lines = text.split("\n")
             json_lines = [l for l in lines if not l.strip().startswith("```")]
             text = "\n".join(json_lines)

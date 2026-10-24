@@ -9,19 +9,16 @@ and your inventory (right).
 - The cheaper side pays the difference in **drams** (water currency).
 - Your **Ego** stat affects buy/sell prices — higher Ego = better deals.
 - **Equipped items cannot be sold** — unequip first if you want to sell gear.
-- **Water is heavy** (0.25 lb/dram) — carry wealth as trade goods (copper nuggets,
-  artifacts), not as water.
+- **Water is heavy** — carry wealth as trade goods, not as water.
 
 ## Strategy
 
-- **Sell**: trade goods, old equipment, artifacts you don't need, excess food/water.
-- **Buy**: better weapons/armor, healing items (salve injectors), water (for desert
-  travel), ammo (if using guns), utility items.
+- **Sell**: trade goods, old equipment, artifacts you don't need.
+- **Buy**: better weapons/armor, healing items, water, ammo.
 - Decide what you want **before** opening trade — don't browse aimlessly.
-- Confirm the trade when the deal looks fair. Check the dram difference.
 
 ## Tools
 
-- `send_keys` — navigate the trade panes (arrows to move, enter/space to select)
+- `press` — navigate the trade panes (arrows to move, enter/space to select)
 - `choose_option(n)` — if the trade UI uses numbered selections
 - The trade screen closes when the deal is confirmed or you press Escape.

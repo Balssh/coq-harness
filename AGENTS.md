@@ -41,7 +41,7 @@ This is **not RL training**. It's an exploratory agent-capability demo: can the 
 1. `bridge/` (Windows): `server.py` (socket API: grab / keys / wait_for_change), `capture.py` (WGC), `input.py` (SendInput wrappers + keymap), `framediff.py` (numpy log-region diff)
 2. `client/bridge_client.py` (WSL)
 3. `game/`: `controller.py` (symbolic action → key sequence), `screens.py` (which screen: creation tab / inventory / map / death)
-4. `tools/`: base class + registry; movement (`move`, `rest`, stairs, `auto_explore`), interaction (`get`, `drop`, `equip`, `quaff`, `eat`, `talk`, `trade`), info (`character_sheet`, `inventory`, `skills`, `quests`, `read_log`, `look`, `alt_overlay`), meta (`save`, `quit`, `restart_run`)
+4. `tools/`: base class + registry + screen-based filtering; movement (`move`, `rest`, `go_stairs`, `auto_explore`, `travel`, `wait_until_healed`), interaction (`get`, `use_item`, `interact`, `choose_option`), info (`open_screen`, `read_log`, `read_stats`, `look`, `show_labels`), meta (`save`, `quit`, `abandon`, `restart_run`), chargen (`select`, `confirm`, `next`, `back`), generic (`press`)
 5. `perception/`: crop viewport/log/stats-bar; downscale viewport, full-res log (ML4 reads Qud's font fine)
 6. `memory/`: `state.py` (hp, hunger, goal, turn count), `transcript.py` (ML4 transcribes log each step), `journal.py` (cross-episode notes), `map_memory.py`
 7. `agent/`: prompts (`system_base.md` with distilled Qud manual — verify keys in-game via Esc→k, wiki is outdated; `system_creation.md`; `system_play.md`; few-shot), `schemas.py` (pydantic JSON output), `llm.py` (retry-on-invalid, fallback `wait`), `decide.py`
