@@ -13,7 +13,7 @@ from memory.transcript import get_transcript
 from perception.capture import capture
 from tools import execute_tool, get_tool
 
-WAIT_TIMEOUT = 3.0
+WAIT_TIMEOUT = 1.5
 
 MAX_CONVERSATION_TURNS = 20
 _conversation: list[dict] = []
@@ -27,8 +27,8 @@ def clear_conversation() -> None:
     _conversation.clear()
 
 
-def run_turn(phase: str = "play") -> Decision:
-    """Execute one full turn. Returns the Decision made."""
+def run_turn(phase: str = "play") -> tuple[Decision, bool]:
+    """Execute one full turn. Returns (Decision, turn_changed)."""
     state = get_state()
     recorder = get_recorder()
     client = get_client()
@@ -97,9 +97,15 @@ def run_turn(phase: str = "play") -> Decision:
         user_parts.append(f"Tool result: {result.text}")
     if result.error:
         user_parts.append("(This was an error result.)")
+    if should_wait and not turn_changed:
+        user_parts.append(
+            "Note: The message log did not change after this action. "
+            "This is normal for actions like bumping into a wall, waiting, "
+            "or certain menu interactions — the turn still advanced, "
+            "there was just no new log message."
+        )
     user_parts.append(
         f"Turn {state.turn_count + 1} complete. "
-        f"Turn changed: {turn_changed}. "
         f"HP: {decision.hp or '?'}/{decision.max_hp or '?'}, "
         f"Hunger: {decision.hunger or '?'}, "
         f"Location: {decision.location or '?'}"
@@ -117,4 +123,4 @@ def run_turn(phase: str = "play") -> Decision:
     if len(_conversation) > max_messages:
         _conversation[:] = _conversation[-max_messages:]
 
-    return decision
+    return decision, turn_changed

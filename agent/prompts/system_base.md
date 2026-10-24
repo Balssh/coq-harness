@@ -207,7 +207,11 @@ what you'd pass to `press(["key"])` or `press([["shift", "key"]])` for chords.
 ## Key Reminders
 
 - The game is **turn-based**. After calling a tool that advances the turn, the
-  harness waits for the message log to update before showing the next screenshot.
+  harness waits briefly for the message log to update, then shows you the next
+  screenshot regardless.
+- **The message log does NOT always update** — bumping into a wall, waiting in
+  place, or certain menu actions may produce no new log text. The turn still
+  advanced. Look at the viewport image to see what actually happened.
 - If you're in a menu, the turn clock doesn't apply — navigate by key presses.
 - **Auto-explore and zone travel advance MANY turns** — expect the log to show
   multiple messages and the screen may change significantly.

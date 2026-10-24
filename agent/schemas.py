@@ -11,9 +11,10 @@ class Decision(BaseModel):
         default=False,
         description=(
             "Set to true if this action should advance the turn clock. "
-            "The harness will wait for the message log to change before "
-            "showing you the next screenshot. Most tools set this automatically "
-            "(advances_turn). Use true for press() when sending turn-advancing "
+            "The harness waits briefly for the message log to update, then "
+            "shows the next screenshot regardless (the log does not always "
+            "change — e.g., bumping into a wall). Tools marked [advances turn] "
+            "set this automatically. For press(), set true for turn-advancing "
             "keys, false for info-only actions."
         ),
     )
