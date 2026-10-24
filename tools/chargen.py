@@ -1,23 +1,26 @@
 """Chargen tools: select, confirm, next, back.
 
-Used during character creation. No turn clock — chargen has its own flow.
+Used during character creation. Screen-filtered to title, mode_select, and
+chargen phases. No turn clock — chargen has its own flow.
 
 Key bindings (verified in-game):
 - Arrow keys: navigate options within a screen
 - Enter (confirm): select the highlighted option
-- Num 9 (next): proceed to the next chargen screen (shown as [Num 9] Next)
+- Num 9 (next): proceed to the next chargen screen
 - Escape (back): go back to the previous screen
 """
 
 from game.controller import press
 from tools import Tool, ToolResult, register
 
+_CHARGEN_SCREENS = {"title", "mode_select", "chargen"}
+
 
 class SelectTool(Tool):
     name = "select"
     description = (
         "Navigate a menu option in a direction (up/down/left/right). "
-        "Used during character creation."
+        "Used during character creation and title/mode screens."
     )
     parameters = {
         "type": "object",
@@ -30,6 +33,7 @@ class SelectTool(Tool):
         "required": ["direction"],
     }
     advances_turn = False
+    screens = _CHARGEN_SCREENS
 
     def execute(self, direction: str) -> ToolResult:
         press(direction)
@@ -45,6 +49,7 @@ class ConfirmTool(Tool):
     )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
+    screens = _CHARGEN_SCREENS
 
     def execute(self) -> ToolResult:
         press("enter")
@@ -61,6 +66,7 @@ class NextTool(Tool):
     )
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
+    screens = {"chargen"}
 
     def execute(self) -> ToolResult:
         press("num_9")
@@ -72,6 +78,7 @@ class BackTool(Tool):
     description = "Go back (Escape). Used during character creation."
     parameters = {"type": "object", "properties": {}}
     advances_turn = False
+    screens = _CHARGEN_SCREENS
 
     def execute(self) -> ToolResult:
         press("escape")

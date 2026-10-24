@@ -15,10 +15,6 @@ from tools import execute_tool, get_tool
 
 WAIT_TIMEOUT = 3.0
 
-# Conversation context — bounded to prevent unbounded token growth.
-# Each turn adds 2 messages (assistant + user). We keep the most recent
-# MAX_CONVERSATION_TURNS pairs, which is enough for short-term continuity
-# while the transcript + journal provide longer-term context.
 MAX_CONVERSATION_TURNS = 20
 _conversation: list[dict] = []
 
@@ -41,13 +37,9 @@ def run_turn(phase: str = "play") -> Decision:
 
     turn_start = time.monotonic()
 
-    # 1. Capture perception
     perception = capture()
-
-    # 2. Record turn start
     recorder.start_turn(state.turn_count)
 
-    # 3. Call decide()
     decision_start = time.monotonic()
     decision = decide(
         perception=perception,
@@ -59,10 +51,8 @@ def run_turn(phase: str = "play") -> Decision:
     )
     decision_ms = (time.monotonic() - decision_start) * 1000
 
-    # 4. Record decision
     recorder.record_decision(decision)
 
-    # 5. Update harness state
     update(
         turn_count=state.turn_count + 1,
         screen=decision.screen,
@@ -74,37 +64,34 @@ def run_turn(phase: str = "play") -> Decision:
         phase=decision.screen,
     )
 
-    # 6. Journal note
     if decision.journal_note:
         journal.add(decision.journal_note)
 
-    # 7. Execute tool
     result = execute_tool(decision.tool, decision.args)
     recorder.record_tool_result(result)
 
-    # Capture intermediate frame after action keys sent
     if result.error:
         recorder.capture("after-error")
     else:
         recorder.capture("after-action")
 
-    # 8. Turn clock: wait for log change if tool advances turn
+    # Turn clock: wait for log change if the tool advances the turn
+    # OR if the model explicitly set wait_for_turn=true (e.g., for press())
+    tool = get_tool(decision.tool)
+    should_wait = (tool and tool.advances_turn) or decision.wait_for_turn
+
     turn_changed = False
     wait_time = 0.0
-    tool = get_tool(decision.tool)
-    if tool and tool.advances_turn:
+    if should_wait:
         t0 = time.monotonic()
         turn_changed = client.wait_for_change(timeout=WAIT_TIMEOUT)
         wait_time = time.monotonic() - t0
 
-    # 9. Record turn end
     recorder.end_turn(turn_changed=turn_changed, wait_time=wait_time)
 
-    # 10. Record timing
     turn_total_ms = (time.monotonic() - turn_start) * 1000
     recorder.record_timing(decision_ms=decision_ms, turn_total_ms=turn_total_ms)
 
-    # 11. Append to conversation context
     user_parts = []
     if result.text:
         user_parts.append(f"Tool result: {result.text}")
@@ -126,7 +113,6 @@ def run_turn(phase: str = "play") -> Decision:
         "content": "\n".join(user_parts),
     })
 
-    # Trim conversation to bounded window (keep most recent N turn-pairs)
     max_messages = MAX_CONVERSATION_TURNS * 2
     if len(_conversation) > max_messages:
         _conversation[:] = _conversation[-max_messages:]
