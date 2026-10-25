@@ -182,6 +182,9 @@ _SwitchToThisWindow = ctypes.windll.user32.SwitchToThisWindow
 _ShowWindow = ctypes.windll.user32.ShowWindow
 _SW_RESTORE = 9
 
+def _log(msg: str) -> None:
+    print(f"[input] {msg}", flush=True)
+
 def _force_foreground(hwnd: int) -> tuple[int, bool]:
     """Force the target window to the foreground.
 
@@ -197,12 +200,16 @@ def _force_foreground(hwnd: int) -> tuple[int, bool]:
         raise RuntimeError(f"Window no longer exists (HWND={hwnd})")
     prev = win32gui.GetForegroundWindow()
     if prev == hwnd:
+        _log(f"Already foreground (HWND={hwnd})")
         return prev, True
+
+    _log(f"Stealing focus: HWND={hwnd} prev_fg={prev}")
 
     # Strategy 1: AttachThreadInput + SetForegroundWindow
     try:
         cur_thread = win32api.GetCurrentThreadId()
         tgt_thread = _get_window_thread_id(hwnd)
+        _log(f"  Strategy 1: AttachThreadInput(cur={cur_thread}, tgt={tgt_thread})")
         attached = _AttachThreadInput(cur_thread, tgt_thread, True)
         if attached:
             win32gui.BringWindowToTop(hwnd)
@@ -213,30 +220,38 @@ def _force_foreground(hwnd: int) -> tuple[int, bool]:
             _AttachThreadInput(cur_thread, tgt_thread, False)
             time.sleep(0.05)
             if win32gui.GetForegroundWindow() == hwnd:
+                _log(f"  Strategy 1 SUCCESS")
                 return prev, True
-    except Exception:
-        pass
+            else:
+                _log(f"  Strategy 1: foreground still {win32gui.GetForegroundWindow()}")
+    except Exception as e:
+        _log(f"  Strategy 1 exception: {e}")
 
     # Strategy 2: ShowWindow(SW_RESTORE) + SetForegroundWindow
     try:
+        _log(f"  Strategy 2: ShowWindow + SetForegroundWindow")
         _ShowWindow(hwnd, _SW_RESTORE)
         time.sleep(0.05)
         win32gui.SetForegroundWindow(hwnd)
         time.sleep(0.05)
         if win32gui.GetForegroundWindow() == hwnd:
+            _log(f"  Strategy 2 SUCCESS")
             return prev, True
-    except Exception:
-        pass
+    except Exception as e:
+        _log(f"  Strategy 2 exception: {e}")
 
     # Strategy 3: SwitchToThisWindow
     try:
+        _log(f"  Strategy 3: SwitchToThisWindow")
         _SwitchToThisWindow(hwnd, True)
         time.sleep(0.05)
         if win32gui.GetForegroundWindow() == hwnd:
+            _log(f"  Strategy 3 SUCCESS")
             return prev, True
-    except Exception:
-        pass
+    except Exception as e:
+        _log(f"  Strategy 3 exception: {e}")
 
+    _log(f"  ALL STRATEGIES FAILED — falling back to PostMessage")
     return prev, False
 
 
@@ -279,10 +294,13 @@ class InputInjector:
         Falls back to PostMessage if foreground focus cannot be obtained.
         """
         vks = [_vk(k) for k in keys]
+        _log(f"send_chord: keys={keys}")
         prev, focused = _force_foreground(self.hwnd)
         if not focused:
+            _log(f"  -> PostMessage fallback for {keys}")
             self._post_chord(vks)
             return
+        _log(f"  -> SendInput path for {keys}")
         pressed: list[tuple[int, bool]] = []
         try:
             for vk, ext in vks:
