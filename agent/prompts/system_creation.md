@@ -36,27 +36,37 @@ Here is the exact verified flow:
 2. **Mode select** → report `"screen": "mode_select"` → `confirm()` — selects "Classic"
 3. **Character Type** → report `"screen": "chargen"` → `confirm()` — selects a preset
 4. **Attributes screen** → `next()` — proceeds past the attributes summary
-5. **Customize screen (Name: <random>)** → `confirm()` — activates the name field
-6. **"Enter name:" prompt** → `confirm()` — accepts the random name
-7. **Customize screen** → `next()` — proceeds to starting location
-8. **Starting Location** → `confirm()` — selects a location (e.g. Joppa)
-9. **World generation** → wait for the game world to appear
-10. Report `"screen": "play"`
+5. **Customize screen (Name: <random>)** → `next()` — the random name is already
+   filled in, just press Num9 to proceed. Do NOT press `confirm()` here!
+6. **Starting Location** → `confirm()` — selects a location (e.g. Joppa)
+7. **World generation** → wait for the game world to appear
+8. Report `"screen": "play"`
+
+### Name Screen — CRITICAL
+
+On the **Customize** screen, the name field already has a random name.
+The flow is very simple:
+
+- **Just press `next()` (Num9)** to proceed. The random name is fine.
+- **Optionally**, press `press(["r"])` to randomize the name, then `next()`.
+- **NEVER press `confirm()` (Enter) on the Customize screen.** Enter activates
+  text-edit mode on the name field. If you then press `next()` (Num9), it will
+  type "9" into the name instead of advancing the screen. You will see the name
+  changing character by character — that means you are in text-edit mode.
+- If you accidentally enter text-edit mode: press `confirm()` (Enter) to exit
+  edit mode, then press `next()` (Num9) to proceed.
 
 ### Critical Rules
 
 - **`confirm()` (Enter)** selects the highlighted option. Use it on the title
-  screen (New Game), mode select (Classic), character-type screen, name field,
-  and starting-location screen.
-- **`next()` (Num 9)** advances to the next chargen screen.
-- **Do NOT press `confirm()` repeatedly on the same screen** — it will toggle
-  the name field on/off without progressing.
+  screen (New Game), mode select (Classic), character-type screen, and
+  starting-location screen. **NOT on the Customize screen.**
+- **`next()` (Num 9)** advances to the next chargen screen. Use it on the
+  Attributes screen and the Customize screen.
 - **Do NOT use `select(left/right)` to switch tabs** — use `next()` instead.
 - **Do NOT use `quit`, `abandon`, or `restart_run`** — they are disabled during
   chargen.
-- The name is already randomly generated. You just need to `confirm()` twice
-  on the name screen (once to activate, once to accept), then `next()`.
-- **If the screen doesn't match expectations**, don't spam confirm — report
+- **If the screen doesn't match expectations**, don't spam keys — report
   the actual screen and let the watchdog handle it.
 
 ## Chargen Tools

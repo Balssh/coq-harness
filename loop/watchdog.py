@@ -29,7 +29,7 @@ class Watchdog:
     # Chargen budgets
     CHARGEN_MAX_STEPS    = 100
     CHARGEN_MAX_SECONDS  = 600   # 10 minutes
-    CHARGEN_NO_PROGRESS  = 30    # steps without screen change
+    CHARGEN_NO_PROGRESS  = 15    # steps without screen change (lowered: model can waste many steps on wrong key)
 
     def __init__(self) -> None:
         self.last_screen: str = ""
