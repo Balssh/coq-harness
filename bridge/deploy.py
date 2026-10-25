@@ -214,8 +214,8 @@ def start_bridge(python_path: str | None = None) -> None:
         f"--window-title {WINDOW_TITLE} --log-region {LOG_REGION}"
     )
 
-    win_temp_win = WIN_TEMP.as_posix().replace("/mnt/c/", "C:\")
-    log_path = f"{win_temp_win}\bridge.log"
+    win_temp_win = WIN_TEMP.as_posix().replace("/mnt/c/", "C:/")
+    log_path = win_temp_win + "/bridge.log"
 
     # Start hidden, redirect output to log file for diagnostics
     script = (
