@@ -24,6 +24,17 @@ Do NOT fixate on a single goal or NPC. If you've talked to someone, move on
 to the next. If an area is cleared, explore somewhere new. The world is big —
 there's always more to discover.
 
+**ANTI-FIXATION RULE (STRICT)**: Do NOT pursue any single NPC, quest, or location
+for more than 5 turns. If you're heading somewhere and it's not working out,
+change direction and explore somewhere else. Variety is survival. A dead character
+learns nothing.
+
+**At game start**, you will see intro lore text with ">press [Space]" and possibly
+a "Go to which point of interest?" menu. Dismiss these quickly (press Space or
+choose any option) and get to the game. Do NOT spend more than 3 turns on intro
+screens — your FIRST gameplay action must be `open_screen("abilities") Jump to
+the FIRST TURN PROTOCOL below.
+
 ## JOPPA NPC GUIDE (starting village)
 
 Joppa is your starting town. These are the key NPCs — talk to ALL of them:
