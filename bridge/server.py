@@ -24,6 +24,7 @@ Reliability:
 import argparse
 import json
 import socket
+import sys
 import struct
 import threading
 import time
@@ -331,7 +332,20 @@ def main() -> None:
         metavar="HOST:PORT",
         help="Connect to WSL relay at HOST:PORT instead of listening (for firewall workaround)",
     )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Redirect stdout/stderr to this file",
+    )
     args = parser.parse_args()
+
+    if args.log_file:
+        import os as _os
+        _os.makedirs(_os.path.dirname(args.log_file) or ".", exist_ok=True)
+        _f = open(args.log_file, "a", buffering=1, encoding="utf-8")
+        sys.stdout = _f
+        sys.stderr = _f
 
     log_region = tuple(args.log_region)
     server = BridgeServer(

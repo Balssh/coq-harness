@@ -209,21 +209,24 @@ def start_bridge(python_path: str | None = None) -> None:
         python_path = _find_windows_python()
     _log(f"Starting Windows bridge (Python: {python_path})...")
 
+    log_file = str(WIN_TEMP / "bridge.log").replace("/mnt/c/", "C:/")
     args = (
         f"-m bridge.server --connect localhost:{RELAY_BRIDGE_PORT} "
-        f"--window-title {WINDOW_TITLE} --log-region {LOG_REGION}"
+        f"--window-title {WINDOW_TITLE} --log-region {LOG_REGION} "
+        f"--log-file '{log_file}'"
     )
 
-    win_temp_win = WIN_TEMP.as_posix().replace("/mnt/c/", "C:/")
-    log_path = win_temp_win + "/bridge.log"
-
-    # Start via cmd with output redirection to log file
-    inner = f'\"{python_path}\" {args} > \"{log_path}\" 2>&1'
-    script = f"Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"{inner}\"' -WorkingDirectory '{win_temp_win}' -WindowStyle Hidden"
+    # Start hidden — bridge redirects its own output to bridge.log
+    script = (
+        f"Start-Process -FilePath '{python_path}' "
+        f"-ArgumentList '{args}' "
+        f"-WorkingDirectory '{WIN_TEMP.as_posix().replace('/mnt/c/', 'C:/')}' "
+        f"-WindowStyle Hidden"
+    )
     result = _powershell(script, timeout=10)
     if result.returncode != 0:
         raise RuntimeError(f"Failed to start bridge: {result.stderr}")
-    _log(f"Bridge process started. Log: {log_path}")
+    _log("Bridge process started.")
 
 
 def wait_for_bridge(timeout: float = BRIDGE_START_TIMEOUT) -> bool:
