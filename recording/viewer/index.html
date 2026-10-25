@@ -5,152 +5,841 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CoQ Harness — Replay Viewer</title>
 <style>
+  :root {
+    --bg: #0f0f1a;
+    --bg-panel: #161628;
+    --bg-elevated: #1e1e38;
+    --bg-hover: #252545;
+    --border: #2a2a4a;
+    --border-accent: #e94560;
+    --text: #d0d0e0;
+    --text-dim: #7a7a9a;
+    --text-faint: #55556a;
+    --accent: #e94560;
+    --accent-soft: rgba(233, 69, 96, 0.15);
+    --green: #4ade80;
+    --yellow: #facc15;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --radius: 8px;
+    --radius-sm: 4px;
+    --shadow: 0 4px 20px rgba(0,0,0,0.4);
+    --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column;
-    height: 100vh; overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
   }
+
+  /* ===== Header ===== */
   #header {
-    padding: 8px 16px; background: #16213e; border-bottom: 1px solid #0f3460;
-    display: flex; align-items: center; gap: 16px; flex-shrink: 0;
+    padding: 0 16px;
+    height: 52px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
   }
-  #header h1 { font-size: 14px; font-weight: 600; color: #e94560; }
-  #controls { display: flex; align-items: center; gap: 8px; }
-  #controls button {
-    background: #0f3460; color: #e0e0e0; border: 1px solid #e94560;
-    border-radius: 4px; padding: 4px 12px; cursor: pointer; font-size: 13px;
+  #header .logo {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
-  #controls button:hover { background: #e94560; }
-  #controls button:disabled { opacity: 0.4; cursor: default; }
-  #turn-slider { flex: 1; accent-color: #e94560; }
-  #turn-label { font-size: 13px; color: #aaa; min-width: 100px; }
-  #speed-control { font-size: 12px; color: #aaa; }
+  #header .logo .dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: inline-block;
+  }
+  #run-title {
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+  }
+
+  /* Transport controls */
+  #transport {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tbtn {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tbtn:hover { background: var(--bg-hover); border-color: var(--accent); }
+  .tbtn:active { transform: scale(0.96); }
+  .tbtn:disabled { opacity: 0.35; cursor: default; }
+  .tbtn:disabled:hover { background: var(--bg-elevated); border-color: var(--border); }
+  .tbtn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    width: 36px;
+    height: 32px;
+    justify-content: center;
+    padding: 0;
+    font-size: 16px;
+    border-radius: 50%;
+  }
+  .tbtn.primary:hover { filter: brightness(1.15); }
+  .tbtn .kbd-hint {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-left: 2px;
+  }
+
+  /* Timeline slider area */
+  #timeline-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 100px;
+  }
+  #turn-slider {
+    width: 100%;
+    accent-color: var(--accent);
+    height: 4px;
+    cursor: pointer;
+  }
+  #timeline-markers {
+    position: relative;
+    height: 10px;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    padding: 0 2px;
+    overflow: hidden;
+  }
+  .tl-marker {
+    flex: 1;
+    min-width: 2px;
+    height: 4px;
+    border-radius: 1px;
+    background: var(--text-faint);
+    cursor: pointer;
+    transition: height 0.1s;
+  }
+  .tl-marker:hover { height: 8px; }
+  .tl-marker.active { height: 10px; background: var(--accent); }
+  .tl-marker.error { background: var(--accent); }
+  .tl-marker.error:hover { background: #ff6b81; }
+  .tl-marker.death { background: #888; }
+  .tl-marker.filtered-out { opacity: 0.15; }
+
+  #turn-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    white-space: nowrap;
+    min-width: 90px;
+    text-align: center;
+  }
+
+  /* Speed + search */
+  #speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
   #speed-control select {
-    background: #0f3460; color: #e0e0e0; border: 1px solid #333;
-    border-radius: 4px; padding: 2px 6px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    font-size: 12px;
+    cursor: pointer;
   }
-  #main { display: flex; flex: 1; overflow: hidden; }
-  #viewer {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; overflow: auto; padding: 16px; background: #0d0d1a;
+  #search-box {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: 12px;
+    width: 160px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #search-box:focus { border-color: var(--accent); }
+  #search-box::placeholder { color: var(--text-faint); }
+
+  /* Icon buttons (help, stats) */
+  .icon-btn {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ===== Main layout ===== */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Viewer pane */
+  #viewer-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0a0a14;
+    overflow: hidden;
+    min-width: 0;
+  }
+  #viewer-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  #viewer-toolbar .spacer { flex: 1; }
+  #zoom-level { font-family: var(--mono); min-width: 40px; text-align: center; }
+  .zoom-btn {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .zoom-btn:hover { border-color: var(--accent); }
+  #frame-canvas-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 16px;
+    position: relative;
   }
   #frame-img {
-    max-width: 100%; max-height: 70vh; border: 1px solid #333;
+    max-width: 100%;
+    max-height: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     image-rendering: pixelated;
+    transition: transform 0.15s;
+    cursor: zoom-in;
   }
-  #frame-label { font-size: 12px; color: #888; margin-top: 8px; }
-  #frame-nav { display: flex; gap: 8px; margin-top: 8px; }
-  #frame-nav button {
-    background: #16213e; color: #aaa; border: 1px solid #333;
-    border-radius: 4px; padding: 2px 10px; cursor: pointer; font-size: 12px;
+  #frame-img.zoomed { cursor: zoom-out; }
+  #frame-label {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 6px;
+    font-family: var(--mono);
+    flex-shrink: 0;
   }
-  #frame-nav button:hover { border-color: #e94560; color: #e0e0e0; }
+
+  /* Frame thumbnails strip */
+  #frame-strip {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    overflow-x: auto;
+    flex-shrink: 0;
+    max-height: 80px;
+  }
+  #frame-strip:empty { display: none; }
+  .frame-thumb {
+    height: 56px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    image-rendering: pixelated;
+    transition: border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .frame-thumb:hover { border-color: var(--text-dim); }
+  .frame-thumb.active { border-color: var(--accent); }
+  .frame-thumb-label {
+    font-size: 9px;
+    color: var(--text-faint);
+    text-align: center;
+    margin-top: 2px;
+    font-family: var(--mono);
+  }
+  .frame-thumb-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  /* ===== Sidebar ===== */
   #sidebar {
-    width: 400px; background: #16213e; border-left: 1px solid #0f3460;
-    overflow-y: auto; padding: 16px; flex-shrink: 0;
+    width: 380px;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
   }
-  #sidebar h2 {
-    font-size: 12px; text-transform: uppercase; color: #e94560;
-    margin-bottom: 8px; margin-top: 16px;
+  #sidebar.collapsed { width: 0; border-left: none; overflow: hidden; }
+
+  .sb-section {
+    border-bottom: 1px solid var(--border);
   }
-  #sidebar h2:first-child { margin-top: 0; }
-  #sidebar .panel {
-    background: #1a1a2e; border-radius: 6px; padding: 12px;
-    font-size: 13px; line-height: 1.5; margin-bottom: 12px;
-    white-space: pre-wrap; word-break: break-word;
+  .sb-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    user-select: none;
+    transition: background 0.15s;
   }
-  #sidebar .panel.error { border-left: 3px solid #e94560; }
-  #sidebar .panel .label { color: #888; font-size: 11px; text-transform: uppercase; }
-  #sidebar .panel .value { color: #e0e0e0; }
-  #transcript { max-height: 200px; overflow-y: auto; }
-  .state-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-  .state-grid .item { font-size: 12px; }
-  .state-grid .item .label { color: #888; }
-  #jump-to { display: flex; gap: 4px; align-items: center; }
-  #jump-to input {
-    width: 60px; background: #0f3460; color: #e0e0e0; border: 1px solid #333;
-    border-radius: 4px; padding: 2px 6px; font-size: 12px;
+  .sb-section-header:hover { background: var(--bg-elevated); }
+  .sb-section-header .chevron {
+    transition: transform 0.2s;
+    font-size: 10px;
+    color: var(--text-faint);
+  }
+  .sb-section.collapsed .sb-section-header .chevron { transform: rotate(-90deg); }
+  .sb-section-body {
+    padding: 0 14px 12px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .sb-section.collapsed .sb-section-body { display: none; }
+
+  .panel {
+    background: var(--bg-elevated);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .panel.error {
+    border-left: 3px solid var(--accent);
+    background: rgba(233, 69, 96, 0.08);
+  }
+  .panel .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-faint);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .panel .value { color: var(--text); }
+  .panel .tool-name {
+    font-family: var(--mono);
+    color: var(--blue);
+    font-weight: 600;
+  }
+  .panel .tool-args {
+    font-family: var(--mono);
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+
+  .state-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .state-grid .item {
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .state-grid .item .label {
+    color: var(--text-faint);
+    font-size: 10px;
+    text-transform: uppercase;
+    display: block;
+  }
+  .state-grid .item .value {
+    color: var(--text);
+    font-family: var(--mono);
+  }
+  .state-grid .item .value.hp-low { color: var(--accent); }
+  .state-grid .item .value.hp-mid { color: var(--yellow); }
+  .state-grid .item .value.hp-ok { color: var(--green); }
+  .state-grid .item .value.screen-death { color: #888; }
+
+  #transcript-panel .value {
+    font-family: var(--mono);
+    font-size: 11px;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
+
+  /* Stats summary */
+  #stats-body .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  #stats-body .stat-row:last-child { border-bottom: none; }
+  #stats-body .stat-row .stat-label { color: var(--text-dim); }
+  #stats-body .stat-row .stat-value { font-family: var(--mono); color: var(--text); }
+  .tool-bar-wrap {
+    margin-top: 8px;
+  }
+  .tool-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    font-size: 11px;
+  }
+  .tool-bar-row .tool-name {
+    font-family: var(--mono);
+    width: 100px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tool-bar-row .bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .tool-bar-row .bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0.7;
+    transition: width 0.3s;
+  }
+  .tool-bar-row .bar-count {
+    font-family: var(--mono);
+    color: var(--text-faint);
+    width: 30px;
+    text-align: right;
+  }
+
+  /* ===== Overlays ===== */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .overlay.visible { display: flex; }
+  .modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 28px;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: var(--shadow);
+  }
+  .modal h2 {
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .modal .shortcut-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    font-size: 13px;
+  }
+  .modal .shortcut-grid .key {
+    font-family: var(--mono);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 2px 8px;
+    color: var(--text);
+    text-align: center;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .modal .shortcut-grid .desc { color: var(--text-dim); align-self: center; }
+  .modal .close-btn {
+    margin-top: 20px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 20px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .modal .close-btn:hover { border-color: var(--accent); }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 20px;
+    font-size: 13px;
+    color: var(--text);
+    box-shadow: var(--shadow);
+    transition: transform 0.3s;
+    z-index: 200;
+    pointer-events: none;
+  }
+  #toast.visible { transform: translateX(-50%) translateY(0); }
+
+  /* Sidebar toggle */
+  #sidebar-toggle {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    padding: 8px 4px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 12px;
+    z-index: 10;
+  }
+  #sidebar-toggle:hover { color: var(--text); }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+  /* Filter chips */
+  #filter-bar {
+    display: flex;
+    gap: 4px;
+    padding: 4px 12px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    align-items: center;
+    font-size: 11px;
+    overflow-x: auto;
+  }
+  #filter-bar:empty, #filter-bar.hidden { display: none; }
+  .filter-chip {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .filter-chip:hover { background: rgba(233, 69, 96, 0.25); }
+  .filter-chip .chip-x { font-weight: bold; }
+  #filter-bar .filter-label {
+    color: var(--text-faint);
+    white-space: nowrap;
   }
 </style>
 </head>
 <body>
+
+<!-- ===== Header / Transport ===== -->
 <div id="header">
-  <h1>CoQ Replay</h1>
-  <div id="controls">
-    <button id="btn-prev-turn" title="Previous turn (Left)">&#x25C0; Turn</button>
-    <button id="btn-prev-frame" title="Previous frame (, )">&#x25C0; Frame</button>
-    <button id="btn-play" title="Play/Pause (Space)">&#x25B6;</button>
-    <button id="btn-next-frame" title="Next frame (.)">Frame &#x25B6;</button>
-    <button id="btn-next-turn" title="Next turn (Right)">Turn &#x25B6;</button>
+  <span class="logo"><span class="dot"></span>CoQ Replay</span>
+  <span id="run-title">—</span>
+
+  <div id="transport">
+    <button class="tbtn" id="btn-first" title="First turn (Home)">⏮</button>
+    <button class="tbtn" id="btn-prev-turn" title="Previous turn (←)">◀ Turn</button>
+    <button class="tbtn" id="btn-prev-frame" title="Previous frame (,)">◀ Frame</button>
+    <button class="tbtn primary" id="btn-play" title="Play/Pause (Space)">▶</button>
+    <button class="tbtn" id="btn-next-frame" title="Next frame (.)">Frame ▶</button>
+    <button class="tbtn" id="btn-next-turn" title="Next turn (→)">Turn ▶</button>
+    <button class="tbtn" id="btn-last" title="Last turn (End)">⏭</button>
   </div>
-  <input type="range" id="turn-slider" min="0" max="0" value="0">
+
+  <div id="timeline-wrap">
+    <input type="range" id="turn-slider" min="0" max="0" value="0">
+    <div id="timeline-markers"></div>
+  </div>
   <span id="turn-label">Turn 0 / 0</span>
+
   <div id="speed-control">
-    Speed: <select id="speed">
-      <option value="2000">0.5x</option>
-      <option value="1000" selected>1x</option>
-      <option value="500">2x</option>
-      <option value="250">4x</option>
+    <span>Speed</span>
+    <select id="speed">
+      <option value="2000">0.5×</option>
+      <option value="1000" selected>1×</option>
+      <option value="500">2×</option>
+      <option value="250">4×</option>
+      <option value="100">8×</option>
     </select>
   </div>
-  <div id="jump-to">
-    <input type="number" id="jump-input" min="0" placeholder="Turn #">
-    <button id="btn-jump">Go</button>
-  </div>
+
+  <input type="text" id="search-box" placeholder="Search turns… (/)" title="Search reasoning, tool names, transcripts">
+
+  <button class="icon-btn" id="btn-stats" title="Run statistics">📊</button>
+  <button class="icon-btn" id="btn-help" title="Keyboard shortcuts (?)">?</button>
 </div>
-<div id="main">
-  <div id="viewer">
-    <img id="frame-img" alt="Game frame" src="">
+
+<!-- Filter bar -->
+<div id="filter-bar" class="hidden"></div>
+
+<!-- ===== Main ===== -->
+<div id="main" style="position:relative;">
+  <button id="sidebar-toggle" title="Toggle sidebar ([)">◀</button>
+
+  <!-- Viewer pane -->
+  <div id="viewer-pane">
+    <div id="viewer-toolbar">
+      <span id="frame-turn-info">—</span>
+      <span class="spacer"></span>
+      <button class="zoom-btn" id="btn-zoom-out" title="Zoom out (-)">−</button>
+      <span id="zoom-level">100%</span>
+      <button class="zoom-btn" id="btn-zoom-in" title="Zoom in (+)">+</button>
+      <button class="zoom-btn" id="btn-zoom-reset" title="Reset zoom (0)">Fit</button>
+    </div>
+    <div id="frame-canvas-wrap">
+      <img id="frame-img" alt="Game frame" src="" draggable="false">
+    </div>
     <div id="frame-label">No frame</div>
-    <div id="frame-nav"></div>
+    <div id="frame-strip"></div>
   </div>
+
+  <!-- Sidebar -->
   <div id="sidebar">
-    <h2>Decision</h2>
-    <div class="panel" id="panel-reasoning"><span class="label">Reasoning</span><br><span class="value" id="val-reasoning">—</span></div>
-    <div class="panel" id="panel-tool"><span class="label">Tool Call</span><br><span class="value" id="val-tool">—</span></div>
-    <h2>State</h2>
-    <div class="panel">
-      <div class="state-grid">
-        <div class="item"><span class="label">Screen:</span> <span class="value" id="val-screen">—</span></div>
-        <div class="item"><span class="label">HP:</span> <span class="value" id="val-hp">—</span></div>
-        <div class="item"><span class="label">Hunger:</span> <span class="value" id="val-hunger">—</span></div>
-        <div class="item"><span class="label">Location:</span> <span class="value" id="val-location">—</span></div>
-        <div class="item"><span class="label">Goal:</span> <span class="value" id="val-goal">—</span></div>
-        <div class="item"><span class="label">Turn:</span> <span class="value" id="val-turn">—</span></div>
+    <!-- Decision section -->
+    <div class="sb-section" id="sec-decision">
+      <div class="sb-section-header" onclick="toggleSection('sec-decision')">
+        <span>Decision</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body">
+        <div class="panel" id="panel-reasoning">
+          <span class="label">Reasoning</span>
+          <span class="value" id="val-reasoning">—</span>
+        </div>
+        <div class="panel" id="panel-tool">
+          <span class="label">Tool Call</span>
+          <span class="value" id="val-tool">—</span>
+        </div>
       </div>
     </div>
-    <h2>Timing</h2>
-    <div class="panel">
-      <div class="state-grid">
-        <div class="item"><span class="label">Decision:</span> <span class="value" id="val-decision-ms">—</span></div>
-        <div class="item"><span class="label">Turn total:</span> <span class="value" id="val-turn-ms">—</span></div>
-        <div class="item"><span class="label">Wait:</span> <span class="value" id="val-wait-time">—</span></div>
-        <div class="item"><span class="label">Changed:</span> <span class="value" id="val-changed">—</span></div>
+
+    <!-- State section -->
+    <div class="sb-section" id="sec-state">
+      <div class="sb-section-header" onclick="toggleSection('sec-state')">
+        <span>State</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body">
+        <div class="state-grid">
+          <div class="item"><span class="label">Screen</span><span class="value" id="val-screen">—</span></div>
+          <div class="item"><span class="label">Turn</span><span class="value" id="val-turn">—</span></div>
+          <div class="item"><span class="label">HP</span><span class="value" id="val-hp">—</span></div>
+          <div class="item"><span class="label">Hunger</span><span class="value" id="val-hunger">—</span></div>
+          <div class="item" style="grid-column:1/-1;"><span class="label">Location</span><span class="value" id="val-location">—</span></div>
+          <div class="item" style="grid-column:1/-1;"><span class="label">Goal</span><span class="value" id="val-goal">—</span></div>
+        </div>
       </div>
     </div>
-    <h2>Transcript</h2>
-    <div class="panel" id="transcript"><span class="value" id="val-transcript">—</span></div>
-    <h2>Journal Note</h2>
-    <div class="panel" id="panel-journal"><span class="value" id="val-journal">—</span></div>
+
+    <!-- Timing section -->
+    <div class="sb-section" id="sec-timing">
+      <div class="sb-section-header" onclick="toggleSection('sec-timing')">
+        <span>Timing</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body">
+        <div class="state-grid">
+          <div class="item"><span class="label">Decision</span><span class="value" id="val-decision-ms">—</span></div>
+          <div class="item"><span class="label">Turn total</span><span class="value" id="val-turn-ms">—</span></div>
+          <div class="item"><span class="label">Wait</span><span class="value" id="val-wait-time">—</span></div>
+          <div class="item"><span class="label">Log changed</span><span class="value" id="val-changed">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transcript section -->
+    <div class="sb-section" id="sec-transcript">
+      <div class="sb-section-header" onclick="toggleSection('sec-transcript')">
+        <span>Message Log Transcript</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body">
+        <div class="panel" id="transcript-panel">
+          <span class="value" id="val-transcript">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Journal section -->
+    <div class="sb-section" id="sec-journal">
+      <div class="sb-section-header" onclick="toggleSection('sec-journal')">
+        <span>Journal Note</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body">
+        <div class="panel">
+          <span class="value" id="val-journal">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats section (collapsed by default) -->
+    <div class="sb-section collapsed" id="sec-stats">
+      <div class="sb-section-header" onclick="toggleSection('sec-stats')">
+        <span>Run Statistics</span><span class="chevron">▼</span>
+      </div>
+      <div class="sb-section-body" id="stats-body">
+        <!-- populated by JS -->
+      </div>
+    </div>
   </div>
 </div>
 
+<!-- ===== Help overlay ===== -->
+<div class="overlay" id="help-overlay">
+  <div class="modal">
+    <h2>Keyboard Shortcuts</h2>
+    <div class="shortcut-grid">
+      <span class="key">Space</span><span class="desc">Play / Pause</span>
+      <span class="key">← / →</span><span class="desc">Previous / Next turn</span>
+      <span class="key">, / .</span><span class="desc">Previous / Next frame</span>
+      <span class="key">Home / End</span><span class="desc">First / Last turn</span>
+      <span class="key">/</span><span class="desc">Focus search</span>
+      <span class="key">+ / −</span><span class="desc">Zoom in / out</span>
+      <span class="key">0</span><span class="desc">Reset zoom (fit)</span>
+      <span class="key">[</span><span class="desc">Toggle sidebar</span>
+      <span class="key">?</span><span class="desc">Show this help</span>
+      <span class="key">Esc</span><span class="desc">Close dialogs</span>
+    </div>
+    <button class="close-btn" onclick="document.getElementById('help-overlay').classList.remove('visible')">Close</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
 <script>
-// --- State ---
+'use strict';
+
+// ===== State =====
 let events = [];
-let turns = [];       // [{turn, events: [...], frames: [{label, file}]}]
+let turns = [];
 let currentTurn = 0;
 let currentFrameIdx = 0;
 let playing = false;
 let playTimer = null;
+let zoom = 1;
+let searchQuery = '';
+let activeFilters = new Set();
+let statsData = null;
 
-// --- Load data ---
+// Tool name → color
+const TOOL_COLORS = {
+  move: '#60a5fa', go_stairs: '#60a5fa', rest: '#60a5fa',
+  auto_explore: '#a78bfa', travel: '#a78bfa', wait_until_healed: '#4ade80',
+  get: '#facc15', use_item: '#facc15', interact: '#facc15', choose_option: '#facc15',
+  open_screen: '#94a3b8', read_log: '#94a3b8', read_stats: '#94a3b8',
+  look: '#94a3b8', show_labels: '#94a3b8',
+  save: '#4ade80', quit: '#e94560', abandon: '#e94560', restart_run: '#e94560',
+  select: '#f472b6', confirm: '#f472b6', next: '#f472b6', back: '#f472b6',
+  press: '#fb923c',
+};
+function toolColor(name) { return TOOL_COLORS[name] || '#94a3b8'; }
+
+// ===== Toast =====
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('visible'), 2000);
+}
+
+// ===== Load =====
 async function load() {
   const resp = await fetch('/api/events');
   events = await resp.json();
+  try {
+    const metaResp = await fetch('/api/meta');
+    if (metaResp.ok) {
+      const meta = await metaResp.json();
+      document.getElementById('run-title').textContent = meta.run_name || meta.episode_name || '—';
+    }
+  } catch (e) { /* meta optional */ }
   buildTurns();
+  computeStats();
   setupSlider();
+  buildTimelineMarkers();
   showTurn(0);
 }
 
@@ -158,27 +847,183 @@ function buildTurns() {
   const turnMap = new Map();
   for (const ev of events) {
     const t = ev.turn ?? 0;
-    if (!turnMap.has(t)) {
-      turnMap.set(t, { turn: t, events: [], frames: [] });
-    }
+    if (!turnMap.has(t)) turnMap.set(t, { turn: t, events: [], frames: [] });
     const turn = turnMap.get(t);
     turn.events.push(ev);
-    if (ev.type === 'turn_start' && ev.frame) {
-      turn.frames.push({ label: 'start', file: ev.frame });
-    }
-    if (ev.type === 'frame' && ev.frame) {
-      turn.frames.push({ label: ev.label, file: ev.frame });
-    }
-    if (ev.type === 'turn_end' && ev.frame) {
-      turn.frames.push({ label: 'end', file: ev.frame });
-    }
-    if (ev.type === 'tool_result' && ev.image) {
-      turn.frames.push({ label: 'tool-result', file: ev.image });
-    }
+    if (ev.type === 'turn_start' && ev.frame) turn.frames.push({ label: 'start', file: ev.frame });
+    if (ev.type === 'frame' && ev.frame) turn.frames.push({ label: ev.label, file: ev.frame });
+    if (ev.type === 'turn_end' && ev.frame) turn.frames.push({ label: 'end', file: ev.frame });
+    if (ev.type === 'tool_result' && ev.image) turn.frames.push({ label: 'tool-result', file: ev.image });
   }
   turns = Array.from(turnMap.values()).sort((a, b) => a.turn - b.turn);
 }
 
+function computeStats() {
+  const toolCounts = {};
+  let errorCount = 0;
+  let deathTurn = null;
+  let totalDecisionMs = 0;
+  let decisionCount = 0;
+  let totalTurnMs = 0;
+  let turnCount = 0;
+  let hpChanges = [];
+
+  for (const turn of turns) {
+    const dec = turn.events.find(e => e.type === 'decision');
+    const tr = turn.events.find(e => e.type === 'tool_result');
+    const timing = turn.events.find(e => e.type === 'timing');
+
+    if (dec) {
+      toolCounts[dec.tool] = (toolCounts[dec.tool] || 0) + 1;
+      if (dec.screen === 'death' && deathTurn === null) deathTurn = turn.turn;
+      if (dec.hp != null) hpChanges.push({ turn: turn.turn, hp: dec.hp, max: dec.max_hp });
+    }
+    if (tr && tr.error) errorCount++;
+    if (timing) {
+      if (timing.decision_ms != null) { totalDecisionMs += timing.decision_ms; decisionCount++; }
+      if (timing.turn_total_ms != null) { totalTurnMs += timing.turn_total_ms; turnCount++; }
+    }
+  }
+
+  statsData = {
+    totalTurns: turns.length,
+    toolCounts,
+    errorCount,
+    deathTurn,
+    avgDecisionMs: decisionCount > 0 ? Math.round(totalDecisionMs / decisionCount) : 0,
+    avgTurnMs: turnCount > 0 ? Math.round(totalTurnMs / turnCount) : 0,
+    hpChanges,
+  };
+}
+
+function renderStats() {
+  const body = document.getElementById('stats-body');
+  if (!statsData) return;
+  const s = statsData;
+  const maxToolCount = Math.max(...Object.values(s.toolCounts), 1);
+
+  let html = '';
+  html += `<div class="stat-row"><span class="stat-label">Total turns</span><span class="stat-value">${s.totalTurns}</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Errors</span><span class="stat-value" style="color:${s.errorCount > 0 ? 'var(--accent)' : 'var(--green)'}">${s.errorCount}</span></div>`;
+  if (s.deathTurn !== null) {
+    html += `<div class="stat-row"><span class="stat-label">Died at turn</span><span class="stat-value">${s.deathTurn}</span></div>`;
+  }
+  html += `<div class="stat-row"><span class="stat-label">Avg decision</span><span class="stat-value">${s.avgDecisionMs}ms</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Avg turn</span><span class="stat-value">${s.avgTurnMs}ms</span></div>`;
+
+  if (s.hpChanges.length > 1) {
+    const first = s.hpChanges[0];
+    const last = s.hpChanges[s.hpChanges.length - 1];
+    html += `<div class="stat-row"><span class="stat-label">HP start→end</span><span class="stat-value">${first.hp} → ${last.hp}${last.max ? '/' + last.max : ''}</span></div>`;
+  }
+
+  html += `<div class="tool-bar-wrap"><div class="stat-row" style="border-bottom:1px solid var(--border);margin-bottom:6px;"><span class="stat-label">Tool usage</span><span class="stat-value">${Object.keys(s.toolCounts).length} tools</span></div>`;
+  const sortedTools = Object.entries(s.toolCounts).sort((a, b) => b[1] - a[1]);
+  for (const [name, count] of sortedTools) {
+    const pct = Math.round((count / maxToolCount) * 100);
+    html += `<div class="tool-bar-row">
+      <span class="tool-name" style="color:${toolColor(name)}">${name}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${toolColor(name)}"></span></span>
+      <span class="bar-count">${count}</span>
+    </div>`;
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
+// ===== Timeline markers =====
+function buildTimelineMarkers() {
+  const container = document.getElementById('timeline-markers');
+  container.innerHTML = '';
+  for (let i = 0; i < turns.length; i++) {
+    const turn = turns[i];
+    const dec = turn.events.find(e => e.type === 'decision');
+    const tr = turn.events.find(e => e.type === 'tool_result');
+    const marker = document.createElement('div');
+    marker.className = 'tl-marker';
+    if (tr && tr.error) marker.classList.add('error');
+    if (dec && dec.screen === 'death') marker.classList.add('death');
+    marker.title = `Turn ${turn.turn}${dec ? ' — ' + dec.tool : ''}${tr && tr.error ? ' — ERROR' : ''}`;
+    marker.dataset.idx = i;
+    marker.onclick = () => { stopPlay(); showTurn(i); };
+    container.appendChild(marker);
+  }
+}
+
+function updateTimelineMarkers() {
+  const markers = document.querySelectorAll('.tl-marker');
+  markers.forEach((m, i) => {
+    m.classList.toggle('active', i === currentTurn);
+    const turn = turns[i];
+    const matches = turnMatchesFilter(turn);
+    m.classList.toggle('filtered-out', !matches);
+  });
+}
+
+// ===== Filtering =====
+function turnMatchesFilter(turn) {
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    const haystack = turn.events.map(e => JSON.stringify(e)).join(' ').toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+  for (const filter of activeFilters) {
+    const dec = turn.events.find(e => e.type === 'decision');
+    const tr = turn.events.find(e => e.type === 'tool_result');
+    if (filter.startsWith('tool:')) {
+      if (!dec || dec.tool !== filter.slice(5)) return false;
+    } else if (filter === 'error') {
+      if (!tr || !tr.error) return false;
+    } else if (filter.startsWith('screen:')) {
+      if (!dec || dec.screen !== filter.slice(7)) return false;
+    }
+  }
+  return true;
+}
+
+function getFilteredTurnIndices() {
+  const indices = [];
+  for (let i = 0; i < turns.length; i++) {
+    if (turnMatchesFilter(turns[i])) indices.push(i);
+  }
+  return indices;
+}
+
+function updateFilterBar() {
+  const bar = document.getElementById('filter-bar');
+  if (activeFilters.size === 0 && !searchQuery) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('hidden');
+  let html = '<span class="filter-label">Filters:</span>';
+  if (searchQuery) {
+    html += `<span class="filter-chip" onclick="clearSearch()">"${escapeHtml(searchQuery)}" <span class="chip-x">×</span></span>`;
+  }
+  for (const f of activeFilters) {
+    let label = f;
+    if (f.startsWith('tool:')) label = 'tool: ' + f.slice(5);
+    else if (f.startsWith('screen:')) label = 'screen: ' + f.slice(7);
+    html += `<span class="filter-chip" onclick="removeFilter('${f}')">${label} <span class="chip-x">×</span></span>`;
+  }
+  bar.innerHTML = html;
+  updateTimelineMarkers();
+}
+
+function clearSearch() {
+  searchQuery = '';
+  document.getElementById('search-box').value = '';
+  updateFilterBar();
+}
+
+function removeFilter(f) {
+  activeFilters.delete(f);
+  updateFilterBar();
+}
+
+// ===== Slider =====
 function setupSlider() {
   const slider = document.getElementById('turn-slider');
   slider.max = Math.max(0, turns.length - 1);
@@ -188,10 +1033,29 @@ function setupSlider() {
   });
 }
 
+// ===== Section toggle =====
+function toggleSection(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+// ===== Helpers =====
 function findEvent(turn, type) {
   return turn.events.find(e => e.type === type);
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function hpClass(hp, maxHp) {
+  if (hp == null) return '';
+  const ratio = maxHp ? hp / maxHp : 1;
+  if (ratio <= 0.3) return 'hp-low';
+  if (ratio <= 0.6) return 'hp-mid';
+  return 'hp-ok';
+}
+
+// ===== Show turn =====
 function showTurn(idx) {
   if (idx < 0 || idx >= turns.length) return;
   currentTurn = idx;
@@ -199,22 +1063,49 @@ function showTurn(idx) {
   const turn = turns[idx];
 
   document.getElementById('turn-slider').value = idx;
+  const lastTurn = turns[turns.length - 1];
   document.getElementById('turn-label').textContent =
-    `Turn ${turn.turn} / ${turns[turns.length - 1]?.turn ?? 0}`;
+    `Turn ${turn.turn} / ${lastTurn ? lastTurn.turn : 0}`;
+  document.getElementById('frame-turn-info').textContent =
+    `Turn ${turn.turn}`;
 
   // Decision
   const dec = findEvent(turn, 'decision');
+  const panelTool = document.getElementById('panel-tool');
   if (dec) {
     document.getElementById('val-reasoning').textContent = dec.reasoning || '—';
-    document.getElementById('val-tool').textContent =
-      `${dec.tool}(${JSON.stringify(dec.args)})`;
-    document.getElementById('val-screen').textContent = dec.screen || '—';
-    document.getElementById('val-hp').textContent =
-      dec.hp != null ? `${dec.hp}/${dec.max_hp ?? '?'}` : '—';
+    const toolEl = document.getElementById('val-tool');
+    toolEl.innerHTML = `<span class="tool-name" style="color:${toolColor(dec.tool)}">${escapeHtml(dec.tool)}</span>` +
+      (dec.args && Object.keys(dec.args).length > 0
+        ? ` <span class="tool-args">${escapeHtml(JSON.stringify(dec.args))}</span>`
+        : '');
+
+    const screenEl = document.getElementById('val-screen');
+    screenEl.textContent = dec.screen || '—';
+    screenEl.className = 'value' + (dec.screen === 'death' ? ' screen-death' : '');
+
+    const hpEl = document.getElementById('val-hp');
+    if (dec.hp != null) {
+      hpEl.textContent = `${dec.hp}/${dec.max_hp ?? '?'}`;
+      hpEl.className = 'value ' + hpClass(dec.hp, dec.max_hp);
+    } else {
+      hpEl.textContent = '—';
+      hpEl.className = 'value';
+    }
     document.getElementById('val-hunger').textContent = dec.hunger || '—';
     document.getElementById('val-location').textContent = dec.location || '—';
     document.getElementById('val-goal').textContent = dec.goal || '—';
     document.getElementById('val-journal').textContent = dec.journal_note || '—';
+    document.getElementById('val-turn').textContent = turn.turn;
+  } else {
+    document.getElementById('val-reasoning').textContent = '—';
+    document.getElementById('val-tool').textContent = '—';
+    document.getElementById('val-screen').textContent = '—';
+    document.getElementById('val-hp').textContent = '—';
+    document.getElementById('val-hunger').textContent = '—';
+    document.getElementById('val-location').textContent = '—';
+    document.getElementById('val-goal').textContent = '—';
+    document.getElementById('val-journal').textContent = '—';
   }
 
   // Timing
@@ -224,75 +1115,131 @@ function showTurn(idx) {
       timing.decision_ms != null ? `${timing.decision_ms}ms` : '—';
     document.getElementById('val-turn-ms').textContent =
       timing.turn_total_ms != null ? `${timing.turn_total_ms}ms` : '—';
+  } else {
+    document.getElementById('val-decision-ms').textContent = '—';
+    document.getElementById('val-turn-ms').textContent = '—';
   }
   const end = findEvent(turn, 'turn_end');
   if (end) {
     document.getElementById('val-wait-time').textContent =
       end.wait_time != null ? `${end.wait_time}s` : '—';
-    document.getElementById('val-changed').textContent =
-      end.turn_changed != null ? (end.turn_changed ? 'yes' : 'no') : '—';
+    const changedEl = document.getElementById('val-changed');
+    changedEl.textContent = end.turn_changed != null ? (end.turn_changed ? 'yes' : 'no') : '—';
+    changedEl.style.color = end.turn_changed ? 'var(--green)' : 'var(--yellow)';
+  } else {
+    document.getElementById('val-wait-time').textContent = '—';
+    document.getElementById('val-changed').textContent = '—';
   }
 
   // Transcript
   const tr = findEvent(turn, 'transcript');
   document.getElementById('val-transcript').textContent = tr ? tr.text : '—';
 
-  // Tool result error highlight
-  const tr_err = findEvent(turn, 'tool_result');
-  const panelTool = document.getElementById('panel-tool');
-  if (tr_err && tr_err.error) {
+  // Tool result error
+  const trErr = findEvent(turn, 'tool_result');
+  if (trErr && trErr.error) {
     panelTool.classList.add('error');
-    document.getElementById('val-tool').textContent +=
-      `\nERROR: ${tr_err.text}`;
+    const existing = document.getElementById('val-tool-error');
+    if (existing) existing.remove();
+    const errDiv = document.createElement('div');
+    errDiv.id = 'val-tool-error';
+    errDiv.style.cssText = 'color:var(--accent);font-size:12px;margin-top:4px;font-family:var(--mono);';
+    errDiv.textContent = 'ERROR: ' + (trErr.text || '');
+    panelTool.appendChild(errDiv);
   } else {
     panelTool.classList.remove('error');
+    const existing = document.getElementById('val-tool-error');
+    if (existing) existing.remove();
   }
 
-  document.getElementById('val-turn').textContent = turn.turn;
-
   showFrame(0);
-  updateFrameNav();
+  updateFrameStrip();
+  updateTimelineMarkers();
+  updateNavButtons();
 }
 
+// ===== Frame display =====
 function showFrame(idx) {
   const turn = turns[currentTurn];
-  if (!turn || turn.frames.length === 0) return;
+  if (!turn || turn.frames.length === 0) {
+    document.getElementById('frame-img').src = '';
+    document.getElementById('frame-label').textContent = 'No frame';
+    return;
+  }
   currentFrameIdx = Math.max(0, Math.min(idx, turn.frames.length - 1));
   const frame = turn.frames[currentFrameIdx];
-  document.getElementById('frame-img').src = `/frames/${frame.file}`;
+  const img = document.getElementById('frame-img');
+  img.src = `/frames/${frame.file}`;
+  img.style.transform = `scale(${zoom})`;
   document.getElementById('frame-label').textContent =
     `Turn ${turn.turn} — Frame ${currentFrameIdx + 1}/${turn.frames.length} (${frame.label})`;
-  updateFrameNav();
+  updateFrameStrip();
+  updateNavButtons();
 }
 
-function updateFrameNav() {
+function updateFrameStrip() {
+  const strip = document.getElementById('frame-strip');
   const turn = turns[currentTurn];
-  const nav = document.getElementById('frame-nav');
-  nav.innerHTML = '';
-  if (!turn) return;
+  if (!turn || turn.frames.length <= 1) {
+    strip.innerHTML = '';
+    return;
+  }
+  strip.innerHTML = '';
   turn.frames.forEach((f, i) => {
-    const btn = document.createElement('button');
-    btn.textContent = f.label;
-    if (i === currentFrameIdx) btn.style.borderColor = '#e94560';
-    btn.onclick = () => { stopPlay(); showFrame(i); };
-    nav.appendChild(btn);
+    const wrap = document.createElement('div');
+    wrap.className = 'frame-thumb-wrap';
+    const img = document.createElement('img');
+    img.className = 'frame-thumb' + (i === currentFrameIdx ? ' active' : '');
+    img.src = `/frames/${f.file}`;
+    img.onclick = () => { stopPlay(); showFrame(i); };
+    img.title = f.label;
+    const lbl = document.createElement('div');
+    lbl.className = 'frame-thumb-label';
+    lbl.textContent = f.label;
+    wrap.appendChild(img);
+    wrap.appendChild(lbl);
+    strip.appendChild(wrap);
   });
 }
 
-// --- Playback ---
+function updateNavButtons() {
+  const turn = turns[currentTurn];
+  const hasFrames = turn && turn.frames.length > 0;
+  document.getElementById('btn-prev-frame').disabled = !hasFrames || currentFrameIdx <= 0;
+  document.getElementById('btn-next-frame').disabled = !hasFrames || currentFrameIdx >= turn.frames.length - 1;
+  document.getElementById('btn-prev-turn').disabled = currentTurn <= 0;
+  document.getElementById('btn-next-turn').disabled = currentTurn >= turns.length - 1;
+  document.getElementById('btn-first').disabled = currentTurn <= 0;
+  document.getElementById('btn-last').disabled = currentTurn >= turns.length - 1;
+}
+
+// ===== Zoom =====
+function setZoom(z) {
+  zoom = Math.max(0.25, Math.min(4, z));
+  document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+  const img = document.getElementById('frame-img');
+  img.style.transform = `scale(${zoom})`;
+  img.classList.toggle('zoomed', zoom > 1);
+}
+
+// ===== Playback =====
 function startPlay() {
+  if (turns.length === 0) return;
   playing = true;
   document.getElementById('btn-play').textContent = '⏸';
+  const speed = parseInt(document.getElementById('speed').value);
   playTimer = setInterval(() => {
     const turn = turns[currentTurn];
+    if (!turn) { stopPlay(); return; }
     if (currentFrameIdx < turn.frames.length - 1) {
       showFrame(currentFrameIdx + 1);
     } else if (currentTurn < turns.length - 1) {
       showTurn(currentTurn + 1);
     } else {
       stopPlay();
+      toast('End of replay');
     }
-  }, parseInt(document.getElementById('speed').value));
+  }, speed);
 }
 
 function stopPlay() {
@@ -301,30 +1248,87 @@ function stopPlay() {
   if (playTimer) { clearInterval(playTimer); playTimer = null; }
 }
 
-// --- Controls ---
+function stepTurn(delta) {
+  stopPlay();
+  const filtered = getFilteredTurnIndices();
+  if (filtered.length === 0) { showTurn(currentTurn + delta); return; }
+  const pos = filtered.indexOf(currentTurn);
+  if (pos >= 0) {
+    const newPos = Math.max(0, Math.min(filtered.length - 1, pos + delta));
+    showTurn(filtered[newPos]);
+  } else {
+    showTurn(currentTurn + delta);
+  }
+}
+
+// ===== Sidebar toggle =====
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  document.getElementById('sidebar-toggle').textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
+}
+
+// ===== Event listeners =====
 document.getElementById('btn-play').onclick = () => playing ? stopPlay() : startPlay();
-document.getElementById('btn-prev-turn').onclick = () => { stopPlay(); showTurn(currentTurn - 1); };
-document.getElementById('btn-next-turn').onclick = () => { stopPlay(); showTurn(currentTurn + 1); };
+document.getElementById('btn-prev-turn').onclick = () => stepTurn(-1);
+document.getElementById('btn-next-turn').onclick = () => stepTurn(1);
 document.getElementById('btn-prev-frame').onclick = () => { stopPlay(); showFrame(currentFrameIdx - 1); };
 document.getElementById('btn-next-frame').onclick = () => { stopPlay(); showFrame(currentFrameIdx + 1); };
-document.getElementById('btn-jump').onclick = () => {
-  stopPlay();
-  const t = parseInt(document.getElementById('jump-input').value);
-  const idx = turns.findIndex(tn => tn.turn >= t);
-  if (idx >= 0) showTurn(idx);
+document.getElementById('btn-first').onclick = () => { stopPlay(); showTurn(0); };
+document.getElementById('btn-last').onclick = () => { stopPlay(); showTurn(turns.length - 1); };
+document.getElementById('btn-help').onclick = () => document.getElementById('help-overlay').classList.add('visible');
+document.getElementById('btn-stats').onclick = () => {
+  renderStats();
+  const sec = document.getElementById('sec-stats');
+  sec.classList.remove('collapsed');
+  sec.scrollIntoView({ behavior: 'smooth' });
 };
+document.getElementById('sidebar-toggle').onclick = toggleSidebar;
+
+document.getElementById('btn-zoom-in').onclick = () => setZoom(zoom + 0.25);
+document.getElementById('btn-zoom-out').onclick = () => setZoom(zoom - 0.25);
+document.getElementById('btn-zoom-reset').onclick = () => setZoom(1);
+document.getElementById('frame-img').onclick = () => setZoom(zoom > 1 ? 1 : 2);
+
 document.getElementById('speed').onchange = () => {
   if (playing) { stopPlay(); startPlay(); }
 };
 
+document.getElementById('search-box').addEventListener('input', (e) => {
+  searchQuery = e.target.value.trim();
+  updateFilterBar();
+});
+
+document.getElementById('help-overlay').onclick = (e) => {
+  if (e.target === document.getElementById('help-overlay')) {
+    document.getElementById('help-overlay').classList.remove('visible');
+  }
+};
+
+// Global keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
   switch (e.key) {
     case ' ': e.preventDefault(); playing ? stopPlay() : startPlay(); break;
-    case 'ArrowLeft': stopPlay(); showTurn(currentTurn - 1); break;
-    case 'ArrowRight': stopPlay(); showTurn(currentTurn + 1); break;
-    case ',': case 'ArrowUp': stopPlay(); showFrame(currentFrameIdx - 1); break;
-    case '.': case 'ArrowDown': stopPlay(); showFrame(currentFrameIdx + 1); break;
+    case 'ArrowLeft': e.preventDefault(); stepTurn(-1); break;
+    case 'ArrowRight': e.preventDefault(); stepTurn(1); break;
+    case ',': case 'ArrowUp': e.preventDefault(); stopPlay(); showFrame(currentFrameIdx - 1); break;
+    case '.': case 'ArrowDown': e.preventDefault(); stopPlay(); showFrame(currentFrameIdx + 1); break;
+    case 'Home': e.preventDefault(); stopPlay(); showTurn(0); break;
+    case 'End': e.preventDefault(); stopPlay(); showTurn(turns.length - 1); break;
+    case '/': e.preventDefault(); document.getElementById('search-box').focus(); break;
+    case '+': case '=': setZoom(zoom + 0.25); break;
+    case '-': case '_': setZoom(zoom - 0.25); break;
+    case '0': setZoom(1); break;
+    case '[': toggleSidebar(); break;
+    case '?': document.getElementById('help-overlay').classList.add('visible'); break;
+    case 'Escape':
+      document.getElementById('help-overlay').classList.remove('visible');
+      stopPlay();
+      break;
   }
 });
 

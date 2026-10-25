@@ -20,12 +20,12 @@ import win32gui
 # ---------------------------------------------------------------------------
 
 VK = {
-    # Directions (arrows)
-    "up":         (win32con.VK_UP,    True),
-    "down":       (win32con.VK_DOWN,  True),
-    "left":       (win32con.VK_LEFT,  True),
-    "right":      (win32con.VK_RIGHT, True),
-    # Diagonals map to numpad keys (NumLock-independent when sent as VK)
+    # Movement: strictly numpad. Cardinal = 8/2/4/6, diagonals = 7/9/1/3.
+    # Numpad VK codes are NumLock-independent when sent via SendInput.
+    "up":         (win32con.VK_NUMPAD8, False),
+    "down":       (win32con.VK_NUMPAD2, False),
+    "left":       (win32con.VK_NUMPAD4, False),
+    "right":      (win32con.VK_NUMPAD6, False),
     "up_left":    (win32con.VK_NUMPAD7, False),
     "up_right":   (win32con.VK_NUMPAD9, False),
     "down_left":  (win32con.VK_NUMPAD1, False),

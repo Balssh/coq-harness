@@ -1,6 +1,11 @@
-"""Tool framework: base class, registry, and execution.
+"""Tool framework: base class, registry, screen-based filtering, and execution.
 
-Tools are the semantic API the model calls. The model never emits raw keys.
+Tools are the semantic API the model calls. The model never emits raw keys
+directly — it calls tools by name with arguments. The generic `press` tool
+is the escape hatch for anything not covered by a dedicated tool.
+
+Screen-based filtering: each tool declares which screens it's relevant on.
+The agent only sees tools for the current screen, reducing choice overload.
 """
 
 from abc import ABC, abstractmethod
@@ -22,6 +27,7 @@ class Tool(ABC):
     description: str
     parameters: dict                 # JSON Schema
     advances_turn: bool = False
+    screens: set[str] | None = None  # None = available on all screens
 
     @abstractmethod
     def execute(self, **params) -> ToolResult: ...
@@ -46,11 +52,28 @@ def all_tools() -> list[Tool]:
     return list(_REGISTRY.values())
 
 
-def tool_schemas() -> list[dict]:
-    """Returns [{name, description, parameters}] for the system prompt."""
+def tools_for_screen(screen: str) -> list[Tool]:
+    """Return tools relevant to the given screen.
+
+    Tools with `screens=None` are always available.
+    Tools with `screens` set are only available when the current screen
+    is in that set.
+    """
+    return [
+        t for t in _REGISTRY.values()
+        if t.screens is None or screen in t.screens
+    ]
+
+
+def tool_schemas(screen: str | None = None) -> list[dict]:
+    """Returns [{name, description, parameters}] for the system prompt.
+
+    If screen is provided, only tools relevant to that screen are returned.
+    """
+    tools = tools_for_screen(screen) if screen else all_tools()
     return [
         {"name": t.name, "description": t.description, "parameters": t.parameters}
-        for t in _REGISTRY.values()
+        for t in tools
     ]
 
 
@@ -96,5 +119,4 @@ def image_to_png_bytes(img: Image.Image) -> bytes:
 
 
 # Import all tool modules to trigger registration
-from tools import movement, interaction, info, meta, chargen  # noqa: E402, F401
-
+from tools import movement, interaction, info, meta, chargen, press  # noqa: E402, F401

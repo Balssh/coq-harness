@@ -4,19 +4,18 @@ You are at the **main menu** or **mode select screen** (before character creatio
 
 ## Expected Flow
 
-1. **Title screen**: "New Game" is the DEFAULT cursor position. Press Enter to
-   select it. Do NOT select Continue, Options, or Achievements.
+1. **Title screen**: "New Game" is the DEFAULT cursor position. Use `confirm()`
+   to select it. Do NOT select Continue, Options, or Achievements.
 2. **Mode select**: Choose **Classic** (permadeath — this is the mode we play).
-   Classic is typically the default — press Enter.
-3. **Character type**: Choose **Preset** for the fastest start (one confirm).
-   Custom chargen is the fallback.
+   Classic is typically the default — use `confirm()`.
+3. **Character type**: Choose **Preset** for the fastest start.
 4. Report your screen accurately: `"title"`, `"mode_select"`, or `"chargen"`.
 
 ## Rules
 
-- Arrows move the cursor, Enter confirms.
-- If you see the title screen, press Enter (New Game is default).
-- If you see mode select, press Enter (Classic is default).
-- If you accidentally end up on Continue/Options/Achievements, press Escape
+- `select(direction)` moves the cursor, `confirm()` presses Enter.
+- If you see the title screen, use `confirm()` (New Game is default).
+- If you see mode select, use `confirm()` (Classic is default).
+- If you accidentally end up on Continue/Options/Achievements, use `back()`
   or navigate back.
-- Do NOT use `quit`, `restart_run`, or `abandon` on these screens.
+- Do NOT use `quit`, `abandon`, or `restart_run` on these screens.

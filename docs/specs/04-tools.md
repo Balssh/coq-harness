@@ -6,6 +6,22 @@ Tools are the **semantic API** the model calls. The model never emits raw keys �
 it calls tools by name with parameters. Tools compose the controller, screens,
 bridge client, and perception modules to perform game actions.
 
+## Philosophy: Pi-Style Thin Primitives
+
+The model is smart. Tools are **thin primitives** that encode game mechanics
+so the model doesn't have to. The model uses dedicated tools when they fit,
+and falls back to the generic `press()` tool with the keymap when they don't.
+
+Design principles:
+- **Minimal surface area**: ~24 tools total, but screen-based filtering means
+  the model only sees 2-20 tools per turn depending on context.
+- **Semantic where it matters**: movement, item use, and screen navigation have
+  dedicated tools with validated parameters.
+- **Generic escape hatch**: `press(keys)` lets the model send any key sequence
+  using the keymap reference in the system prompt.
+- **Screen-aware**: tools declare which screens they're relevant on. The agent
+  only receives schemas for tools available on the current screen.
+
 ## Tool Base Class
 
 ```python
@@ -14,23 +30,157 @@ from dataclasses import dataclass
 
 @dataclass
 class ToolResult:
-    text: str = ""              # text for the model to read
-    image: bytes | None = None  # PNG bytes of a cropped screenshot
-    error: bool = False         # True if this is an error result
+    text: str = ""
+    image: bytes | None = None       # PNG bytes of a cropped screenshot
+    images: dict[str, bytes] = {}    # named PNG bytes
+    error: bool = False
 
 class Tool(ABC):
-    name: str                   # unique identifier, e.g. "move"
-    description: str            # shown to the model in the system prompt
-    parameters: dict            # JSON schema for the model's arguments
-    advances_turn: bool = False # if True, turn loop calls wait_for_change after execute
+    name: str                        # unique identifier, e.g. "move"
+    description: str                 # shown to the model in the system prompt
+    parameters: dict                 # JSON schema for the model's arguments
+    advances_turn: bool = False      # if True, turn loop calls wait_for_change
+    screens: set[str] | None = None  # None = available on all screens
 
     @abstractmethod
     def execute(self, **params) -> ToolResult: ...
 ```
 
-## Registry
+## Screen-Based Filtering
 
-Simple dict, populated at startup. Tools register themselves.
+Tools declare which screens they're relevant on via the `screens` attribute:
+
+```python
+def tools_for_screen(screen: str) -> list[Tool]:
+    """Return tools relevant to the given screen.
+
+    Tools with `screens=None` are always available (e.g., `press`).
+    Tools with `screens` set are only available when the current screen
+    is in that set.
+    """
+    return [
+        t for t in _REGISTRY.values()
+        if t.screens is None or screen in t.screens
+    ]
+```
+
+The agent calls `tools_for_screen(state.screen)` to get the filtered list,
+and `_format_tools(screen)` renders it for the system prompt.
+
+### Screen → Tool Mapping
+
+| Screen | Tools Available |
+|--------|-----------------|
+| `play` | move, go_stairs, rest, auto_explore, travel, wait_until_healed, get, use_item, interact, choose_option, open_screen, read_log, read_stats, look, show_labels, save, quit, abandon, restart_run, press |
+| `menu` | choose_option, open_screen, read_log, read_stats, save, quit, press |
+| `dialogue` | choose_option, press |
+| `trade` | choose_option, press |
+| `title` | select, confirm, back, press |
+| `mode_select` | select, confirm, back, press |
+| `chargen` | select, confirm, next, back, press |
+| `death` | press |
+| `world_map` | press |
+
+## Execution Flow
+
+1. Model outputs a tool call: `{"tool": "move", "args": {"direction": "up"}, "wait_for_turn": true}`
+2. Agent validates the tool is available on the current screen
+3. Agent validates `args` against the tool's parameter schema
+4. Agent looks up the tool in the registry
+5. Tool `execute()` runs: sends keys via controller, may capture screenshots
+6. Tool returns `ToolResult`
+7. If `tool.advances_turn` is True OR `decision.wait_for_turn` is True:
+   turn loop calls `bridge.wait_for_change(timeout=3.0)`
+8. Turn loop captures a fresh frame
+9. `ToolResult` (text + image) + fresh frame are appended to the conversation
+10. Model decides the next action
+
+The **turn loop owns the turn clock**. Tools just send keys and return results.
+
+The `wait_for_turn` field in the Decision schema lets the model control the
+turn clock when using `press()` — set it to `true` for turn-advancing keys,
+`false` for info-only actions.
+
+## Error Handling
+
+Tool execution errors are **caught and returned as `ToolResult(error=True, text=...)`**.
+The model sees the error message and decides what to do. Tools never raise exceptions
+to the agent loop — a failed tool call is information, not a crash.
+
+## Tool Catalog (24 tools)
+
+### Movement (play only, advances turn)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `move` | `direction`: 8 compass | Move one tile. Bump enemies to attack, doors to open. |
+| `go_stairs` | `direction`: up/down | Take stairs. Must be on a staircase tile. |
+| `rest` | `turns`: int (optional) | Rest to heal/wait. Omit turns to rest indefinitely. |
+| `auto_explore` | — | Trigger Qud's auto-explore. Advances many turns. |
+| `travel` | `direction`: N/S/E/W | Auto-pathfind to zone edge, load adjacent zone. |
+| `wait_until_healed` | — | Rest until healed or interrupted. Advances many turns. |
+
+### Interaction (play only, advances turn)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `get` | — | Pick up items on current tile. Menu may appear for multiples. |
+| `use_item` | `slot`: a-z, `action`: equip/drop/quaff/eat/unequip | Use inventory item. Opens inventory, selects slot, performs action. |
+| `interact` | `direction`: 8 compass | Space+direction context menu (talk, open, take, etc.). |
+
+### Menu/Dialogue (menu/dialogue/trade screens)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `choose_option` | `option`: 1-9 | Select numbered option in dialogue or menu. |
+
+### Info (play/menu screens, no turn advance)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `open_screen` | `screen`: inventory/equipment/skills/character/quests/journal/abilities/mutations | Open a game screen, return screenshot. Close with `press(['escape'])`. |
+| `read_log` | — | Full-resolution message log crop. |
+| `read_stats` | — | Stats bar + abilities bar crops. |
+| `look` | — | Enter look mode. Use `move()` to inspect tiles. |
+| `show_labels` | — | Hold Alt for item/entity labels, capture, release. |
+
+### Meta
+
+| Tool | Screens | Description |
+|------|---------|-------------|
+| `save` | play, menu | Save the game. |
+| `quit` | play, menu | Quit to main menu (no-op in chargen). |
+| `abandon` | play | Abandon run cleanly (Esc → Abandon). |
+| `restart_run` | play | End current run, start new one. |
+
+### Chargen (title/mode_select/chargen screens)
+
+| Tool | Screens | Description |
+|------|---------|-------------|
+| `select` | title, mode_select, chargen | Navigate menu with arrow keys. |
+| `confirm` | title, mode_select, chargen | Press Enter to select. |
+| `next` | chargen | Press Num 9 to advance to next screen. |
+| `back` | title, mode_select, chargen | Press Escape to go back. |
+
+### Generic (all screens)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `press` | `keys`: array of strings or string arrays (max 10) | Send any key sequence. Escape hatch for actions not covered by dedicated tools. Consult the keymap in the system prompt. |
+
+## Keymap Reference (in system prompt)
+
+The system prompt includes a keymap reference table for use with `press()`:
+
+- **Movement**: numpad only — `num_8`/`num_2`/`num_4`/`num_6` (cardinal),
+  `num_7`/`num_9`/`num_1`/`num_3` (diagonal), `num_5` (wait/rest),
+  `num_0` (auto-explore), `~` (wait until healed), `-`/`+` (stairs)
+- **Interaction**: `g` (get), `space`+direction (interact), `1-9` (numbered options)
+- **Screens**: `I`/`E`/`X`/`P`/`Q`/`J`/`A`/`M`/`L` (various screens), `escape` (close)
+- **Inventory actions**: `d` (drop), `w` (wear), `q` (quaff), `e` (eat), `t` (take off)
+- **Meta**: `escape`→`s`→`enter` (save), `escape`→`q`→`enter` (quit)
+
+## Registry
 
 ```python
 _REGISTRY: dict[str, Tool] = {}
@@ -44,137 +194,42 @@ def get_tool(name: str) -> Tool | None:
 def all_tools() -> list[Tool]:
     return list(_REGISTRY.values())
 
-def tool_schemas() -> list[dict]:
-    """Returns [{name, description, parameters}] for the system prompt."""
-    return [
-        {"name": t.name, "description": t.description, "parameters": t.parameters}
-        for t in _REGISTRY.values()
-    ]
-```
+def tools_for_screen(screen: str) -> list[Tool]:
+    return [t for t in _REGISTRY.values()
+            if t.screens is None or screen in t.screens]
 
-## Execution Flow
-
-1. Model outputs a tool call: `{"tool": "move", "args": {"direction": "up"}}`
-2. Agent validates `args` against the tool's parameter schema
-3. Agent looks up the tool in the registry
-4. Tool `execute()` runs: sends keys via controller, may capture screenshots
-5. Tool returns `ToolResult`
-6. If `tool.advances_turn` is True: turn loop calls `bridge.wait_for_change(timeout=3.0)`
-7. Turn loop captures a fresh frame
-8. `ToolResult` (text + image) + fresh frame are appended to the conversation
-9. Model decides the next action
-
-The **turn loop owns the turn clock**. Tools just send keys and return results.
-
-## Error Handling
-
-Tool execution errors are **caught and returned as `ToolResult(error=True, text=...)`**.
-The model sees the error message and decides what to do. Tools never raise exceptions
-to the agent loop — a failed tool call is information, not a crash.
-
-Example: `equip("z")` when slot z is empty → `ToolResult(error=True, text="No item in slot z.")`
-
-## Tool Categories
-
-### Movement
-
-| Tool | Params | advances_turn | Description |
-|------|--------|---------------|-------------|
-| `move` | `direction`: "up" \| "down" \| "left" \| "right" \| "up_left" \| "up_right" \| "down_left" \| "down_right" | Yes | Move one tile in a direction |
-| `rest` | `turns`: int (optional, default 1) | Yes | Rest (pass turns). If turns omitted, rest until interrupted |
-| `go_stairs` | `direction`: "up" \| "down" | Yes | Take stairs. Must be standing on stairs |
-| `auto_explore` | — | Yes | Harness-side loop: explore unexplored adjacent tiles until none remain or interrupted |
-| `wait` | — | Yes | Do nothing, pass one turn. For waiting for NPCs, enemies, etc. |
-
-### Interaction
-
-| Tool | Params | advances_turn | Description |
-|------|--------|---------------|-------------|
-| `get` | — | Yes | Pick up item(s) on current tile. If multiple items, a menu appears — model picks via follow-up |
-| `drop` | `slot`: str (letter a-z) | Yes | Open inventory, drop item in slot |
-| `equip` | `slot`: str (letter a-z) | Yes | Open inventory, equip item in slot. Handles equip sub-menu (choose slot) |
-| `unequip` | `slot`: str (letter a-z) | Yes | Open equipment screen, unequip item in slot |
-| `quaff` | `slot`: str (letter a-z) | Yes | Open inventory, quaff item in slot |
-| `eat` | `slot`: str (letter a-z) | Yes | Open inventory, eat item in slot |
-| `talk` | — | Yes | Initiate conversation with adjacent NPC. Model handles dialogue choices via follow-up |
-| `trade` | — | Yes | Initiate trade with adjacent NPC (talk → trade option) |
-
-**Menu navigation pattern** (for `equip`, `drop`, `quaff`, `eat`, `unequip`):
-1. Open the relevant screen via `screens.open_screen(...)`
-2. Wait for the menu to render
-3. Press the slot letter via `controller.press(slot)`
-4. If a sub-menu appears (e.g., "Equip on which hand?"), capture it and return to model
-5. Model calls the tool again with the sub-menu choice, or a follow-up tool handles it
-
-### Info (no turn advance)
-
-| Tool | Params | advances_turn | Description |
-|------|--------|---------------|-------------|
-| `character_sheet` | — | No | Open character sheet, crop, return screenshot |
-| `inventory` | — | No | Open inventory, crop, return screenshot |
-| `skills` | — | No | Open skills/abilities screen, crop, return |
-| `quests` | — | No | Open journal/quests, crop, return |
-| `read_log` | — | No | Crop the message log region at full resolution, return |
-| `read_stats` | — | No | Return stats bar + abilities bar crops. For when the model wants fresh HP/hunger/abilities without waiting for the periodic refresh |
-| `look` | — | No | Enter look mode (press look key), capture viewport, return. Model uses move keys to inspect tiles |
-| `alt_overlay` | — | No | Hold Alt (item labels), capture, release, return screenshot |
-
-Info tools return cropped screenshots (`ToolResult.image`) plus optional text.
-The model reads the image to understand the screen contents.
-
-### Meta
-
-| Tool | Params | advances_turn | Description |
-|------|--------|---------------|-------------|
-| `save` | — | No | Save the game (Esc → Save) |
-| `quit` | — | No | Quit to main menu |
-| `restart_run` | — | No | End current run, start a new one. Signals the run manager |
-
-## Parameter Schemas
-
-Schemas are JSON Schema dicts. Example for `move`:
-
-```python
-{
-    "type": "object",
-    "properties": {
-        "direction": {
-            "type": "string",
-            "enum": ["up", "down", "left", "right",
-                     "up_left", "up_right", "down_left", "down_right"]
-        }
-    },
-    "required": ["direction"]
-}
+def tool_schemas(screen: str | None = None) -> list[dict]:
+    tools = tools_for_screen(screen) if screen else all_tools()
+    return [{"name": t.name, "description": t.description, "parameters": t.parameters}
+            for t in tools]
 ```
 
 ## File Layout
 
 ```
 tools/
-  __init__.py          # registry, Tool base class, ToolResult
-  movement.py          # move, rest, go_stairs, auto_explore, wait
-  interaction.py       # get, drop, equip, unequip, quaff, eat, talk, trade
-  info.py              # character_sheet, inventory, skills, quests, read_log, look, alt_overlay
-  meta.py              # save, quit, restart_run
+  __init__.py          # registry, Tool base class, ToolResult, screen filtering
+  movement.py          # move, go_stairs, rest, auto_explore, travel, wait_until_healed
+  interaction.py       # get, use_item, interact, choose_option
+  info.py              # open_screen, read_log, read_stats, look, show_labels
+  meta.py              # save, quit, abandon, restart_run
+  chargen.py           # select, confirm, next, back
+  press.py             # press (generic key sender)
 ```
-
-Tools register themselves on import. `tools/__init__.py` imports all category
-modules to trigger registration.
 
 ## Dependencies
 
 - `client/bridge_client.py` (via game/controller)
 - `game/controller.py`, `game/screens.py`
 - `perception/` (for cropping screenshots)
-- `jsonschema` (or similar) for parameter validation — or hand-rolled if simple enough
+- `jsonschema` for parameter validation
+- `PIL` for image encoding
 
 ## Open Items
 
 - Exact keybindings for all actions must be verified in-game (Esc → k).
-- `auto_explore` is the most complex tool — it runs a harness-side loop. Needs its
-  own sub-spec or at least a detailed design before implementation.
-- Menu navigation (sub-menus after selecting an item) needs a state machine or
-  the model drives it turn-by-turn. TBD which approach.
+- `auto_explore` key binding needs verification (currently 'e').
+- Menu navigation (sub-menus after selecting an item) — model drives via
+  `press()` or `choose_option()` turn-by-turn.
 - `look` mode interaction: after entering look mode, movement keys move the cursor.
-  The model needs to know it's in look mode (via `Screen` enum or tool result text).
+  The model needs to know it's in look mode (via screen report or tool result text).

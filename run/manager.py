@@ -155,7 +155,7 @@ def _play_loop() -> None:
             transition_to(Phase.DEATH)
             break
 
-        decision = run_turn(phase="play")
+        decision, turn_changed = run_turn(phase="play")
         state = get_state()
 
         # Check phase from model's report
@@ -169,14 +169,12 @@ def _play_loop() -> None:
         if screen_phase == Phase.CHARGEN:
             print("[run] WARNING: Model reported chargen during play. Continuing.")
 
-        # Watchdog check
+        # Watchdog check with actual turn_changed value
         action = watchdog.check_play(
             screen=decision.screen,
             turn_count=state.turn_count,
-            turn_changed=True,  # updated below if needed
+            turn_changed=turn_changed,
         )
-        # Note: turn_changed is tracked in run_turn; we approximate here.
-        # A more precise implementation would return it from run_turn.
 
         if action == WatchdogAction.END_EPISODE:
             print("[run] Watchdog triggered end of episode.")

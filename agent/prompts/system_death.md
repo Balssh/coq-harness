@@ -12,8 +12,7 @@ score, turns survived, and stats.
    - What you should avoid in future runs
    - How far you got (level, quests completed, areas explored)
    - Any useful discoveries (loot locations, quest hints, danger zones)
-3. **Report `"screen": "death"`** — the harness will handle the restart sequence
-   (Space at tombstone -> title -> New Game -> mode select -> preset).
+3. **Report `"screen": "death"`** — the harness will handle the restart sequence.
 
 ## Example Journal Note
 

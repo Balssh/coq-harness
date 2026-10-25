@@ -26,13 +26,10 @@ response options.
   bonds you, shifts faction reputation, and gives choices: trade secrets, gossip,
   buy a secret, or recruit as follower.
 - **End conversations**: don't talk forever. Get the quest, get the info, leave.
-- After choosing an option, the NPC responds — read the new screenshot and log
-  before deciding your next action.
 
 ## Tools for Dialogue
 
 - `choose_option(n)` — select numbered option n (1-9)
 - `close_menu` — exit the dialogue (Escape)
-- `send_keys` — for non-numbered menus (arrow keys + enter)
-- `talk(direction)` — to start a new conversation with an adjacent NPC
-- `trade(direction)` — to open trade with an adjacent NPC
+- `press` — for non-numbered menus (arrow keys + enter, or escape to exit)
+- `interact(direction)` — to start a new conversation with an adjacent NPC

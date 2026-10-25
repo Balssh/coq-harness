@@ -9,7 +9,7 @@ from agent.llm import call_llm_with_images, image_to_base64
 from agent.schemas import Decision, parse_decision
 from memory.state import GameState
 from perception.regions import Perception
-from tools import all_tools, get_tool, tool_schemas, validate_args
+from tools import all_tools, get_tool, tools_for_screen, validate_args
 from tools import image_to_png_bytes
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -22,10 +22,11 @@ def _load_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _format_tools() -> str:
-    """Format the tool list for the system prompt."""
+def _format_tools(screen: str) -> str:
+    """Format the screen-filtered tool list for the system prompt."""
+    tools = tools_for_screen(screen)
     lines = []
-    for t in all_tools():
+    for t in tools:
         args_desc = ""
         if t.parameters.get("properties"):
             props = t.parameters["properties"]
@@ -33,7 +34,7 @@ def _format_tools() -> str:
             parts = []
             for pname, pspec in props.items():
                 req = " (required)" if pname in required else " (optional)"
-                enum = f" [{', '.join(pspec['enum'])}]" if "enum" in pspec else ""
+                enum = f" [{', '.join(str(e) for e in pspec['enum'])}]" if "enum" in pspec else ""
                 parts.append(f"{pname}{req}{enum}")
             args_desc = f" — args: {', '.join(parts)}"
         turn = " [advances turn]" if t.advances_turn else ""
@@ -56,9 +57,10 @@ def build_system_prompt(phase: str, screen: str = "") -> str:
 
     Phase prompts (chargen/play) are always included. Screen-specific
     add-ons are composed on top when the model reports a specific screen.
+    Tool list is filtered by screen to reduce choice overload.
     """
     base = _load_prompt("system_base.md")
-    base = base.replace("{TOOLS}", _format_tools())
+    base = base.replace("{TOOLS}", _format_tools(screen))
     fewshot = _load_prompt("fewshot.md")
 
     parts = [base, fewshot]
@@ -68,7 +70,6 @@ def build_system_prompt(phase: str, screen: str = "") -> str:
     else:
         parts.append(_load_prompt("system_play.md"))
 
-    # Screen-specific add-on (only in play phase, not chargen)
     if phase != "chargen" and screen in _SCREEN_PROMPTS:
         try:
             parts.append(_load_prompt(_SCREEN_PROMPTS[screen]))
@@ -88,19 +89,16 @@ def decide(
 ) -> Decision:
     """Run one decision cycle.
 
-    1. Build system prompt for the current phase
+    1. Build system prompt for the current phase, filtered by screen
     2. Attach images to the last user message
     3. Call ML4
     4. Parse + validate the Decision
-    5. Retry on failure (max 3), fallback to `wait`
+    5. Retry on failure (max 3), fallback to `rest` (or `confirm` in chargen)
     """
     system_prompt = build_system_prompt(phase, screen=state.screen)
 
-    # In play phase the map is loaded — send cropped regions.
-    # Otherwise (chargen, menus, loading) send the full screenshot.
     in_play = state.screen == "play"
 
-    # Build the current turn's user message
     turn_text_parts = []
     if transcript:
         turn_text_parts.append(f"## Message Log Transcript\n{transcript}")
@@ -110,6 +108,7 @@ def decide(
         f"## Current State\n"
         f"Turn: {state.turn_count}\n"
         f"Phase: {state.phase}\n"
+        f"Screen: {state.screen}\n"
         f"Goal: {state.goal or '(none)'}\n"
         f"Location: {state.location or '(unknown)'}\n"
         f"HP: {state.hp or '?'}/{state.max_hp or '?'}\n"
@@ -129,7 +128,6 @@ def decide(
         )
     turn_text = "\n\n".join(turn_text_parts)
 
-    # Determine which images to send.
     send_all = state.turn_count == 0 or state.turn_count % 10 == 0
 
     if in_play:
@@ -157,6 +155,10 @@ def decide(
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(conversation)
     messages.append({"role": "user", "content": turn_text})
+
+    # Get the screen-filtered tool list for validation messages
+    available_tools = tools_for_screen(state.screen)
+    available_names = ", ".join(sorted(t.name for t in available_tools))
 
     # Retry loop
     for attempt in range(MAX_RETRIES):
@@ -202,14 +204,25 @@ def decide(
             })
             continue
 
-        # Validate tool exists
+        # Validate tool exists and is available on this screen
         tool = get_tool(decision.tool)
         if tool is None:
-            available = ", ".join(sorted(t.name for t in all_tools()))
+            all_names = ", ".join(sorted(t.name for t in all_tools()))
             messages.append({"role": "assistant", "content": raw})
             messages.append({
                 "role": "user",
-                "content": f"Tool '{decision.tool}' does not exist. Available tools: {available}",
+                "content": f"Tool '{decision.tool}' does not exist. Available tools: {all_names}",
+            })
+            continue
+
+        if tool.screens is not None and state.screen not in tool.screens:
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Tool '{decision.tool}' is not available on screen '{state.screen}'. "
+                    f"Available tools on this screen: {available_names}"
+                ),
             })
             continue
 
@@ -225,12 +238,24 @@ def decide(
 
         return decision
 
-    # All retries exhausted — fallback to wait
-    print("[decide] All retries exhausted, falling back to 'wait'")
+    # All retries exhausted — fallback
+    print("[decide] All retries exhausted, falling back")
+    if phase == "chargen":
+        return Decision(
+            reasoning="Failed to get a valid decision after 3 retries. Falling back to confirm.",
+            tool="confirm",
+            args={},
+            screen=state.screen or "unknown",
+            goal=state.goal,
+            hp=state.hp,
+            max_hp=state.max_hp,
+            hunger=state.hunger,
+            location=state.location,
+        )
     return Decision(
-        reasoning="Failed to get a valid decision after 3 retries. Falling back to wait.",
-        tool="wait",
-        args={},
+        reasoning="Failed to get a valid decision after 3 retries. Falling back to rest.",
+        tool="rest",
+        args={"turns": 1},
         screen=state.screen or "unknown",
         goal=state.goal,
         hp=state.hp,
