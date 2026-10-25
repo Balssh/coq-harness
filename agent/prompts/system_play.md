@@ -89,6 +89,20 @@ are visible on screen, Space won't work** — press a number key (`"key": "1"`,
 `"key": "2"`, etc.) or use `choose_option(n)` to select an option. If Space
 doesn't change the screen after 2 presses, try `"key": "enter"` or a number key.
 
+### TUTORIAL POPUPS (dismiss these FIRST)
+
+When you start a new game, **tutorial popups** appear as overlay text boxes
+pointing at things (chests, NPCs, items). They block the viewport.
+
+**How to dismiss tutorial popups:**
+- Look for ">press [Space]" or "[Space]" or "[Enter]" in the popup text.
+- Press `"key": "space"` to dismiss. Some may need `"key": "enter"`.
+- **Do NOT use `close_menu` (Escape)** — that opens the game menu, not dismisses tutorials.
+- After dismissing one, another may appear. Keep pressing Space until they stop.
+- Tutorial popups are NOT game menus. They are hints. Dismiss them all before
+  trying to move, interact, or open screens.
+- If you see a tutorial popup, your action should be `"key": "space"` — nothing else.
+
 ### Step 1: Inspect Your Abilities (do this FIRST)
 
 **Your very first action on the play screen must be `open_screen("abilities")`.**

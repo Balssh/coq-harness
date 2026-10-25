@@ -17,6 +17,15 @@ class Decision(BaseModel):
             "Raw key presses do NOT advance the turn clock."
         ),
     )
+    keys: list | None = Field(
+        default=None,
+        description=(
+            "FREEPLAY MODE: Array of keys to press in sequence. "
+            "Each element is a key name (string) or a chord (array of strings). "
+            "Example: ['num_8'] to move north, ['shift', 'a'] to open abilities, "
+            "['space', 'num_8'] to interact north. Max 5 keys."
+        ),
+    )
     args: dict = Field(default_factory=dict, description="Tool arguments")
     wait_for_turn: bool = Field(
         default=False,

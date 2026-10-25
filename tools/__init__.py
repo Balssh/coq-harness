@@ -49,7 +49,14 @@ def get_tool(name: str) -> Tool | None:
 
 
 def all_tools() -> list[Tool]:
+    if _FREEPLAY:
+        return [t for t in _REGISTRY.values() if t.name == "press"]
     return list(_REGISTRY.values())
+
+
+import os as _os
+
+_FREEPLAY = _os.environ.get("COQ_FREEPLAY", "") == "1"
 
 
 def tools_for_screen(screen: str) -> list[Tool]:
@@ -58,7 +65,11 @@ def tools_for_screen(screen: str) -> list[Tool]:
     Tools with `screens=None` are always available.
     Tools with `screens` set are only available when the current screen
     is in that set.
+
+    In freeplay mode (COQ_FREEPLAY=1), only the `press` tool is available.
     """
+    if _FREEPLAY:
+        return [t for t in _REGISTRY.values() if t.name == "press"]
     return [
         t for t in _REGISTRY.values()
         if t.screens is None or screen in t.screens

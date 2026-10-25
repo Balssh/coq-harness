@@ -72,8 +72,22 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
     if decision.journal_note:
         journal.add(decision.journal_note)
 
-    # 7. Execute action (tool or direct key press)
-    if decision.key:
+    # 7. Execute action (tool, keys, or direct key press)
+    if decision.keys:
+        # FREEPLAY MODE: press a sequence of keys
+        from game.controller import press as _press, chord as _chord
+        import time as _time
+        sent = []
+        for k in decision.keys:
+            if isinstance(k, list):
+                _chord(k)
+                sent.append("+".join(k))
+            else:
+                _press(k)
+                sent.append(k)
+            _time.sleep(0.08)
+        result = ToolResult(text=f"Sent keys: {' '.join(sent)}")
+    elif decision.key:
         # Direct key press — no tool, no turn advance
         from game.controller import press
         press(decision.key)
@@ -89,8 +103,14 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
 
     # 8. Turn clock: wait for log change if the tool advances the turn
     # OR if the model explicitly set wait_for_turn=true (e.g., for press())
+    # In freeplay mode, movement keys and most actions advance the turn.
+    import os as _os
+    _freeplay = _os.environ.get("COQ_FREEPLAY", "") == "1"
     tool = get_tool(decision.tool) if decision.tool else None
     should_wait = (tool and tool.advances_turn) or decision.wait_for_turn
+    if _freeplay and decision.keys:
+        # In freeplay, always wait for turn change after key presses
+        should_wait = True
 
     turn_changed = False
     wait_time = 0.0
@@ -124,7 +144,9 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
     )
 
     # Anti-repeat warning: track consecutive identical actions
-    if decision.key:
+    if decision.keys:
+        action_str = f"keys:{json.dumps(decision.keys)}"
+    elif decision.key:
         action_str = f"key:{decision.key}"
     else:
         action_str = f"{decision.tool}:{json.dumps(decision.args, sort_keys=True)}"

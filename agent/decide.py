@@ -16,6 +16,8 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 MAX_RETRIES = 3
 
+_FREEPLAY = os.environ.get("COQ_FREEPLAY", "") == "1"
+
 
 def _load_prompt(name: str) -> str:
     path = _PROMPTS_DIR / name
@@ -59,6 +61,9 @@ def build_system_prompt(phase: str, screen: str = "") -> str:
     add-ons are composed on top when the model reports a specific screen.
     Tool list is filtered by screen to reduce choice overload.
     """
+    if _FREEPLAY:
+        return _load_prompt("system_freeplay.md")
+
     base = _load_prompt("system_base.md")
     base = base.replace("{TOOLS}", _format_tools(screen))
     fewshot = _load_prompt("fewshot.md")
@@ -172,6 +177,24 @@ def decide(
                 "content": f"Your response was not valid JSON. Please respond with a single JSON object matching the schema. Error: could not parse JSON.\nYour response was:\n{raw[:500]}",
             })
             continue
+
+        # FREEPLAY MODE: validate keys field
+        if _FREEPLAY:
+            if not decision.keys:
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({
+                    "role": "user",
+                    "content": "You MUST set 'keys' to an array of keys to press. Example: [\"num_8\"] to move north. Never return an empty keys array.",
+                })
+                continue
+            if len(decision.keys) > 5:
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({
+                    "role": "user",
+                    "content": f"Too many keys ({len(decision.keys)}). Max 5 keys per call.",
+                })
+                continue
+            return decision
 
         # Validate: either tool or key must be set
         if decision.key:

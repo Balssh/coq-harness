@@ -13,7 +13,7 @@ from loop.watchdog import WatchdogAction, get_watchdog
 from memory.journal import get_journal
 from memory.state import get_state, update
 from perception.capture import capture
-from tools import execute_tool, get_tool
+from tools import ToolResult, execute_tool, get_tool
 
 MAX_CHARGEN_RETRIES = 3
 
@@ -54,8 +54,26 @@ def _chargen_turn() -> str:
     if decision.journal_note:
         get_journal().add(decision.journal_note)
 
-    # Execute tool (chargen tools don't advance turn)
-    result = execute_tool(decision.tool, decision.args)
+    # Execute tool or keys (chargen tools don't advance turn)
+    if decision.keys:
+        from game.controller import press as _press, chord as _chord
+        import time as _time
+        sent = []
+        for k in decision.keys:
+            if isinstance(k, list):
+                _chord(k)
+                sent.append("+".join(k))
+            else:
+                _press(k)
+                sent.append(k)
+            _time.sleep(0.08)
+        result = ToolResult(text=f"Sent keys: {' '.join(sent)}")
+    elif decision.key:
+        from game.controller import press
+        press(decision.key)
+        result = ToolResult(text=f"Pressed key: {decision.key}")
+    else:
+        result = execute_tool(decision.tool, decision.args)
     recorder.record_tool_result(result)
     recorder.capture("after-action")
     recorder.end_turn(turn_changed=False, wait_time=0.0)
