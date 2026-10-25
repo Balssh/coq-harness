@@ -94,13 +94,34 @@ python -m recording.replay runs/2026-10-20_episode-3/
 
 ### Features
 
-- Frame timeline: all frames in sequence, grouped by turn
-- Step controls: arrow keys to step, space to play/pause
-- Decision panel: reasoning, tool call, args, state report
-- Transcript panel: transcript update for current turn
-- Turn jump: input to jump to a specific turn
-- Intermediate frames: sub-steps within a turn
-- Timing info: decision latency, turn duration
+- **Visual timeline**: per-turn markers below the slider — errors highlighted in
+  red, death turns in grey, active turn in accent color. Click any marker to
+  jump to that turn.
+- **Transport controls**: first / prev-turn / prev-frame / play-pause /
+  next-frame / next-turn / last, with disabled states.
+- **Playback speed**: 0.5× / 1× / 2× / 4× / 8×.
+- **Search**: live text search across all turn events (reasoning, tool names,
+  args, transcripts, locations). Matching turns stay highlighted; non-matching
+  turns dim in the timeline. Press `/` to focus.
+- **Filter chips**: active filters shown as removable chips below the header.
+- **Frame thumbnails**: horizontal strip of all frames within the current turn
+  (start / after-action / end / tool-result). Click to jump.
+- **Zoom controls**: zoom in/out/reset on the frame image. Click the image to
+  toggle 1× ↔ 2×. Shortcuts: `+` / `-` / `0`.
+- **Collapsible sidebar sections**: Decision, State, Timing, Transcript,
+  Journal, Run Statistics — each section collapses independently.
+- **Color-coded tool calls**: each tool name gets a consistent color in the
+  decision panel and stats bars.
+  - **HP color coding**: green (>60%), yellow (30-60%), red (≤30%).
+- **Run statistics panel**: total turns, error count, death turn, average
+  decision latency, average turn duration, HP trajectory, and a per-tool usage
+  bar chart.
+- **Keyboard shortcuts**: full shortcut overlay (`?` to show).
+  - `Space` play/pause, `←`/`→` prev/next turn, `,`/`.` prev/next frame
+  - `Home`/`End` first/last turn, `/` search, `+`/`-`/`0` zoom
+  - `[` toggle sidebar, `?` help, `Esc` close dialogs
+- **Toast notifications**: end-of-replay and other transient messages.
+- **Dark theme**: redesigned color palette with CSS custom properties.
 
 ### Implementation
 
@@ -108,6 +129,7 @@ python -m recording.replay runs/2026-10-20_episode-3/
 - Viewer: single `index.html` with inline CSS + JS, no build step, no framework
 - Data: server reads `log.jsonl` and serves it as JSON; frames served as static files
 - Playback: JS timer, configurable speed
+- All stats/search/filtering computed client-side from the events JSON
 
 ### File Layout
 
