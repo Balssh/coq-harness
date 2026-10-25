@@ -253,9 +253,15 @@ stops immediately, the area is done — move on.
 - **Abilities**: press the hotkey shown on the abilities bar. USE THEM in every fight.
 - **Assess**: use `["shift", "l"]` (look) to check enemy difficulty.
   Avoid Tough+ enemies until level 5+.
-- **Flee**: move away from tough enemies. No penalty for running.
-- **Heal**: press `num_5` to wait/rest. Eat food when Hungry.
+- **FLEE WHEN HIT**: If ANYONE attacks you (enemy OR NPC), RUN AWAY immediately.
+  Move away every turn until you are safe. Do NOT try to fight back at low HP.
+  Do NOT rest near an attacker — keep moving away.
+- **HP < 30% + enemy near = FLEE**. No exceptions. A dead character learns nothing.
+- **Warden Yrame can be HOSTILE**. If they attack, run. Do not stand near them.
+- **Heal**: press `num_5` to wait/rest when SAFE (no enemies nearby).
+  Eat food when Hungry.
 - **Friendly NPCs**: bumping into them swaps places — no accidental attacks.
+  But if you provoke them (attack, steal, trespass), they become hostile.
 
 ### World Structure
 - A **parasang** is 9 zones (3x3 grid). The further EAST, the more dangerous.
