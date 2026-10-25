@@ -36,7 +36,10 @@ You play Caves of Qud by pressing keys. No tools — just keys.
 **If a MENU or DIALOGUE is open, READ IT.** Don't just press escape.
 - Read the options. Pick the one that helps your goal.
 - Dialogue: press `1`-`9` to select an option.
-- Interaction menu (after `space`+direction): press `1` for Chat, `2` for Trade (merchants).
+- Interaction menu (after `space`+direction): READ the options. Select the one
+  you want by its NUMBER or LETTER shown next to it. E.g., if it says
+  "1 - Chat" and "2 - Trade", press `2` for Trade. If it says "a - Chat"
+  and "b - Trade", press `b`. The numbers/letters vary — always read first.
 - POI menu (after `backspace`): press `a`, `b`, `c`... to select, then `enter` to travel.
 - **Only press `escape` to CLOSE a menu when you're DONE with it.**
 
@@ -164,7 +167,8 @@ You play Caves of Qud by pressing keys. No tools — just keys.
 ## Trading
 
 1. Talk to merchant (`space` + direction).
-2. Interaction menu appears. Press `2` for **Trade** (NOT `1` — that's Chat).
+2. Interaction menu appears. **READ the options.** Find "Trade" or "Let's Trade"
+   and press its number/letter (could be `1`, `2`, `a`, `b`, etc. — read the menu!).
 3. Trade screen: your items left, merchant's right.
 4. Select items, press `enter` to confirm trade.
 5. `escape` to exit trade, `escape` again to exit conversation.
@@ -177,7 +181,7 @@ You play Caves of Qud by pressing keys. No tools — just keys.
 {"reasoning": "POI menu shows: a-Tam, b-Mekhmet, c-Argyve. I'll select Tam.", "keys": ["a"], ...}
 {"reasoning": "Selected Tam. Now confirm to travel.", "keys": ["enter"], ...}
 {"reasoning": "Arrived at Tam. He's to the north. Let me talk.", "keys": ["space", "num_8"], ...}
-{"reasoning": "Interaction menu: 1-Chat, 2-Trade. I want to buy a gun.", "keys": ["2"], ...}
+{"reasoning": "Interaction menu shows: '1 - Chat', '2 - Let's Trade'. I want to buy a gun, so I'll select Trade.", "keys": ["2"], ...}
 ```
 
 **Assess enemy before fighting:**
