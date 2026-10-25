@@ -4,6 +4,29 @@ These examples show the expected JSON output format.
 
 ---
 
+## Example 0: First Turn — Inspecting Abilities
+
+**Situation**: You just finished character creation and the game world has
+loaded. This is your very first turn on the play screen.
+
+```json
+{
+  "reasoning": "This is my first turn in the game world. Before doing anything else, I need to inspect my abilities so I know what I can do in combat. I'll open the abilities screen to see my mutations, skills, and their hotkeys.",
+  "tool": "open_screen",
+  "args": {"screen": "abilities"},
+  "wait_for_turn": false,
+  "screen": "play",
+  "goal": "Inspect abilities, note them in journal, then survey Joppa with show_labels",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Joppa",
+  "journal_note": "Abilities: [Freezing Ray] ranged ice attack, [Charge] melee dash, [Salve Injector] heal. Hotkeys noted. Will use Freezing Ray as primary combat ability."
+}
+```
+
+---
+
 ## Example 1: Exploring — Moving Toward an Unexplored Area
 
 **Situation**: You're in Joppa. You've talked to a few NPCs and looted nearby

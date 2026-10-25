@@ -74,3 +74,8 @@ When character creation is complete and the game world appears, report
 ```
 [chargen] Created a preset character. Ready to explore.
 ```
+
+**IMPORTANT**: Your very first action on the play screen must be
+`open_screen("abilities")` — inspect your abilities, note what each does,
+and write a `journal_note` summarizing them. You will need this knowledge
+in every combat encounter. Then proceed to `show_labels` to survey the area.

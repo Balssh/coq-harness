@@ -43,6 +43,7 @@ This means sharing water and lore for reputation. Do it — reputation unlocks
 better trade prices and quests.
 
 **Joppa Routine** (good first-hour plan):
+0. `open_screen("abilities")` — inspect and journal your abilities FIRST
 1. `show_labels` — see all NPCs and items
 2. Loot chests in houses (close doors first so guards don't see)
 3. Check your starting equipment for "painted" or "engraved" items (special!)
@@ -67,7 +68,25 @@ are visible on screen, Space won't work** — press a number key (`"key": "1"`,
 `"key": "2"`, etc.) or use `choose_option(n)` to select an option. If Space
 doesn't change the screen after 2 presses, try `"key": "enter"` or a number key.
 
-**Your first action should be `show_labels`.** This shows labels on all items
+### Step 1: Inspect Your Abilities (do this FIRST)
+
+**Your very first action on the play screen must be `open_screen("abilities")`.**
+This opens the abilities/mutations screen. Read EVERY ability listed — note
+what each one does (damage, healing, escape, buff, etc.) and its hotkey.
+Then write a `journal_note` summarizing your abilities, e.g.:
+
+```
+"Abilities: [Freezing Ray] ranged ice attack (hotkey A), [Charge] melee dash
+(hotkey B), [Healing Salve] heal item. Will use Freezing Ray in combat."
+```
+
+**Why**: You will forget what abilities you have during combat. Knowing them
+upfront is the #1 factor between life and death. After noting them, close
+the screen with `close_menu` (Escape) and continue to Step 2.
+
+### Step 2: Survey the Area
+
+**Your next action should be `show_labels`.** This shows labels on all items
 and NPCs in the viewport. NPCs are colored symbols (blue, purple, green, etc.)
 with names. Identify the nearest NPC, then move toward it.
 
