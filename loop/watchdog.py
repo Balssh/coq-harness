@@ -19,7 +19,12 @@ class Watchdog:
     MAX_EPISODE_SECONDS = 2 * 3600  # 2 hours
 
     # Stuck detection
-    SAME_SCREEN_TURNS = 20
+    # "Same screen" for play mode means the model stayed on the play screen
+    # without the screen label changing — but "play" IS the normal game screen
+    # and doesn't change when moving around. Use a high threshold and rely
+    # primarily on the anti-repeat system + no-log-change streak.
+    SAME_SCREEN_TURNS = 100
+    NO_LOG_CHANGE_TURNS = 30  # consecutive turns with no log change = stuck
 
     # Chargen budgets
     CHARGEN_MAX_STEPS    = 100
@@ -63,12 +68,16 @@ class Watchdog:
             print(f"[watchdog] Stuck: same screen '{screen}' for {self.same_screen_count} turns")
             return WatchdogAction.END_EPISODE
 
-        # Track consecutive no-log-change turns (informational, not a failure
-        # — the message log does not always update, e.g., bumping into a wall)
+        # Track consecutive no-log-change turns. The log doesn't always update
+        # (bumping into a wall), but 30+ consecutive turns with no log change
+        # means the model is truly stuck (wandering in circles, blocked, etc.)
         if not turn_changed:
             self.no_log_streak += 1
         else:
             self.no_log_streak = 0
+        if self.no_log_streak >= self.NO_LOG_CHANGE_TURNS:
+            print(f"[watchdog] Stuck: no log change for {self.no_log_streak} turns")
+            return WatchdogAction.END_EPISODE
 
         # Turn budget
         if turn_count - self.episode_start_turn >= self.MAX_TURNS:

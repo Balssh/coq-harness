@@ -6,10 +6,15 @@ that can survive the early game. You have limited steps — don't overthink it.
 ## RECOMMENDED: Use Presets (Exact Flow)
 
 The fastest path is a **preset character** (one confirm skips the entire
-custom chargen tree). Recommended presets for episode 1:
-- **Marsh Taur** (Mutant Marauder) — tutorial character, 22 Str melee bruiser
-- **Praetorian Prime** (True Kin) — 22 Str/21 Toughness, rifle + slugs
-- **Gunwing** (Mutant Gunslinger) — 22 Agi ranged, kills from a distance
+custom chargen tree). Since your mission is to **explore, talk to NPCs, and
+fight hostiles**, pick a preset that can survive combat:
+
+- **Gunwing** (Mutant Gunslinger) — **RECOMMENDED**. 22 Agi, starts with a gun.
+  Ranged combat is much safer than melee — you can kill enemies from a distance.
+- **Praetorian Prime** (True Kin) — 22 Str/21 Toughness, rifle + slugs.
+  Good armor and ranged weapon. Solid all-rounder.
+- **Marsh Taur** (Mutant Marauder) — 22 Str melee bruiser.
+  High HP and melee damage, but melee is riskier. Good for learning combat.
 
 Here is the exact verified flow:
 

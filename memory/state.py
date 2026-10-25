@@ -7,12 +7,12 @@ from dataclasses import dataclass, field
 class GameState:
     turn_count: int = 0
     phase: str = "chargen"
-    goal: str = ""
+    goal: str | None = None
     screen: str = "unknown"
     hp: int | None = None
     max_hp: int | None = None
-    hunger: str = ""
-    location: str = ""
+    hunger: str | None = None
+    location: str | None = None
 
 
 _state: GameState = GameState()

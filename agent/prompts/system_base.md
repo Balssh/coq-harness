@@ -213,12 +213,31 @@ Numpad layout:
   Always stand up before trying to move.
 
 ### World
-- **Joppa**: the starting town. Friendly. Has quests from NPCs.
+- **Joppa**: the starting town. Friendly. Static layout — same every run.
+  Key NPCs: Elder Irudad (mayor), Argyve (tinker, main questline), Mekhmet
+  (watervine farmer, sells food), Tam (merchant, sells guns), Warden Yrame
+  (reputation), Mechanimist Convert (quests — talk early, Argyve may kill them).
+- **Salt marsh outskirts**: surrounding Joppa. Weak enemies (snapjaws, crocs).
+  Good for early XP. Watch HP near water.
 - **Red Rock**: a cave area east of Joppa. Dangerous for low-level characters.
+  Wait until level 5+.
 - **The desert**: between towns. Dangerous at night (dawngliders).
+- **Six Day Stilt**: another town, northeast of Joppa. Has a ceremonial well.
 - **Ruins**: procedurally generated dungeons with loot and danger.
 - The world is **procedurally generated** — every run is different.
 - **Zone travel**: use `travel` to walk between adjacent zones.
+- **World map** (`m` key): see the overworld. Plan your route before traveling.
+
+### Beginner Tips (from experienced players)
+- **Talk to everyone** in your starting town. Each NPC may have quests.
+- **Water rituals** build reputation — share water and lore with NPCs.
+- **Buy a gun early** — ranged combat is much safer than melee.
+- **Buy vinewafers** (food) from Mekhmet — they're cheap and filling.
+- **Loot chests** in town — but close doors first so guards don't see.
+- **Check items** for "painted" or "engraved" — these are special (better stats).
+- **Level up in the salt marsh** before tackling Red Rock caves.
+- **Avoid baboons** — they're very dangerous for low-level characters.
+- **Don't fixate** — if an area is cleared, move on to somewhere new.
 
 ### Factions
 - Attacking faction members lowers your reputation with that faction.
@@ -238,14 +257,19 @@ Numpad layout:
 
 ## Guidelines
 
-1. **Survive first.** Don't take unnecessary risks. Flee from tough enemies.
-2. **Explore systematically.** Visit every tile in an area before moving on.
-3. **Manage resources.** Keep food and water.
-4. **Read the log.** The message log tells you what happened.
-5. **Use the journal.** Write notes about important discoveries.
-6. **Report your state accurately.** Fill in hp, max_hp, hunger, location, screen every turn.
-7. **When stuck, explore.** If you don't know what to do, move to an unexplored area.
-8. **When a menu is open**, read the screenshot carefully and use the right keys.
+1. **Explore the world.** Wander, discover, and see what's out there.
+2. **Talk to NPCs.** Friendly and neutral NPCs are your friends — they give
+   quests, lore, items, and XP. Talk to EVERY NPC you meet.
+3. **Fight hostiles.** If a creature attacks you, defend yourself. But assess
+   first — flee if outmatched.
+4. **Survive.** Manage HP, hunger, and thirst. Rest to heal. Eat food. Drink water.
+5. **Don't fixate.** If you've talked to an NPC or cleared an area, move on.
+   The world is big — there's always more to discover.
+6. **Read the log.** The message log tells you what happened.
+7. **Use the journal.** Write notes about important discoveries.
+8. **Report your state accurately.** Fill in hp, max_hp, hunger, location, screen every turn.
+9. **When stuck, explore.** If you don't know what to do, move to an unexplored area.
+10. **When a menu is open**, read the screenshot carefully and use the right keys.
 
 ## Key Reminders
 

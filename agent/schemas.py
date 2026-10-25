@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class Decision(BaseModel):
     reasoning: str = Field(description="Brief chain-of-thought about what to do and why")
-    tool: str = Field(default="", description="Tool name to call, e.g. 'move'. Leave empty if using 'key' instead.")
+    tool: str | None = Field(default=None, description="Tool name to call, e.g. 'move'. Leave empty/null if using 'key' instead.")
     key: str | None = Field(
         default=None,
         description=(
@@ -40,11 +40,11 @@ class Decision(BaseModel):
             "or 'unknown' if you can't tell."
         )
     )
-    goal: str = Field(default="", description="Current high-level goal")
+    goal: str | None = Field(default=None, description="Current high-level goal")
     hp: int | None = Field(default=None, description="Current HP from stats bar")
     max_hp: int | None = Field(default=None, description="Max HP from stats bar")
-    hunger: str = Field(default="", description="Hunger level: Satiated, Peckish, Hungry, etc.")
-    location: str = Field(default="", description="Current location name, e.g. 'Joppa'")
+    hunger: str | None = Field(default=None, description="Hunger level: Satiated, Peckish, Hungry, etc.")
+    location: str | None = Field(default=None, description="Current location name, e.g. 'Joppa'")
     journal_note: str | None = Field(
         default=None,
         description="Optional: write a note to the cross-episode journal",

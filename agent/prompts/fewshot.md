@@ -4,20 +4,67 @@ These examples show the expected JSON output format.
 
 ---
 
-## Example 1: Combat — Moving Away from an Enemy
+## Example 1: Exploring — Moving Toward an Unexplored Area
 
-**Situation**: You see a snapjaw two tiles to your north in the viewport.
-Your HP is 12/25. The message log shows "A snapjaw snarls at you!"
+**Situation**: You're in Joppa. You've talked to a few NPCs and looted nearby
+chests. The viewport shows an unexplored street to the east with a building
+you haven't entered.
 
 ```json
 {
-  "reasoning": "A snapjaw is nearby and hostile. I'm at half HP, so I should back off to a safer position before fighting. I'll move south to create distance, then reassess.",
+  "reasoning": "I've explored the western part of Joppa. There's an unexplored area to the east with buildings I haven't checked. Let me head east to discover more.",
   "tool": "move",
-  "args": {"direction": "down"},
+  "args": {"direction": "right"},
   "wait_for_turn": true,
   "screen": "play",
-  "goal": "Survive the snapjaw encounter and explore Joppa outskirts",
-  "hp": 12,
+  "goal": "Explore eastern Joppa, find more NPCs to talk to and buildings to loot",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Joppa",
+  "journal_note": null
+}
+```
+
+---
+
+## Example 2: Talking to an NPC
+
+**Situation**: `show_labels` reveals a villager named "Argyve" two tiles to
+your north. You're adjacent (one tile south of him).
+
+```json
+{
+  "reasoning": "I see Argyve the tinker nearby. He gives the main questline — I should talk to him. I'm already adjacent, so I'll interact north to open the conversation menu.",
+  "tool": "interact",
+  "args": {"direction": "up"},
+  "wait_for_turn": false,
+  "screen": "play",
+  "goal": "Talk to Argyve and start the main questline",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Joppa",
+  "journal_note": null
+}
+```
+
+---
+
+## Example 3: Fighting a Hostile — Assessing and Engaging
+
+**Situation**: A snapjaw (hostile dog creature) is approaching from the west.
+Your HP is 20/25. You have a musket equipped.
+
+```json
+{
+  "reasoning": "A snapjaw is hostile and approaching. It's a weak enemy — good for early XP. I have a gun, so I'll let it come closer and shoot. I'll move east to create space, then it will follow and I can shoot it.",
+  "tool": "move",
+  "args": {"direction": "right"},
+  "wait_for_turn": true,
+  "screen": "play",
+  "goal": "Fight the snapjaw for XP, then continue exploring Joppa outskirts",
+  "hp": 20,
   "max_hp": 25,
   "hunger": "Satiated",
   "location": "Joppa outskirts",
@@ -27,21 +74,45 @@ Your HP is 12/25. The message log shows "A snapjaw snarls at you!"
 
 ---
 
-## Example 2: Checking Inventory
+## Example 4: Fleeing from a Tough Enemy + Journal Note
 
-**Situation**: You want to see what items you're carrying.
+**Situation**: A baboon (very dangerous) is two tiles away. Your HP is 10/25.
+The message log shows "A baboon whoops!"
 
 ```json
 {
-  "reasoning": "I should check my inventory to see what food and gear I have before exploring further.",
-  "tool": "open_screen",
-  "args": {"screen": "inventory"},
+  "reasoning": "A baboon is extremely dangerous for my level. I'm at low HP. I need to run away immediately — move south to put distance between us, then keep moving away from the salt marsh.",
+  "tool": "move",
+  "args": {"direction": "down"},
+  "wait_for_turn": true,
+  "screen": "play",
+  "goal": "Escape the baboon and return to Joppa to heal",
+  "hp": 10,
+  "max_hp": 25,
+  "hunger": "Peckish",
+  "location": "Salt marsh",
+  "journal_note": "Baboons are extremely dangerous at low level — always flee. Found in the salt marsh east of Joppa."
+}
+```
+
+---
+
+## Example 5: Using show_labels to Find NPCs
+
+**Situation**: You're in Joppa but can't find any NPCs to talk to. The viewport
+shows several colored symbols but you're not sure what they are.
+
+```json
+{
+  "reasoning": "I need to find NPCs to talk to. Let me use show_labels to see names and identify villagers, merchants, and quest-givers in the viewport.",
+  "tool": "show_labels",
+  "args": {},
   "wait_for_turn": false,
   "screen": "play",
-  "goal": "Check inventory, then continue exploring",
+  "goal": "Find NPCs in Joppa to talk to and get quests",
   "hp": 25,
   "max_hp": 25,
-  "hunger": "Peckish",
+  "hunger": "Satiated",
   "location": "Joppa",
   "journal_note": null
 }
@@ -49,47 +120,23 @@ Your HP is 12/25. The message log shows "A snapjaw snarls at you!"
 
 ---
 
-## Example 3: Using press() for a Menu Action
+## Example 6: Dismissing a ">press [Space]" Prompt
 
-**Situation**: You're in the inventory screen. You see a healing salve in slot 'c'.
-You want to quaff it. (Note: you could also use `use_item` from the play screen,
-but you're already in the inventory menu.)
+**Situation**: The message log shows ">press [Space]" at the bottom. You just
+finished a conversation with an NPC.
 
 ```json
 {
-  "reasoning": "I'm in the inventory and I see a healing salve in slot c. I'll select it and quaff it. In Qud's inventory, pressing the slot letter selects the item, then 'q' quaffs it.",
+  "reasoning": "The game is showing a '>press [Space]' prompt after the conversation. I'll press space to dismiss it and continue exploring.",
   "tool": "press",
-  "args": {"keys": ["c", "q"]},
-  "wait_for_turn": true,
-  "screen": "menu",
-  "goal": "Heal up before exploring further",
-  "hp": 8,
-  "max_hp": 25,
-  "hunger": "Peckish",
-  "location": "Joppa outskirts",
-  "journal_note": null
-}
-```
-
----
-
-## Example 4: Writing a Journal Note
-
-**Situation**: You just learned from an NPC that the Red Rock caves are
-dangerous for low-level characters.
-
-```json
-{
-  "reasoning": "The NPC warned me about Red Rock caves. I should remember this for future runs. I'll write a journal note, then continue exploring Joppa.",
-  "tool": "move",
-  "args": {"direction": "up"},
-  "wait_for_turn": true,
+  "args": {"keys": ["space"]},
+  "wait_for_turn": false,
   "screen": "play",
-  "goal": "Explore Joppa and complete quests",
+  "goal": "Continue exploring Joppa and find the next NPC to talk to",
   "hp": 25,
   "max_hp": 25,
-  "hunger": "Peckish",
+  "hunger": "Satiated",
   "location": "Joppa",
-  "journal_note": "Red Rock caves are dangerous for low-level characters — avoid until level 5+. The mayor warned me about snapjaw packs."
+  "journal_note": null
 }
 ```
