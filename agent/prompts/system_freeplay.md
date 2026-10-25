@@ -54,22 +54,40 @@ You play Caves of Qud by pressing keys. No tools — just keys.
 
 **Do NOT wander with numpad keys.** Auto-explore + POI menu is faster and safer.
 
-### 3. COMBAT — ASSESS BEFORE FIGHTING
+### 3. COMBAT — BE DECISIVE
 
-**Before fighting ANY enemy, use `shift+l` (look mode) to check them:**
-- Move the look cursor onto the enemy (numpad keys).
-- Read the description in the message log. It shows:
-  - **Attitude**: Friendly / Neutral / Hostile
-  - **Difficulty**: Trivial / Easy / Average / **Tough** / Very Tough / Impossible
-- **Fight only if**: Trivial, Easy, or Average AND your HP > 50%.
-- **FLEE if**: Tough, Very Tough, or Impossible. Move away every turn.
-- **FLEE if**: HP < 50% and any enemy is near. Move to a safe area first.
+**You NEED XP to level up. Don't run from every fight.**
+
+**When you see a hostile creature:**
+1. **Use `shift+l` (look mode)** to check it. Move cursor onto the enemy.
+2. **Read the difficulty** in the message log:
+   - **Trivial / Easy / Average** → **FIGHT IT.** Bump into it (melee) or press
+     `f` + direction (ranged). Use abilities. You have full HP — use it!
+   - **Tough / Very Tough / Impossible** → **FLEE.** Move away every turn.
+3. **After winning**: loot the corpse (`g`), then move on.
+4. **After combat**: move AWAY from the fight area before resting.
+
+**HP rules:**
+- HP > 80%: fight Trivial/Easy/Average enemies. Be aggressive.
+- HP 50-80%: fight only Trivial/Easy. Avoid Average.
+- HP < 50%: FLEE from everything. Move to a safe area, then rest (`num_5`).
 
 **Combat actions:**
 - Melee: bump into the enemy (numpad direction toward them).
 - Ranged: press `f` + direction to fire your equipped gun.
 - Abilities: press the hotkey shown on the abilities bar (bottom of screen).
-- **After combat**: move AWAY from the fight area before resting.
+
+### 3b. MENU ESCAPE — DON'T GET STUCK
+
+**If you see an unexpected menu (Control Mapping, Options, etc.):**
+1. Press `escape` to close it.
+2. If it's still open, press `escape` again.
+3. If you see "Cancel" or "Back" as an option, select it (read the label, press its key).
+4. **Do NOT press random keys.** Read the menu, pick the right option.
+5. If the same menu appears 2 turns in a row, you're stuck — try a different approach.
+
+**Anti-loop rule:** Never press the same key 3 times in a row. If `escape`
+doesn't close a menu, read the menu options and select "Cancel" or "Back".
 
 ### 4. SURVIVAL
 
