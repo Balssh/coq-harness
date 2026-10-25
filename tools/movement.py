@@ -89,11 +89,11 @@ class RestTool(Tool):
 
     def execute(self, turns: int | None = None) -> ToolResult:
         if turns is None:
-            press(".")
+            press("num_5")
             return ToolResult(text="Resting (waiting for something to happen).")
         else:
             for _ in range(turns):
-                press(".")
+                press("num_5")
             return ToolResult(text=f"Rested for {turns} turn(s).")
 
 
@@ -110,7 +110,7 @@ class AutoExploreTool(Tool):
     screens = _PLAY_SCREENS
 
     def execute(self) -> ToolResult:
-        press("e")
+        press("num_0")
         return ToolResult(
             text="Triggered auto-explore. The game will explore automatically. "
                  "Check the message log for the stop reason when it finishes."

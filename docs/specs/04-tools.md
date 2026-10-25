@@ -172,7 +172,9 @@ to the agent loop — a failed tool call is information, not a crash.
 
 The system prompt includes a keymap reference table for use with `press()`:
 
-- **Movement**: arrows/numpad, `.` (wait), `~` (wait until healed), `e` (auto-explore), `-`/`+` (stairs)
+- **Movement**: numpad only — `num_8`/`num_2`/`num_4`/`num_6` (cardinal),
+  `num_7`/`num_9`/`num_1`/`num_3` (diagonal), `num_5` (wait/rest),
+  `num_0` (auto-explore), `~` (wait until healed), `-`/`+` (stairs)
 - **Interaction**: `g` (get), `space`+direction (interact), `1-9` (numbered options)
 - **Screens**: `I`/`E`/`X`/`P`/`Q`/`J`/`A`/`M`/`L` (various screens), `escape` (close)
 - **Inventory actions**: `d` (drop), `w` (wear), `q` (quaff), `e` (eat), `t` (take off)

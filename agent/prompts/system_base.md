@@ -69,16 +69,25 @@ You receive images of the game screen:
 Use this with the `press()` tool when no dedicated tool fits. Each entry is
 what you'd pass to `press(["key"])` or `press([["shift", "key"]])` for chords.
 
-### Movement
+### Movement (numpad only)
 | Key | Action |
 |-----|--------|
-| `up` `down` `left` `right` `up_left` etc. | Move one tile (8 directions) |
-| `.` | Wait/rest one turn |
+| `num_8` `num_2` `num_4` `num_6` | Move N / S / W / E |
+| `num_7` `num_9` `num_1` `num_3` | Move NW / NE / SW / SE |
+| `num_5` | Wait/rest one turn |
 | `~` (shift+backtick) | Wait until healed |
-| `e` | Auto-explore |
+| `num_0` | Auto-explore |
 | `-` | Go up stairs (`<`) |
 | `+` (shift+=) | Go down stairs (`>`) |
 | Shift+Enter + direction | Travel to zone edge |
+
+Numpad layout:
+```
+  7 8 9     NW N NE
+  4   6  =  W     E
+  1 2 3     SW S SE
+  5 = wait    0 = auto-explore
+```
 
 ### Interaction
 | Key | Action |

@@ -56,7 +56,8 @@ Payload is JSON (UTF-8). All requests have an `action` field.
 
 Use a fixed keymap (see `input.py`). Supported keys:
 
-- Directions: `up`, `down`, `left`, `right`, `up_left`, `up_right`, `down_left`, `down_right`
+- Directions (numpad): `up` (num_8), `down` (num_2), `left` (num_4), `right` (num_6),
+  `up_left` (num_7), `up_right` (num_9), `down_left` (num_1), `down_right` (num_3)
 - Modifiers: `shift`, `ctrl`, `alt`
 - Actions: `enter`, `escape`, `tab`, `space`, `backspace`
 - Function keys: `f1`–`f12`
