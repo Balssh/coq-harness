@@ -1,10 +1,12 @@
 """Input injection for the Qud window.
 
-SendInput with temporary focus attach. PostMessage(WM_KEYDOWN) was tried
-first but Unity/Qud ignores it (Raw Input / DirectInput backend), so input
-goes through SendInput, which requires the window to be foreground for the
-moment of the keystroke. The previous foreground window is restored after
-every chord.
+Primary path: SendInput with temporary focus steal (AttachThreadInput +
+SetForegroundWindow, with ShowWindow and SwitchToThisWindow fallbacks).
+The previous foreground window is restored after every chord.
+
+Fallback path: PostMessage(WM_KEYDOWN/WM_KEYUP) when focus cannot be
+obtained. Unity/Qud may ignore PostMessage (Raw Input backend), but it
+is better than silently dropping input.
 """
 
 import ctypes
@@ -176,30 +178,66 @@ def _get_window_thread_id(hwnd: int) -> int:
     pid = wintypes.DWORD()
     return _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
 
-def _force_foreground(hwnd: int) -> int:
-    """Force the target window to the foreground. Returns previous foreground HWND.
+_SwitchToThisWindow = ctypes.windll.user32.SwitchToThisWindow
+_ShowWindow = ctypes.windll.user32.ShowWindow
+_SW_RESTORE = 9
 
-    Raises RuntimeError if the window is gone or the focus switch fails —
-    sending input to the wrong window is worse than failing loudly.
+def _force_foreground(hwnd: int) -> tuple[int, bool]:
+    """Force the target window to the foreground.
+
+    Returns (previous_foreground_hwnd, success). Tries multiple strategies:
+    1. AttachThreadInput + SetForegroundWindow (classic trick)
+    2. ShowWindow(SW_RESTORE) + SetForegroundWindow
+    3. SwitchToThisWindow (deprecated but sometimes works)
+
+    Never raises for focus failures — callers decide what to do.
+    Raises RuntimeError only if the window is gone.
     """
     if not win32gui.IsWindow(hwnd):
         raise RuntimeError(f"Window no longer exists (HWND={hwnd})")
     prev = win32gui.GetForegroundWindow()
     if prev == hwnd:
-        return prev
-    # Allow our process to steal foreground
-    ctypes.windll.user32.AllowSetForegroundWindow(_ASFW_ANY)
-    # AttachThreadInput trick
-    cur_thread = win32api.GetCurrentThreadId()
-    tgt_thread = _get_window_thread_id(hwnd)
-    _AttachThreadInput(cur_thread, tgt_thread, True)
-    win32gui.BringWindowToTop(hwnd)
-    win32gui.SetForegroundWindow(hwnd)
-    _AttachThreadInput(cur_thread, tgt_thread, False)
-    time.sleep(0.05)  # let the focus settle
-    if win32gui.GetForegroundWindow() != hwnd:
-        raise RuntimeError(f"Failed to focus window (HWND={hwnd})")
-    return prev
+        return prev, True
+
+    # Strategy 1: AttachThreadInput + SetForegroundWindow
+    try:
+        cur_thread = win32api.GetCurrentThreadId()
+        tgt_thread = _get_window_thread_id(hwnd)
+        attached = _AttachThreadInput(cur_thread, tgt_thread, True)
+        if attached:
+            win32gui.BringWindowToTop(hwnd)
+            try:
+                win32gui.SetForegroundWindow(hwnd)
+            except Exception:
+                pass
+            _AttachThreadInput(cur_thread, tgt_thread, False)
+            time.sleep(0.05)
+            if win32gui.GetForegroundWindow() == hwnd:
+                return prev, True
+    except Exception:
+        pass
+
+    # Strategy 2: ShowWindow(SW_RESTORE) + SetForegroundWindow
+    try:
+        _ShowWindow(hwnd, _SW_RESTORE)
+        time.sleep(0.05)
+        win32gui.SetForegroundWindow(hwnd)
+        time.sleep(0.05)
+        if win32gui.GetForegroundWindow() == hwnd:
+            return prev, True
+    except Exception:
+        pass
+
+    # Strategy 3: SwitchToThisWindow
+    try:
+        _SwitchToThisWindow(hwnd, True)
+        time.sleep(0.05)
+        if win32gui.GetForegroundWindow() == hwnd:
+            return prev, True
+    except Exception:
+        pass
+
+    return prev, False
 
 
 def _restore_foreground(prev_hwnd: int) -> None:
@@ -224,14 +262,27 @@ class InputInjector:
     def __init__(self, hwnd: int) -> None:
         self.hwnd = hwnd
 
+    def _post_chord(self, vks: list[tuple[int, bool]]) -> None:
+        """Fallback: send keys via PostMessage when focus steal fails."""
+        for vk, ext in vks:
+            _post_key(self.hwnd, vk, ext, down=True)
+        time.sleep(0.03)
+        for vk, ext in reversed(vks):
+            _post_key(self.hwnd, vk, ext, down=False)
+        time.sleep(0.05)
+
     def send_chord(self, keys: list[str]) -> None:
         """Press all keys in order, release in reverse. ~30ms hold time.
 
         Never leaves keys held: if anything fails mid-chord, all keys that
         are still down are released before the exception propagates.
+        Falls back to PostMessage if foreground focus cannot be obtained.
         """
         vks = [_vk(k) for k in keys]
-        prev = _force_foreground(self.hwnd)
+        prev, focused = _force_foreground(self.hwnd)
+        if not focused:
+            self._post_chord(vks)
+            return
         pressed: list[tuple[int, bool]] = []
         try:
             for vk, ext in vks:
@@ -252,7 +303,10 @@ class InputInjector:
 
     def key_down(self, key: str) -> None:
         vk, ext = _vk(key)
-        prev = _force_foreground(self.hwnd)
+        prev, focused = _force_foreground(self.hwnd)
+        if not focused:
+            _post_key(self.hwnd, vk, ext, down=True)
+            return
         try:
             _send_input_key(vk, ext, down=True)
         finally:
@@ -260,7 +314,10 @@ class InputInjector:
 
     def key_up(self, key: str) -> None:
         vk, ext = _vk(key)
-        prev = _force_foreground(self.hwnd)
+        prev, focused = _force_foreground(self.hwnd)
+        if not focused:
+            _post_key(self.hwnd, vk, ext, down=False)
+            return
         try:
             _send_input_key(vk, ext, down=False)
         finally:
@@ -274,9 +331,18 @@ class InputInjector:
         once, sends each key press-release with a small delay, then
         restores foreground. Prevents focus loss between sequential keys
         like Space + direction (talk/interact).
+        Falls back to PostMessage if foreground focus cannot be obtained.
         """
         vks = [_vk(k) for k in keys]
-        prev = _force_foreground(self.hwnd)
+        prev, focused = _force_foreground(self.hwnd)
+        if not focused:
+            for vk, ext in vks:
+                _post_key(self.hwnd, vk, ext, down=True)
+                time.sleep(0.03)
+                _post_key(self.hwnd, vk, ext, down=False)
+                time.sleep(delay)
+            time.sleep(0.05)
+            return
         pressed: list[tuple[int, bool]] = []
         try:
             for vk, ext in vks:
