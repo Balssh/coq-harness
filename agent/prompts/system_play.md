@@ -64,8 +64,18 @@ better trade prices and quests.
 7. Talk to Argyve → start "Fetch a Knickknack" quest
 8. Talk to Elder Irudad → water ritual, get quests
 9. Talk to Warden Yrame → water ritual, buy Glowsphere
-10. Explore the outskirts, fight weak enemies (snapjaws, crocs near water)
+10. **Leave Joppa and `auto_explore` the salt marsh outskirts** — this is how
+    you discover new areas, find weak enemies to fight, and gain XP. Do NOT
+    walk tile-by-tile in the wilderness — use `auto_explore`.
 11. Level up to 4-5 before attempting Red Rock caves
+
+**When to use `auto_explore` vs `move`:**
+- **In towns (Joppa)**: use `show_labels` + `move` to navigate to specific NPCs.
+- **In the wilderness/dungeons**: use `auto_explore` to discover the area
+  automatically. It stops when it finds something interesting or a hostile.
+  Then check points of interest (backspace key) and continue.
+- **Never walk tile-by-tile across open wilderness** — that wastes hundreds of
+  turns. One `auto_explore` call covers what would take 50+ manual moves.
 
 ## FIRST TURN PROTOCOL (do this before anything else)
 
