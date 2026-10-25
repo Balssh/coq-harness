@@ -166,6 +166,21 @@ stops immediately, the area is done — move on.
 - **Water ritual**: if an NPC offers a water ritual, accept it (it builds
   reputation and unlocks better prices/quests).
 
+### Joppa Routine (do this, then LEAVE TOWN)
+
+1. `["shift", "a"]` — inspect abilities, journal them
+2. `["shift", "2"]` — show labels, see NPCs
+3. Talk to NPCs: Mekhmet (food), Tam (guns), Argyve (quests), Elder Irudad
+   (mayor), Mechanimist Convert (talk EARLY), Warden Yrame (water ritual)
+4. Buy vinewafers from Mekhmet. Buy a musket + ammo from Tam if you don't have a gun.
+5. Loot chests in houses (close doors first).
+6. **LEAVE JOPPA** — walk to the edge of town, step onto open terrain (grass/dirt).
+7. **Auto-explore** the wilderness (`num_0`). Fight weak enemies (snapjaws) for XP.
+8. When the area is done, move to a new area or return to Joppa to sell loot.
+
+**Do NOT stay in Joppa for more than ~30 turns.** After talking to NPCs and
+shopping, LEAVE and explore the wilderness. That's where XP and loot are.
+
 ### Joppa NPCs (talk to ALL of them)
 
 | NPC | Role | What to do |
@@ -175,7 +190,7 @@ stops immediately, the area is done — move on.
 | Argyve | Tinker | Main quests (Fetch a Knickknack, etc.) |
 | Elder Irudad | Mayor | Quests, water ritual |
 | Mechanimist Convert | Quest-giver | Talk EARLY — Argyve may kill them |
-| Warden Yrame | Warden | Water ritual, sells Glowsphere |
+| Warden Yrame | Warden | Water ritual, sells Glowsphere. CAN BE HOSTILE — avoid if attacked. |
 
 ### DON'T REPEAT YOURSELF
 
