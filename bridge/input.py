@@ -160,12 +160,10 @@ def _send_input_key(vk: int, extended: bool, down: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Focus management for SendInput fallback
+# Focus management for SendInput
 # ---------------------------------------------------------------------------
 
-_ASFW_ANY = 0xFFFFFFFF
-
-# Functions missing from this pywin32 build — call via ctypes
+# Raw Win32 calls via ctypes — bypass pywin32 for full control over return values
 _GetWindowThreadProcessId = ctypes.windll.user32.GetWindowThreadProcessId
 _GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 _GetWindowThreadProcessId.restype = wintypes.DWORD
@@ -174,91 +172,199 @@ _AttachThreadInput = ctypes.windll.user32.AttachThreadInput
 _AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
 _AttachThreadInput.restype = wintypes.BOOL
 
+_SetForegroundWindow_raw = ctypes.windll.user32.SetForegroundWindow
+_SetForegroundWindow_raw.argtypes = [wintypes.HWND]
+_SetForegroundWindow_raw.restype = wintypes.BOOL
+
+_GetForegroundWindow_raw = ctypes.windll.user32.GetForegroundWindow
+_GetForegroundWindow_raw.argtypes = []
+_GetForegroundWindow_raw.restype = wintypes.HWND
+
+_SetWindowPos = ctypes.windll.user32.SetWindowPos
+_SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                          ctypes.c_int, ctypes.c_int, wintypes.UINT]
+_SetWindowPos.restype = wintypes.BOOL
+
+_ShowWindow = ctypes.windll.user32.ShowWindow
+_ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+_ShowWindow.restype = wintypes.BOOL
+
+_AllowSetForegroundWindow = ctypes.windll.user32.AllowSetForegroundWindow
+_AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
+_AllowSetForegroundWindow.restype = wintypes.BOOL
+
+# PeekMessage to ensure the thread has a message queue
+_PeekMessageW = ctypes.windll.user32.PeekMessageW
+_PeekMessageW.argtypes = [wintypes.LPVOID, wintypes.HWND, wintypes.UINT,
+                          wintypes.UINT, wintypes.UINT]
+_PeekMessageW.restype = wintypes.BOOL
+
+class _MSG(ctypes.Structure):
+    _fields_ = [
+        ("hwnd", wintypes.HWND),
+        ("message", wintypes.UINT),
+        ("wParam", wintypes.WPARAM),
+        ("lParam", wintypes.LPARAM),
+        ("time", wintypes.DWORD),
+        ("pt_x", wintypes.LONG),
+        ("pt_y", wintypes.LONG),
+    ]
+
+_PM_NOREMOVE = 0x0000
+_SW_RESTORE = 9
+_SW_SHOW = 5
+_HWND_TOP = 0
+_HWND_TOPMOST = -1
+_HWND_NOTOPMOST = -2
+_SWP_NOMOVE = 0x0002
+_SWP_NOSIZE = 0x0001
+_SWP_SHOWWINDOW = 0x0040
+_SWP_NOACTIVATE = 0x0010
+_ASFW_ANY = 0xFFFFFFFF
+
+
 def _get_window_thread_id(hwnd: int) -> int:
     pid = wintypes.DWORD()
     return _GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
 
-_SwitchToThisWindow = ctypes.windll.user32.SwitchToThisWindow
-_ShowWindow = ctypes.windll.user32.ShowWindow
-_SW_RESTORE = 9
+
+def _ensure_msg_queue() -> None:
+    """Force creation of a message queue for the current thread.
+
+    AttachThreadInput fails if either thread lacks a message queue.
+    PeekMessage with hwnd=NULL creates one if it doesn't exist.
+    """
+    msg = _MSG()
+    _PeekMessageW(ctypes.byref(msg), 0, 0, 0, _PM_NOREMOVE)
+
+
+def _fg() -> int:
+    return _GetForegroundWindow_raw()
+
 
 def _log(msg: str) -> None:
     print(f"[input] {msg}", flush=True)
 
-def _force_foreground(hwnd: int) -> tuple[int, bool]:
-    """Force the target window to the foreground.
 
-    Returns (previous_foreground_hwnd, success). Tries multiple strategies:
-    1. AttachThreadInput + SetForegroundWindow (classic trick)
-    2. ShowWindow(SW_RESTORE) + SetForegroundWindow
-    3. SwitchToThisWindow (deprecated but sometimes works)
+def _force_foreground(hwnd: int) -> tuple[int, bool]:
+    """Force the target window to the foreground. Returns (prev_hwnd, success).
+
+    Tries multiple techniques in order:
+    1. Already foreground — return immediately.
+    2. Ensure msg queue, AttachThreadInput, SetForegroundWindow (raw ctypes).
+    3. SetWindowPos TOPMOST then NOTOPMOST, then SetForegroundWindow.
+    4. ShowWindow(SW_RESTORE) + SetForegroundWindow.
+    5. AllowSetForegroundWindow(ASFW_ANY) + AttachThreadInput + retry loop.
 
     Never raises for focus failures — callers decide what to do.
-    Raises RuntimeError only if the window is gone.
     """
     if not win32gui.IsWindow(hwnd):
         raise RuntimeError(f"Window no longer exists (HWND={hwnd})")
-    prev = win32gui.GetForegroundWindow()
+    prev = _fg()
     if prev == hwnd:
         _log(f"Already foreground (HWND={hwnd})")
         return prev, True
 
     _log(f"Stealing focus: HWND={hwnd} prev_fg={prev}")
+    _ensure_msg_queue()
 
-    # Strategy 1: AttachThreadInput + SetForegroundWindow
+    cur_thread = win32api.GetCurrentThreadId()
+    tgt_thread = _get_window_thread_id(hwnd)
+    _log(f"  threads: cur={cur_thread} tgt={tgt_thread}")
+
+    # Technique 1: AttachThreadInput + raw SetForegroundWindow
+    _log(f"  T1: AttachThreadInput + SetForegroundWindow(raw)")
+    attached = _AttachThreadInput(cur_thread, tgt_thread, True)
+    _log(f"    AttachThreadInput returned {attached}")
+    if attached:
+        win32gui.BringWindowToTop(hwnd)
+        ok = _SetForegroundWindow_raw(hwnd)
+        _log(f"    SetForegroundWindow(raw) returned {ok}")
+        time.sleep(0.05)
+        if _fg() == hwnd:
+            _log(f"  T1 SUCCESS")
+            return prev, True
+        _log(f"    foreground still {_fg()}")
+        _AttachThreadInput(cur_thread, tgt_thread, False)
+        time.sleep(0.02)
+
+    # Technique 2: SetWindowPos TOPMOST -> NOTOPMOST -> SetForegroundWindow
+    _log(f"  T2: SetWindowPos TOPMOST/NOTOPMOST + SetForegroundWindow")
     try:
-        cur_thread = win32api.GetCurrentThreadId()
-        tgt_thread = _get_window_thread_id(hwnd)
-        _log(f"  Strategy 1: AttachThreadInput(cur={cur_thread}, tgt={tgt_thread})")
-        attached = _AttachThreadInput(cur_thread, tgt_thread, True)
-        if attached:
-            win32gui.BringWindowToTop(hwnd)
-            try:
-                win32gui.SetForegroundWindow(hwnd)
-            except Exception:
-                pass
-            _AttachThreadInput(cur_thread, tgt_thread, False)
-            time.sleep(0.05)
-            if win32gui.GetForegroundWindow() == hwnd:
-                _log(f"  Strategy 1 SUCCESS")
-                return prev, True
-            else:
-                _log(f"  Strategy 1: foreground still {win32gui.GetForegroundWindow()}")
+        _SetWindowPos(hwnd, _HWND_TOPMOST, 0, 0, 0, 0,
+                      _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW)
+        time.sleep(0.03)
+        _SetWindowPos(hwnd, _HWND_NOTOPMOST, 0, 0, 0, 0,
+                      _SWP_NOMOVE | _SWP_NOSIZE | _SWP_SHOWWINDOW)
+        time.sleep(0.03)
+        ok = _SetForegroundWindow_raw(hwnd)
+        _log(f"    SetForegroundWindow returned {ok}")
+        time.sleep(0.05)
+        if _fg() == hwnd:
+            _log(f"  T2 SUCCESS")
+            return prev, True
     except Exception as e:
-        _log(f"  Strategy 1 exception: {e}")
+        _log(f"    T2 exception: {e}")
 
-    # Strategy 2: ShowWindow(SW_RESTORE) + SetForegroundWindow
+    # Technique 3: ShowWindow + SetForegroundWindow
+    _log(f"  T3: ShowWindow(SW_RESTORE) + SetForegroundWindow")
     try:
-        _log(f"  Strategy 2: ShowWindow + SetForegroundWindow")
         _ShowWindow(hwnd, _SW_RESTORE)
         time.sleep(0.05)
-        win32gui.SetForegroundWindow(hwnd)
+        ok = _SetForegroundWindow_raw(hwnd)
+        _log(f"    SetForegroundWindow returned {ok}")
         time.sleep(0.05)
-        if win32gui.GetForegroundWindow() == hwnd:
-            _log(f"  Strategy 2 SUCCESS")
+        if _fg() == hwnd:
+            _log(f"  T3 SUCCESS")
             return prev, True
     except Exception as e:
-        _log(f"  Strategy 2 exception: {e}")
+        _log(f"    T3 exception: {e}")
 
-    # Strategy 3: SwitchToThisWindow
+    # Technique 4: AllowSetForegroundWindow + AttachThreadInput + retry loop
+    _log(f"  T4: ASFW + AttachThreadInput + retry x5")
     try:
-        _log(f"  Strategy 3: SwitchToThisWindow")
-        _SwitchToThisWindow(hwnd, True)
-        time.sleep(0.05)
-        if win32gui.GetForegroundWindow() == hwnd:
-            _log(f"  Strategy 3 SUCCESS")
-            return prev, True
+        _AllowSetForegroundWindow(_ASFW_ANY)
+        attached = _AttachThreadInput(cur_thread, tgt_thread, True)
+        _log(f"    AttachThreadInput returned {attached}")
+        if attached:
+            for i in range(5):
+                win32gui.BringWindowToTop(hwnd)
+                ok = _SetForegroundWindow_raw(hwnd)
+                time.sleep(0.03)
+                if _fg() == hwnd:
+                    _log(f"  T4 SUCCESS on attempt {i+1}")
+                    return prev, True
+                _log(f"    attempt {i+1}: fg={_fg()} ok={ok}")
+            _AttachThreadInput(cur_thread, tgt_thread, False)
     except Exception as e:
-        _log(f"  Strategy 3 exception: {e}")
+        _log(f"    T4 exception: {e}")
 
-    _log(f"  ALL STRATEGIES FAILED — falling back to PostMessage")
+    # Technique 5: AttachThreadInput kept active, SetForegroundWindow with pywin32
+    _log(f"  T5: AttachThreadInput(held) + pywin32.SetForegroundWindow")
+    try:
+        attached = _AttachThreadInput(cur_thread, tgt_thread, True)
+        if attached:
+            for i in range(3):
+                try:
+                    win32gui.SetForegroundWindow(hwnd)
+                except Exception:
+                    pass
+                time.sleep(0.03)
+                if _fg() == hwnd:
+                    _log(f"  T5 SUCCESS on attempt {i+1}")
+                    return prev, True
+            _AttachThreadInput(cur_thread, tgt_thread, False)
+    except Exception as e:
+        _log(f"    T5 exception: {e}")
+
+    _log(f"  ALL TECHNIQUES FAILED — falling back to PostMessage")
     return prev, False
 
 
 def _restore_foreground(prev_hwnd: int) -> None:
     if prev_hwnd and win32gui.IsWindow(prev_hwnd):
         try:
-            win32gui.SetForegroundWindow(prev_hwnd)
+            _SetForegroundWindow_raw(prev_hwnd)
         except Exception:
             pass
 
