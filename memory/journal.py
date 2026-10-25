@@ -28,7 +28,10 @@ class Journal:
             return
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self._notes = list(data.get("notes", []))
+        if isinstance(data, list):
+            self._notes = list(data)
+        else:
+            self._notes = list(data.get("notes", []))
 
     def clear(self) -> None:
         self._notes.clear()
