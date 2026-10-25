@@ -217,15 +217,9 @@ def start_bridge(python_path: str | None = None) -> None:
     win_temp_win = WIN_TEMP.as_posix().replace("/mnt/c/", "C:/")
     log_path = win_temp_win + "/bridge.log"
 
-    # Start hidden, redirect output to log file for diagnostics
-    script = (
-        f"Start-Process -FilePath '{python_path}' "
-        f"-ArgumentList '{args}' "
-        f"-WorkingDirectory '{win_temp_win}' "
-        f"-WindowStyle Hidden "
-        f"-RedirectStandardOutput '{log_path}' "
-        f"-RedirectStandardError '{log_path}'"
-    )
+    # Start via cmd with output redirection to log file
+    inner = f'\"{python_path}\" {args} > \"{log_path}\" 2>&1'
+    script = f"Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"{inner}\"' -WorkingDirectory '{win_temp_win}' -WindowStyle Hidden"
     result = _powershell(script, timeout=10)
     if result.returncode != 0:
         raise RuntimeError(f"Failed to start bridge: {result.stderr}")
