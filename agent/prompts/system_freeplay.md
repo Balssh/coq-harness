@@ -138,21 +138,31 @@ Every turn, respond with EXACTLY this JSON structure:
 
 ## Strategy Tips
 
-### THE EXPLORATION LOOP (do this in every area)
+### THE EXPLORATION LOOP (do this in EVERY area, including Joppa)
 
-When you enter any new area (town or wilderness), follow this loop:
+**Auto-explore works in towns AND wilderness.** Use it everywhere.
 
-1. **Auto-explore** — press `num_0`. The game explores all unvisited tiles
-   automatically. It stops when it finds a hostile or finishes.
-2. **Interact with what you find** — pick up items (`g`), open chests
-   (`["space", direction]`), talk to NPCs (`["space", direction]`).
-3. **Check points of interest** — press `backspace` to see a list of stairs,
-   NPCs, items, and landmarks. Go to anything unvisited.
-4. **When the screen is fully explored** (no more unvisited tiles, all items
-   looted, all NPCs talked to), move to the NEXT screen/area and repeat.
+When you enter any new area, follow this loop:
+
+1. **Auto-explore** — press `num_0`. The game moves you through all unvisited
+   tiles automatically. Works in Joppa too! It stops when it finds a hostile
+   or finishes exploring.
+2. **Use the POI menu** — press `backspace`. A menu appears listing points of
+   interest (NPCs, items, stairs, landmarks) with LETTER keys next to each.
+   **To go to an NPC**: read the menu, find the NPC's name, press their letter
+   key (e.g. `["a"]` for the first entry), then press `["enter"]` to travel
+   there. Example: `[\"backspace\"]` → read menu → `[\"b\"]` → `[\"enter\"]`.
+3. **Talk to the NPC** — when you arrive, press `["space", direction]` where
+   direction points at the NPC. Select "Chat" (usually option `1`).
+4. **After talking**: press `backspace` again, pick the NEXT unvisited NPC.
+5. **Repeat** until all NPCs are visited. Then auto-explore again or move to
+   a new area.
+
+**Do NOT wander manually with numpad keys.** Use auto-explore + POI menu.
+Walking tile-by-tile wastes turns and gets you killed.
 
 **Do NOT press `num_0` again on a fully-explored screen.** If auto-explore
-stops immediately, the area is done — move on.
+stops immediately, the area is done — use the POI menu or move on.
 
 ### TALK TO NPCs (high priority!)
 
@@ -232,8 +242,10 @@ shopping, LEAVE and explore the wilderness. That's where XP and loot are.
 | Move north | `["num_8"]` |
 | Move southeast | `["num_3"]` |
 | Wait one turn | `["num_5"]` |
-| Auto-explore wilderness | `["num_0"]` |
-| Check points of interest | `["backspace"]` |
+| **Auto-explore (town or wilderness)** | `["num_0"]` |
+| **Open POI menu** | `["backspace"]` |
+| **Select POI entry (first = a, second = b, etc.)** | `["a"]` or `["b"]` etc. |
+| **Confirm POI travel** | `["enter"]` |
 | Talk to NPC to the north | `["space", "num_8"]` |
 | Open inventory | `["shift", "i"]` |
 | Open abilities | `["shift", "a"]` |
@@ -244,6 +256,29 @@ shopping, LEAVE and explore the wilderness. That's where XP and loot are.
 | Pick up item | `["g"]` |
 | Eat food | `["shift", "i"]` → select food → `["e"]` |
 | Select dialogue option 1 | `["1"]` |
+
+### POI Menu — Step by Step Example
+
+You are in Joppa. You want to talk to Tam (the gun merchant).
+
+**Turn 1**: `["backspace"]` — the POI menu opens. You see:
+```
+Points of Interest:
+ a - Tam the dromad merchant
+ b - Mekhmet the watervine farmer
+ c - Argyve the tinker
+ ...
+```
+
+**Turn 2**: `["a"]` — select Tam (first entry, letter 'a').
+
+**Turn 3**: `["enter"]` — confirm. The game auto-walks you to Tam.
+
+**Turn 4**: `["space", "num_8"]` (or whatever direction Tam is in) — talk to Tam.
+
+**Turn 5**: `["1"]` — select "Chat" in the interaction menu.
+
+That's it! Use this pattern for EVERY NPC. Don't wander manually.
 
 ## Game Manual — Essential Knowledge
 
