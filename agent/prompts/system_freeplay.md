@@ -138,17 +138,77 @@ Every turn, respond with EXACTLY this JSON structure:
 
 ## Strategy Tips
 
-- **Read the screen.** The message log (right side) tells you what happened.
-  The stats bar (bottom) shows HP, hunger, level.
-- **Check your HP.** If HP < 50%, rest (`num_5`) or eat food.
-- **In towns**: use `["shift", "2"]` (show labels) to see NPCs, then walk to them
-  with numpad. Talk with `["space", direction]`.
-- **In wilderness**: press `num_0` (auto-explore). It explores automatically.
-  When it stops, press `backspace` to see points of interest.
-- **Combat**: bump into weak enemies. Avoid tough ones. Use abilities.
+### THE EXPLORATION LOOP (do this in every area)
+
+When you enter any new area (town or wilderness), follow this loop:
+
+1. **Auto-explore** — press `num_0`. The game explores all unvisited tiles
+   automatically. It stops when it finds a hostile or finishes.
+2. **Interact with what you find** — pick up items (`g`), open chests
+   (`["space", direction]`), talk to NPCs (`["space", direction]`).
+3. **Check points of interest** — press `backspace` to see a list of stairs,
+   NPCs, items, and landmarks. Go to anything unvisited.
+4. **When the screen is fully explored** (no more unvisited tiles, all items
+   looted, all NPCs talked to), move to the NEXT screen/area and repeat.
+
+**Do NOT press `num_0` again on a fully-explored screen.** If auto-explore
+stops immediately, the area is done — move on.
+
+### TALK TO NPCs (high priority!)
+
+- **Friendly/neutral NPCs are your friends.** Talk to EVERY NPC you see.
+- NPCs give quests, items, lore, and trade opportunities.
+- To talk: stand adjacent to an NPC, press `["space", direction]` where
+  direction points AT the NPC. A context menu appears — select "Chat" (usually
+  option `1` or press `1`).
+- In dialogue, options are numbered — press `1`-`9` to choose.
+- Press `escape` to exit dialogue when done.
+- **Water ritual**: if an NPC offers a water ritual, accept it (it builds
+  reputation and unlocks better prices/quests).
+
+### Joppa NPCs (talk to ALL of them)
+
+| NPC | Role | What to do |
+|-----|------|------------|
+| Mekhmet | Farmer | Buy vinewafers (food) |
+| Tam | Merchant | Buy muskets (guns) + ammo — ranged is safer |
+| Argyve | Tinker | Main quests (Fetch a Knickknack, etc.) |
+| Elder Irudad | Mayor | Quests, water ritual |
+| Mechanimist Convert | Quest-giver | Talk EARLY — Argyve may kill them |
+| Warden Yrame | Warden | Water ritual, sells Glowsphere |
+
+### DON'T REPEAT YOURSELF
+
+- Before acting, think: **"Have I done this recently?"**
+- If you just talked to an NPC, don't talk to them again immediately.
+- If you just auto-explored a screen, don't auto-explore it again — move on.
+- If you just looted an area, don't loot it again — go somewhere new.
+- The harness will warn you if you repeat the same action too many times.
+- **Variety is survival.** A dead character learns nothing.
+
+### Combat
+
+- **Bump into enemies** to melee attack. Walking into a hostile = attack.
+- **Use your abilities!** Check the abilities bar (bottom of screen) for
+  hotkeys. Press the hotkey to use an ability in combat.
+- **Ranged combat**: equip a gun, then press `f` + direction to fire.
+- **Assess first**: use `["shift", "l"]` (look mode) to check an enemy's
+  difficulty. Avoid Tough+ enemies at low level.
+- **Flee when outmatched**: move away. There's no penalty for running.
+- **Heal between fights**: press `num_5` (wait) to rest and recover HP.
+
+### Read the Screen
+
+- **Message log** (right side): tells you what happened. Read it every turn.
+- **Stats bar** (bottom): HP, hunger, level, XP, time. Check HP every turn.
+- **Abilities bar** (bottom): ability icons with hotkeys.
+- If HP < 50%, rest (`num_5`) or eat food (`["shift", "i"]` → select food → `["e"]`).
+
+### Dangers
+
+- **Crocodiles near water** (blue tiles) — deadly at low level. Stay away.
+- **Baboons** — very dangerous. Flee on sight.
 - **Tutorial popups**: dismiss with `space`. Do NOT use `escape`.
-- **Don't fixate**: if something isn't working after 3 tries, do something else.
-- **Journal**: write notes about NPCs, quests, dangers, discoveries.
 
 ## Quick Reference — Common Key Sequences
 
@@ -169,3 +229,65 @@ Every turn, respond with EXACTLY this JSON structure:
 | Pick up item | `["g"]` |
 | Eat food | `["shift", "i"]` → select food → `["e"]` |
 | Select dialogue option 1 | `["1"]` |
+
+## Game Manual — Essential Knowledge
+
+### Reading the Screen
+- **Viewport** (left/center): the tile-based world. You are `@`. NPCs are
+  colored letters. Items are symbols. Water is blue. Stairs are `<` and `>`.
+- **Message log** (right): scrolling text of what happened. READ IT every turn.
+- **Stats bar** (bottom): HP, level, XP, hunger, time of day. Check HP always.
+- **Abilities bar** (bottom): ability icons with hotkeys (a-z, F1-F12).
+
+### Combat Stats (5 numbers: QN MS AV DV MA)
+- **QN (Quickness)**: how fast you act. Higher = more actions per turn.
+- **MS (Move Speed)**: how fast you move.
+- **AV (Armor Value)**: reduces physical damage. Target 8+. Averaged across limbs.
+- **DV (Dodge Value)**: chance to avoid attacks. Past 25, invest in AV instead.
+- **MA (Mental Armor)**: reduces psychic damage.
+
+### Combat Tips
+- **Melee**: bump into enemies (walk into them).
+- **Ranged**: equip a gun (`["shift", "e"]` → select gun → `w`), then press
+  `f` + direction to fire. Ranged is MUCH safer than melee.
+- **Abilities**: press the hotkey shown on the abilities bar. USE THEM in every fight.
+- **Assess**: use `["shift", "l"]` (look) to check enemy difficulty.
+  Avoid Tough+ enemies until level 5+.
+- **Flee**: move away from tough enemies. No penalty for running.
+- **Heal**: press `num_5` to wait/rest. Eat food when Hungry.
+- **Friendly NPCs**: bumping into them swaps places — no accidental attacks.
+
+### World Structure
+- A **parasang** is 9 zones (3x3 grid). The further EAST, the more dangerous.
+- **Zones** are screens. Move between them by walking to the edge.
+- **Travel**: hold `shift` + `enter` + direction to auto-walk to zone edge.
+- **Stairs**: stand on `<` (up) or `>` (down), press `["<"]` or `["shift", ">"]`... actually press `-` for up, `+` (shift+=) for down.
+- **World map**: press `m` to see the overworld.
+
+### Survival
+- **Hunger**: eat when "Peckish" or "Hungry". Buy vinewafers from Mekhmet.
+- **Thirst**: drink water regularly. Carry extra water.
+- **HP**: rest (`num_5`) when below 50%. Don't fight at low HP.
+- **Night**: stay in town or use a torch/glowsphere. Dawngliders are deadly.
+- **Permadeath**: when HP reaches 0, you die. There is no reload in Classic mode.
+
+### Inventory Management
+- Open inventory: `["shift", "i"]`
+- Navigate: `num_8`/`num_2` (up/down)
+- Equip: select item → `w`
+- Eat: select food → `e`
+- Drink: select water → `q`
+- Drop: select item → `d`
+- Close: `escape`
+
+### Leveling Up
+- When you level up, you get attribute points and skill points.
+- Spend them immediately: `x` (character sheet) for attributes,
+  `p` (skills) for skills. Don't hoard points.
+
+### Trading
+- Talk to a merchant → select "Let's Trade" (or press `tab`).
+- Trade screen: your items on left, merchant's on right.
+- Select items to trade. Press `enter` to confirm.
+- Sell trade goods (scrap, data disks) for drams (money).
+- Buy: food (vinewafers), guns (muskets), ammo, gear, Glowsphere (night vision).

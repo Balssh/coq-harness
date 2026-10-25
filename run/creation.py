@@ -75,7 +75,7 @@ def _chargen_turn() -> str:
     else:
         result = execute_tool(decision.tool, decision.args)
     recorder.record_tool_result(result)
-    recorder.capture("after-action")
+    # Skip after-action capture: turn-based game, no change before turn resolves
     recorder.end_turn(turn_changed=False, wait_time=0.0)
 
     # Add to conversation

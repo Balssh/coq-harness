@@ -95,11 +95,8 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
     else:
         result = execute_tool(decision.tool, decision.args)
     recorder.record_tool_result(result)
-
-    if result.error:
-        recorder.capture("after-error")
-    else:
-        recorder.capture("after-action")
+    # Skip after-action capture: in a turn-based game, the frame right after
+    # a key press is identical to the start frame (turn hasn't resolved yet).
 
     # 8. Turn clock: wait for log change if the tool advances the turn
     # OR if the model explicitly set wait_for_turn=true (e.g., for press())
@@ -142,6 +139,14 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
         f"Hunger: {decision.hunger or '?'}, "
         f"Location: {decision.location or '?'}"
     )
+
+    # Show recent actions so the model doesn't repeat itself
+    if len(_recent_actions) >= 3:
+        recent = _recent_actions[-5:-1]  # last 4 actions before this one
+        user_parts.append(
+            f"Your recent actions: {' → '.join(recent)}. "
+            f"Do NOT repeat these — do something different."
+        )
 
     # Anti-repeat warning: track consecutive identical actions
     if decision.keys:

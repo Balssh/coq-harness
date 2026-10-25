@@ -133,22 +133,15 @@ def decide(
         )
     turn_text = "\n\n".join(turn_text_parts)
 
-    send_all = state.turn_count == 0 or state.turn_count % 10 == 0
-
     if in_play:
         images: dict[str, bytes] = {
             "viewport": image_to_png_bytes(perception.viewport),
             "log": image_to_png_bytes(perception.log),
         }
         labels = {
-            "viewport": "Game Viewport (the tile-based world)",
+            "viewport": "Game Viewport (tile-based world + stats bar at bottom)",
             "log": "Message Log (recent game messages)",
         }
-        if send_all:
-            images["top_status"] = image_to_png_bytes(perception.top_status)
-            images["abilities"] = image_to_png_bytes(perception.abilities)
-            labels["top_status"] = "Top Status Bar (HP, level, XP, temperature, time, date)"
-            labels["abilities"] = "Abilities Bar (ability icons with hotkeys — bottom of screen)"
     else:
         images = {
             "full": image_to_png_bytes(perception.full),
