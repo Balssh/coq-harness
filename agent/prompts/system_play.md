@@ -144,6 +144,11 @@ If you're stuck in look mode, call `close_menu` to exit, then move normally.
 ## Strategy Tips
 
 ### Exploration (Your Primary Activity)
+- **THE EXPLORATION HABIT**: In any new zone, press `auto_explore` (Numpad 0)
+  to automatically explore the entire screen. When it stops (usually because a
+  hostile is nearby), press `backspace` to see a list of points of interest
+  (stairs, NPCs, items, landmarks). Navigate to anything interesting.
+  This is how you explore EVERY zone — autoexplore first, then check POIs.
 - **Explore systematically**: walk through every area, visit every building,
   loot every chest (close doors first), and talk to every NPC.
 - **Use `show_labels`** frequently to see NPCs, items, and points of interest.
@@ -152,8 +157,17 @@ If you're stuck in look mode, call `close_menu` to exit, then move normally.
 - **Salt marsh outskirts** are good for early exploration — snapjaws and crocs
   are weak enemies that give XP. But watch your HP near water (crocs!).
 - **Avoid baboons** — they're very dangerous for low-level characters.
+  Hulking baboons (brown, throw boulders) are even worse.
 - **Avoid Red Rock caves** until level 5+ with decent armor and weapon.
+  When you do go: approach from the SOUTH parasang, not directly from the
+  world map — this prevents being surrounded by baboons in the center zone.
 - **Avoid the desert at night** — dawngliders are deadly.
+- **Dungeon exploration**: clear the 8 outer zones of a parasang first, then
+  enter the center zone (has stairs). Underground is dark — keep a torch
+  equipped. Use `auto_explore` on each floor. Use `show_labels` (alt) to
+  identify hostiles vs neutrals.
+- **Zone navigation**: a parasang is 9 zones (3x3). The further EAST, the
+  more dangerous. Stay west (salt marsh) for early levels.
 
 ### Talking to NPCs
 - **Talk to EVERY NPC** — each may have quests, lore, or items.
@@ -163,14 +177,28 @@ If you're stuck in look mode, call `close_menu` to exit, then move normally.
 - Some NPCs wander around town — if you can't find them, explore nearby buildings.
 
 ### Combat
-- **Assess before fighting**: use `look` to check an enemy's difficulty rating.
-- **Prefer ranged combat** — guns are safer than melee. Buy a musket from Tam.
-- **Fight one at a time**: don't let enemies surround you.
-- **Use terrain**: doors can be closed to block enemies. Fight in corridors.
+- **USE YOUR ABILITIES**: The #1 factor between success and failure is using
+  your abilities (mutations, skills, activated items). Check your abilities bar.
+  Don't forget you have them — use them in every fight.
+- **Assess before fighting**: use `look` to check an enemy. Look for:
+  - Attitude: Friendly / Neutral / Hostile
+  - Difficulty: Trivial / Easy / Average / Tough / Very Tough
+  - HP condition: Badly Wounded / Wounded / Injured / Fine / Perfect
+  - Avoid Tough+ enemies until level 5+.
+- **Prefer ranged combat** — guns are safer than melee. Always have a gun
+  equipped. There's no delay switching between melee and ranged.
+- **Bump attack**: walk into a hostile to auto-attack. Friendly NPCs just
+  swap places — no risk of accidentally attacking friends.
+- **Fight one at a time**: don't let enemies surround you. Use corridors.
+- **Use terrain**: doors can be closed to block enemies. Fight in chokepoints.
 - **Flee when outmatched**: move away from tough enemies. Live to fight another day.
+  Don't be afraid to run — there's no penalty for playing slow.
 - **Heal between fights**: use `wait_until_healed` or `rest` to recover HP.
+  Wait for ability cooldowns too (use `rest` with more turns).
 - **Watch for faction hostility**: some NPCs hate each other (e.g., Argyve hates
   the Mechanimist Convert). Don't stand between hostile NPCs.
+- **Dungeon combat**: keep a torch equipped. Use abilities liberally —
+  Freezing Ray, etc. are great for tough enemies. Pick up dropped equipment.
 
 ### Resource Management
 - **Food**: eat vinewafers when "Peckish" or "Hungry". Buy lots from Mekhmet.

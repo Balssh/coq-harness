@@ -9,12 +9,26 @@ The fastest path is a **preset character** (one confirm skips the entire
 custom chargen tree). Since your mission is to **explore, talk to NPCs, and
 fight hostiles**, pick a preset that can survive combat:
 
-- **Gunwing** (Mutant Gunslinger) — **RECOMMENDED**. 22 Agi, starts with a gun.
-  Ranged combat is much safer than melee — you can kill enemies from a distance.
+- **Gunwing** (Mutant Gunslinger) — **RECOMMENDED**. 22 Agility, starts with
+  a gun and ammo. Ranged combat is much safer than melee — you can kill
+  enemies from a distance. High DV (dodge) helps you survive.
 - **Praetorian Prime** (True Kin) — 22 Str/21 Toughness, rifle + slugs.
-  Good armor and ranged weapon. Solid all-rounder.
-- **Marsh Taur** (Mutant Marauder) — 22 Str melee bruiser.
-  High HP and melee damage, but melee is riskier. Good for learning combat.
+  Good armor, HP, and a ranged weapon. True Kin start with better stats,
+  equipment, and more skill points than Mutants.
+- **Marsh Taur** (Mutant Marauder) — 22 Str melee bruiser. High HP and melee
+  damage, plus a Charge ability. Good for learning combat, but melee is riskier.
+
+### Build Tips (from qudzoo)
+- **Attribute priorities**: Your primary attribute should be 2+ points above
+  your secondary. For ranged: Agility > Toughness > Strength.
+- **Agility** → DV (dodge) and ranged accuracy. **Toughness** → HP.
+  **Strength** → melee damage. **Intelligence** → skill points.
+  **Willpower** → mental abilities and cooldown recovery. **Ego** → psychic powers.
+- **Skills matter more than gear**: invest skill points in combat skills
+  (DV/AV), wayfaring (navigate world map), and cooking (Harvestry).
+- **True Kin** start stronger but need loot to scale. **Mutants** are powerful
+  early but need mutation levels to grow.
+- **Always keep a ranged weapon equipped** — there's no delay switching.
 
 Here is the exact verified flow:
 

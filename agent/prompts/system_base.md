@@ -153,12 +153,30 @@ Numpad layout:
 - **Overland travel**: use `travel(direction)` to auto-pathfind to a zone edge.
 
 ### Combat
-- Melee: bump into an enemy.
-- **Assess before fighting**: use `look` to check an enemy's difficulty rating.
-- **AV (Armor Value)**: reduces damage taken. Higher is better.
-- **DV (Dodge Value)**: chance to dodge attacks. Higher is better.
-- **HP**: health points. When HP reaches 0, you die.
+- **Melee**: bump into an enemy (walk into them to auto-attack).
+- **Always have a ranged weapon equipped** — there's no delay switching between
+  melee and ranged. Use your gun whenever possible; it's much safer.
+- **Assess before fighting**: use `look` to check an enemy. The look panel shows:
+  - **Faction/attitude**: Friendly / Neutral / Hostile
+  - **Difficulty**: Trivial / Easy / Average / Tough / Very Tough / Impossible
+  - **HP condition**: Badly Wounded > Wounded > Injured > Fine > Perfect
+  - Avoid **Tough** or harder enemies until you're level 5+.
+- **Combat stats** (shown as 5 numbers: QN MS AV DV MA):
+  - **QN (Quickness)**: how fast you act. Higher = more actions per turn.
+  - **MS (Move Speed)**: how fast you move. Higher = faster movement.
+  - **AV (Armor Value)**: reduces damage from physical attacks. Target: 8+.
+  - **DV (Dodge Value)**: chance to avoid attacks entirely. Higher is better,
+    but past 25 it's less useful — invest in AV instead.
+  - **MA (Mental Armor)**: reduces damage from psychic/mental attacks.
+- **AV is averaged across limbs**: if you equip armor on one arm but not the
+  other, you only get half the AV. Equip matching armor on all slots.
+- **HP**: health points. When HP reaches 0, you die (permadeath in Classic mode).
+- **Use your abilities!** The biggest factor between success and failure is
+  using your abilities (mutations, skills, items), not your build. Don't forget
+  you have them — check your abilities bar.
 - **Retreat**: move away from tough enemies. Use `wait_until_healed` to recover HP.
+- **Friendly creatures**: if you bump into a friendly NPC, you swap places
+  instead of attacking. No risk of accidentally attacking friends.
 
 ### Interaction
 - **Finding NPCs**: NPCs are colored symbols on the map. Use `show_labels` to see
@@ -179,16 +197,35 @@ Numpad layout:
 - **Blocked movement**: if the log says "the way is blocked", DO NOT repeat
   that direction. Pick a different direction immediately.
 - **Trade**: from a conversation, select "Let's Trade" or press Tab. The trade
-  screen has two panes — select items to exchange.
+  screen has two panes — select items to exchange. Trade goods (yellow price)
+  are weight-efficient — good to sell.
+- **Water Ritual**: when talking to an NPC, you may see a "water ritual" option.
+  This costs 1 dram of fresh water and creates a bond. Effects:
+  - Factions that like the NPC will like you more.
+  - Factions that hate the NPC will like you less.
+  - It's frowned upon to kill a creature you've bonded with.
+  - Some NPCs teach you skills/recipes (e.g., Elder Irudad teaches Harvestry
+    and the Apple Matz recipe if you ritual with Mekhmet, Yrame, AND Irudad).
+  - Do water rituals with important NPCs — it's worth the 1 dram.
 - **Pick up**: stand on an item and use `get` (or walk onto it).
 
 ### Items
-- **Weapons**: swords, axes, maces, bows, etc. Equip better ones as you find them.
-- **Armor**: equip to increase AV.
-- **Food**: eat to manage hunger. Don't starve.
-- **Water**: drink to manage thirst. A dram = 10,000 thirst units.
-- **Trade goods**: sell to merchants for currency (drams).
-- **Artifacts**: powerful unique items with special effects.
+- **Weapons**: swords, axes, maces, bows, guns, etc. Equip better ones as you find them.
+  Always keep a ranged weapon equipped — no delay switching to it.
+- **Armor**: equip to increase AV. AV is averaged across limbs — equip matching
+  armor on all slots (both arms, head, body, etc.) for full benefit.
+- **Food**: eat to manage hunger. Vinewafers are cheap and filling. Don't starve.
+- **Water**: drink to manage thirst. Water is also currency (drams). It's heavy:
+  4 drams = 1#. Keep 128-192 drams on hand. Don't carry too much water —
+  convert excess to trade goods or better items.
+- **Trade goods**: sell to merchants for currency. Weight-efficient items sell
+  for 4x their weight in drams. Copper nuggets, gems, and artifacts are good.
+- **Artifacts**: powerful unique items with special effects. Keep them even if
+  broken — tinkers (like Argyve) can repair them. Check items for "painted"
+  or "engraved" — these are special variants with better stats.
+- **Torches**: needed for dungeons (underground is dark). Keep one equipped
+  in a hand slot when exploring caves.
+- **Recoiler**: teleport escape item. Life-saver. Keep it on you.
 
 ### Screens (Info Tools)
 - `open_screen(screen)` — open inventory, equipment, skills, character, quests,
@@ -217,16 +254,24 @@ Numpad layout:
   Key NPCs: Elder Irudad (mayor), Argyve (tinker, main questline), Mekhmet
   (watervine farmer, sells food), Tam (merchant, sells guns), Warden Yrame
   (reputation), Mechanimist Convert (quests — talk early, Argyve may kill them).
+- **Zone** = one game screen. Walk to the edge to load the next zone.
+- **Parasang** = 9 zones (3x3 grid). One world map tile = 1 parasang.
+- **Zone tier**: the further EAST you go, the more dangerous it gets.
+  Salt marsh (west of Joppa) is safest. Lake Hinnom (east) is much harder.
 - **Salt marsh outskirts**: surrounding Joppa. Weak enemies (snapjaws, crocs).
   Good for early XP. Watch HP near water.
 - **Red Rock**: a cave area east of Joppa. Dangerous for low-level characters.
-  Wait until level 5+.
+  Wait until level 5+. Approach from the SOUTH (not directly from world map)
+  to avoid being surrounded by baboons.
 - **The desert**: between towns. Dangerous at night (dawngliders).
 - **Six Day Stilt**: another town, northeast of Joppa. Has a ceremonial well.
 - **Ruins**: procedurally generated dungeons with loot and danger.
 - The world is **procedurally generated** — every run is different.
 - **Zone travel**: use `travel` to walk between adjacent zones.
-- **World map** (`m` key): see the overworld. Plan your route before traveling.
+- **World map** (`-` or `m` key): see the overworld. Plan your route before
+  traveling. You can't use it if Lost or Famished, or if hostiles are nearby.
+- **Recoiler**: a teleport escape item. Argyve gives you one after completing
+  the Weirdwire Conduit quest. Keep it on you for emergencies.
 
 ### Beginner Tips (from experienced players)
 - **Talk to everyone** in your starting town. Each NPC may have quests.
@@ -244,11 +289,16 @@ Numpad layout:
 - Low reputation means faction guards will attack you on sight.
 
 ### Common Dangers
-- **Snapjaws**: dog-like creatures, common near Joppa.
-- **Baboons**: aggressive primates, very dangerous.
+- **Snapjaws**: dog-like creatures, common near Joppa. Weak — good for early XP.
+- **Crocs**: found near water in Joppa outskirts. Moderate danger — watch HP.
+- **Baboons**: aggressive primates. **Very dangerous** — avoid until level 4+.
+  Hulking baboons (brown, throw boulders) are even worse — avoid until level 5+.
 - **Dawngliders**: flying creatures, dangerous at night in the desert.
+- **Slugsnouts**: found on the way to Grit Gate. High damage — approach carefully.
 - **Robots**: mechanical enemies, some are very tough.
-- **Poison/Diseases**: some enemies and environments cause these.
+- **Poison/Diseases**: some enemies and environments cause these. Find cures.
+- **Getting Lost**: if you get lost, you can't use the world map. Explore
+  manually to regain your bearings. Don't wander too far from known areas.
 
 ### Quests
 - NPCs in towns give quests. Talk to them to receive quests.

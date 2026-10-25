@@ -140,3 +140,26 @@ finished a conversation with an NPC.
   "journal_note": null
 }
 ```
+
+---
+
+## Example 7: Auto-Exploring a New Zone
+
+**Situation**: You've walked to a new screen (zone) east of Joppa. It's
+unexplored salt marsh with some creatures visible.
+
+```json
+{
+  "reasoning": "I'm in a new zone. The best way to explore is to auto-explore — the game will move me through all interesting tiles and stop when a hostile threatens me. Then I'll check points of interest with backspace. Let me start auto-exploring.",
+  "tool": "auto_explore",
+  "args": {},
+  "wait_for_turn": true,
+  "screen": "play",
+  "goal": "Explore this zone with autoexplore, then check points of interest for NPCs, items, or stairs",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Salt marsh (east of Joppa)",
+  "journal_note": null
+}
+```

@@ -1,0 +1,632 @@
+============================================================
+QUD FUNDAMENTALS
+============================================================
+
+## How Do I Play?
+
+Caves of Qud is a turn-based game, which means that when it's your turn, you have as much time as you need to make your decisions. Especially when you're starting out, make sure you take your time reading the chat log, looking at the game screen and familiarizing yourself with your equipment. The biggest factor between success and failure is not "What build do I have?", it's "Am I using my abilities?". It's very common for newer players to panic and forget things that their character can do because of a mutation, cybernetic, or item they picked up.
+
+Caves of Qud can be played with mouse & keyboard or entirely with your keyboard. If you are looking to play keyboard only, I would strongly advise having a numpad as it makes movement considerably more fluid. In Caves of Qud, moving in cardinal directions (←↑→↓) takes the same amount of time as ordinal directions (↖↗↘↙), so having a numpad makes this much easier. Enemies will absolutely take advantage of ordinal movement, so you should as well!
+
+On your turn, you can move, bump attack, interact with something, use an ability, or change your equipment. All of these take up time which other creatures will react to by taking their turn. Some creatures don't normally move, like Mehmet in the starting village of Joppa. Some creatures will aggressively move towards you to try and rip you to pieces, and others will actively avoid you. Additionally, there is no delay in switching to your ranged weapon as it's always considered equipped. For that reason, you should always have a ranged weapon equipped and use it (likewise, if you are primarily ranged you should also have a melee weapon).
+
+Let's return to that action "bump attack". If this is your first time in a roguelike game like Caves of Qud, this may be unfamiliar. The way you perform a basic attack is by simply walking into a hostile creature. Your character will automatically attack them, but don't worry about accidentally attacking friendly creatures! If the creature is friendly, instead of attacking them you will swap places with them if they can be moved. "If" a creature is friendly, that is; how can you tell that information?
+
+
+## Parsing Creature Information
+
+The primary way of identifying information about a creature is by using the `l`ook functionality. When you do, it will bring up a reticule on your character and give you information about whatever is found in the tile the reticule is on.
+
+By default, moving around the reticule will advance it tile by tile. If you want to quickly move to creatures that are visible, you can press `f1` and you'll now snap to the closest creature when you move the reticule.
+
+In the middle panel, you'll find a dense amount of information about the entity in the tile being `l`ooked at, in this case our player character. First, a description of the creature. Since it's us, the description is simply "It's you." but this is often times a flowery, advant-garde description of the creature. Below this you can see the equipment the creature has on. For humanoid creatures, this is important since these creatures are often defined by what they are wearing. For most creatures, this isn't that important since they don't wear anything. Finally, we have the active effects for the creature, in this case our player character is in Defensive Stance and they are lost, which means they cannot return to the world map until they regain their bearings by exploring zones manually.
+
+While this panel has very dense information, while starting out it's probably not that useful. Instead, we're interested in the 3 keywords found below and above this middle panel: Friendly, Average and Perfect.
+
+When you `l`ook, by default it only shows the entity at the top of the tile. However, there can be multiple things stacked on top of each other on a tile. If you want to navigate up and down the pile, you can use `+` and `-` to do so.
+
+So now that we know we can use `l`ook in order to see what is hostile to us, we can now know who our enemies are and play accordingly. However, often times there are many creatures on screen at once. It would be rather cumbersome to have to check each one individually to see who is and is not hostile to us, but luckily there is an easy way to tell!
+
+This is a screenshot of the game with the `alt` key held. Neutral and friendly creatures are highlighted in green, our character is highlighted in light blue, and hostile creatures are highlighted in red. Additionally, objects on the map that we can interact with are highlighted in brown. It's highly recommended that whenever you see creatures that are new to you or are having trouble parsing out the game screen, hold the `alt` key to get a clear view of the most important bits of information.
+
+  - Friendly
+
+This means that the creature will not only not attack you, but will attack things that attack you. If you accidentally hit them, they will give you some grace to a point before retaliating. A creature can be Friendly, Neutral, or Hostile. A Neutral creature will only attack if attacked first (or one of their allies), while a Hostile creature will actively try to kill you.
+
+  - Average
+
+This means that the creatures level compared to yours is similar. There are 6 levels to this rating: Trivial > Easy > Average > Tough > Very Tough > Impossible. Generally speaking, avoid fights with anything Very Tough or harder. Even Tough fights should be treated with extreme caution, but anything more and you should probably flee.
+
+  - Perfect
+
+This is the health condition of the creature, and Perfect means it is at full HP. There are 5 stages to this description: Badly Wounded > Wounded > Injured > Fine > Perfect. This description can also be found at the bottom of the screen in your current target information, so be sure to check it to see how close you are to victory.
+
+
+## Parasangs, Zones, Tiers Oh My!
+
+The above image is the world map of Qud. You can arrive at this screen by pressing the `-` key from the surface (also called the overworld). However, if you are lost or Famished! you won't be able to, and if there are hostile creatures nearby you will also be prevented from doing so unless you are flying or they have no path to you. This is where we can start talking about the subject of this section: parasangs, zones, and zone tiers. First, let's describe the concept of a "zone". A zone is simply one game screen. When you reach the edge of the screen, you reach the edge of the zone and moving past the edge will then load up the new zone that you moved into. Simple enough!
+
+Next, the concept of a "parasang". A parasang is 9 zones arranged in a square formation. When you look at the world map, each individual tile on the world map is 1 parasang. When you press the `+` key to drop into the parasang from the world map, you will be dropped into the center zone of the parasang. This is important to understand mostly because both the game and the community will talk about zones and parasangs as measures of distance, so understanding these will help you navigate the world.
+
+If this description was difficult to wrap your head around, starting from Joppa walk to each adjacent zone and each time go to the world map and back. You'll always go to the world map above the Joppa parasang, and when you return it'll ask you if you want to return to your current location (E, NE, N, NW, W, SW, S, SE) or to Joppa (C). Then from the world map, walk to the parasang north of Joppa and count how many screen transitions it takes to get back to the village proper as you move south.
+
+Last, the concept of "zone tier". When you look at the world map, you'll notice there are many different tiles. These are not simply decorative, they describe the terrain you will find there and by extension the creatures that live there. As a general rule, the further east a terrain type is, the more dangerous it is. For example, the salt marsh that you begin in is further west from the Lake Hinnom, so the salt marsh is less dangerous (and considerably so!). The wiki has a zone tier map that you can reference if you are concerned about a jump in difficulty while exploring, and you can also view my article where I break down the world map in more detail but those are outside the scope of fundamentals.
+
+Note that `l`ook functionality works on the world map too! If you see a unique tile, `l`ook at it to see what it is.
+
+Not related to the concept of parasangs and zones, but it's advised that you don't do any serious cave-diving or stray too far from the salt marshes without a recoiler. A recoiler is a teleport sphere that brings you to a predefined location when activated, as long as there are no hostiles nearby with a path to you. Argyve will give you one for completing the Weirdwire Conduit quest (or if you took a random village, the random village equivalent gives a recoiler).
+
+
+## Money and Loot
+
+In Qud, fresh water is the currency and it is heavy. If you've read the Parsing the UI article, you may recall that I recommend having between 128 - 192 drams of water at any one time. The rest of your cash should be in unsold, high-value loot (most commonly guns) and trade goods. Trade goods can be identified by their yellow price color in the trade screen, like in the screenshot below.
+
+The most common is the copper nugget, which you can see pictured. It is 1# and trades for 10 drams, no matter what, meaning that it is far more valuable for its weight. This is true for all trade goods, so you should pick them up when you find them and consider buying them from traders to lighten your load since their trade is lossless. By comparison, 1 dram of water is 0.25#, or 4 drams per #. Therefore, any item that is worth 4 times its weight is "weight efficient" and worthy of being picked up and sold. This is something that you will get a feel for as you play the game, so don't worry about that measure too much right now. Just experiment and see what measures up to this threshold, as a considerable amount of things do. A good rule of thumb is if it is or can be an unidentified artifact, it's probably weight efficient.
+
+A common hole for newer players to get into is be constantly over-encumbered because your valuables sell for more than merchants can buy or you have yet to find an item worthy of purchase. The best fix for this is to pick up the chests you see around the world, as they only weigh 1#. You then put them down in places with many merchants like Ezra or the Six-Day Stilt and store your loot there. Then when you return to buy something and you find something worthy of purchase, you can pick up your stored valuables to buy it.
+
+Items you place on the floor will never be picked up by another creature or otherwise deleted/moved. There is 1 important exception to this rule, and that is the beetlebum creature. It will eat loot on the floor, which can be retrieved by killing it. If there are no beetlebum on the zone, your loot is safe.
+
+
+## Useful Settings
+
+Finally, I'll make some suggestions about settings you might be interested in fiddling with. Some of these are preferences so don't feel forced to adjust these settings if you don't want to, but it always helps to know that you can adjust something even if right now you don't want to. All of these settings I'm talking about are in the options menu (Esc > Options).
+
+
+### Disable Fullscreen Color Effects
+
+In the Accessibility section, there is an option to turn off fullscreen color effects. I recommend doing so, as the main thing this actually does is turn off the green overlay when using night vision. It makes things far easier to parse out with this disabled and isn't so harsh on the eyes.
+
+
+### Minimap and Nearby Objects
+
+In the UI section, there are two options you may want to consider enabling: Show minimap and Show nearby objects list. The minimap shows a scaled-down view of the zone you're in and doesn't get scrambled when you're confused. The nearby objects list gives a list of items on the floor around you, which you can reference instead of checking all the piles. Personally, I only use the minimap but it is a very common choice to enable the objects list.
+
+
+### Automation
+
+In the Automation section, I recommend enabling all the options. This will make your experience more fluid while using autoexplore and you won't have to manually do many tedious things you always want to do; like disassemble scrap. You can leave the difficulty threshold for ignoring to None, but consider bumping this to Easy once you have more experience.
+
+
+### Advanced Options
+
+The next options I'll talk about require you to tick the box that says Show advanced options at the top near the search bar.
+
+In the UI section, there is an option Display detailed weapon penetration and damage in weapon names option. I'd recommend enabling that option, as it makes it easier to see how close you are to the PV cap for your weapon. To make it simple, once you're at the cap, more Strength has very little effect until you start using a higher tier weapon with a higher cap.
+
+The next options all come from the Automation section. Under the Range threshold for ignoring hostile creatures, I'd recommend setting this to at most 15, but no lower than 7. While you're still beginning, 10 or 15 should be what you reach for. This will make auto-movement get interrupted less often by creatures across the map who aren't threats yet. Right below this is the option Attack ignored hostiles that you move adjacent to during autoexplore; I recommend enabling this. While you shouldn't have any ignored hostiles yet, eventually when you start ignoring trivial enemies this will allow your character to automatically retaliate and kill them. Next, I recommend enabling Search containers while autoexploring. This one is pretty self-explanatory; makes sure you end up searching everything while autoexploring.
+
+The last setting in this section is also literally the last one in the Automation section: Maximum automove cells/sec and autoattack actions/sec. This is one that heavily relies on your preference. If the automatic movement is too slow, increase this. If the automatic movement is too fast, decrease this.
+
+Next, we have the Autoget section. I recommend enabling everything in this section except Autoget if hostiles are nearby; picking up items takes turns and if you have non-ignored hostiles around, you want to make sure you don't get smoked while looting.
+
+The final section is Prompts, and this has options largely to your preference. I'd recommend turning off Prompt before autowalking to stairs but the rest are largely in your preference. The big one I want to point out is the Threshold for low hitpoint warning; I'd highly recommend setting it to no lower than 60%. This should give you a warning that the combat is starting to get serious and you should pay attention, making sure you have an escape route planned out and a few backup strategies.
+
+
+============================================================
+PARSING THE UI
+============================================================
+
+## Top of the Screen
+
+When you load up your copy of Caves of Qud and spin up a character, you'll be faced with quite a bit of information at once. Let's just take a look at the screen to see what is going on and parse out the information that is there and what is most relevant. Click on the image below to expand it if you need a better view.
+
+We'll go over the information from top to bottom. First, we have the image of our character at the top left and their name. Take this moment to find the corresponding icon on the game screen below; this is where our character stands relative to everything else. The name is purely for flavor, you will give it out to many creatures on your journey and they will refer to you as such.
+
+Moving to the right, the next piece of information is our temperature T:25°. This is the ambient temperature in Celsius as felt by our character, and is normally always exactly 25 degrees. If it is lower or higher, something is heating you up or cooling you down. Generally speaking, this will only happen because some creature is lighting you on fire or freezing you with some ability but there is a dungeon that gets very cold (Bethesda Susa). Typically, you can ignore this as it won't change but if you notice you are on fire, frozen, or moving slower than you expect then check your temperature to see how bad it is.
+
+Next, we have Sated Quenched. This is actually 2 different pieces of information: how hungry you are and how thirsty you are. Caves of Qud has both mechanics, but luckily managing them isn't quite as tedious as many survival games are. For hunger, there are 3 levels: Sated > Hungry > Famished!.
+
+If you have Photosynthetic Skin, the Famished! level is replaced by Wilted!. They're the same, just have different names for flavor.
+
+If you're Sated, you don't need to eat. You can still eat up to 2 more times if you're Sated, but after that you'll have to wait until you're Hungry in order to eat again. Unless you are Carnivorouss((D), you cannot eat corpses unless you're Famished!. If you're Hungry, nothing changes but you can eat again. If you're Famished!, then you now have a 10 point debuff to your quickness, which means (roughly) that every 10 turns, you lose a turn.
+
+Note that nothing happens when Famished! except for the quickness debuff. You are under no time pressure to eat; nothing else will happen to you.
+
+All you need to do is make a campfire using the Make Camp skill and use that to cook. Many campfires already exist in the world as well as ovens, so you may alternatively use those to cook. You'll get a popup telling you that you're Famished!, so don't worry about this mechanic too much. Eat when you need to. There are skills you can get to make more use out of the eating mechanic; with the skills meals now become temporary buffs as basically a sort of potion mechanic.
+
+For thirst, there are 5 levels: Tumescent > Quenched > Thirsty > Parched > Dehydrated!
+
+If you are Amphibiouss((D), these levels are replaced by Soaked > Wet > Moist > Dry > Dessicated!. Again, they are the same just differently named for flavor.
+
+Thirst is automatically taken care of for you as long as you have fresh water in your inventory. Depending on your settings, you will drink to maintain a certain threshold. If you fall below that threshold, you will drink to bring you above it. You can manually drink too, but there's no reason to do so. In fact, you can drink too much, in which case you will vomit. If you are Dehydrated!, you will constantly take damage so make sure that you maintain some water in your inventory.
+
+Some creatures are capable of changing your thirst levels, but the main one you will encounter are thirst thistles.
+
+Beside your hunger and thirst we have 3 numbers: 63/318# 35$. The 63/318# ratio is the weight of all your items that are currently equipped or in your inventory to the total weight you can carry. In this case, our carry capacity is 318 pounds due to our Strength score and our items cumulatively weigh 63 pounds. If the weight of your items exceeds your capacity, you will no longer be able to move. You may still use certain abilities to move or teleport, but basic movement will be impossible until you can handle the weight.
+
+The 35$ is the amount of fresh water we currently have in our inventory in a unit of measure called drams. You can think of 1 dram of liquid being the smallest divisible unit in Qud. When you're thirsty, you drink 1 dram of water. The smallest amount you can pay for things is 1 dram. In this case, we have 35 drams of water, so we can drink 35 times before we run out. A waterskin or canteen can hold 64 drams of liquid and you'll start out with multiple in your inventory. Water management is something that can be confusing at the start, so let me make it really simple: try to carry about 128 drams of water (2 waterskins). If you're below 50, try not to travel more than 10 tiles away from a town. Carrying more than 192 drams is overkill and water can get heavy.
+
+We'll come back to the 5 numbers that come next and move all the way to Harvest Dawn 6th of Nivvun Ut. This is the current date and the relative time of day, and is really just flavor text. Nobody will ever ask you to be somewhere on a certain day, but quests will sometimes ask you to wait a certain number of days. You can use this to keep track of when you need to return. For example, if someone asked us to come back to them 3 days from now, we would return on the 9th. Finally, we have the name of the current zone we're in: Joppa. We'll talk more about zones and parasangs later, but just know that every zone has a name and this is displayed here.
+
+
+## Statistics
+
+We'll now return to those funny 5 numbers: QN: 100 MS: 120 AV: 3 DV 5 MA: 5. These are your combat statistics, and each one has significant impact on how well combat goes for you.
+
+
+### Quickness (QN)
+
+The first number is quickness. For most of you, this will be 100. It can be improved with equipment, mutations like Heightened Quickness, and the rare liquid sunslag. Without getting too caught in the details, quickness can be thought of as the following: At what % efficiency do I perform actions in general? If you have 100 quickness, you perform at 100% efficiency. If you have 90 quickness, you perform at 90% efficiency, meaning that every 10 turns you lose a turn. If you have 110 quickness, you perform at 110% efficiency; this time meaning that every 10 turns you gain a turn. As you may imagine, this is extremely powerful and is one of the most powerful stats you could have.
+
+
+### Movement Speed (MS)
+
+The second number is your movement speed. There are far more ways to improve your movement speed, but where quickness is the efficiency at which you perform any action, movement speed is the efficiency you perform specifically movement actions. Only basic moves are considered here, so if you have a skill that moves you like Charge or Jump, movement speed doesn't affect that. Something useful to note here is that quickness stacks with movement speed for movement actions, so having both high quickness and high movement speed will make you move faster than if you had just one or the other.
+
+
+### Armor Value (AV)
+
+There is a lot to discuss when it comes to AV as it's one of Qud's most complex mechanics but I'll make it as simple as I can here. The third number is your armor value, which represents how hard it is for weapons to pierce your armor and deal damage to you. Generally speaking, a weapon with a penetration value (PV) can be expected to reliably pierce an AV of equal value. Your AV is the sum of the AV granted to you by your armor (+1 if you have the Calloused skill).
+
+
+### Dodge Value (DV)
+
+The fourth number is your dodge value, which represents how hard it is for you to be hit in general. The way rolls to hit work is that a random number from 1-20 is rolled. The attacker's Agility modifier is added (plus other bonuses if they're available) and if the total is equal to or higher than the target's DV, the attack hits. Once an attack hits, it must roll past the AV of the target in order to deal damage and proc any effects that occur on penetration. Note that some damaging effects proc on hit only, and some effects (like explosions) don't even have to hit. Your DV is the sum of the DV granted to you by your armor, plus your Agility modifier and any bonuses from skills you may have.
+
+This is again a pretty complicated topic so I'll try and make it simple while you're still beginning. DV is all or nothing and very swingy. It is very unreliable as when you get hit, you will often get hit extremely hard. All it takes are a few lucky hits and your character can die, and when you will be getting attacked thousands of times in a single run it's bound to happen. Therefore, it's a bad idea to not have good AV as well. How much AV you should go for is where the debate stems from so I'll provide you a baseline that you can jump off from as you gain more experience in more runs.
+
+At the start of the game, you want to get to 6 AV as soon as you can. Once you have 6 AV, you can think of every point of AV as being worth 2 points of DV. If the ratio is bad, it may not be worth the trade-off. Under 10 DV, you're not missing much by going lower so if you can't reach 12 DV or so with your gear setup, boost your AV as much as you can. A safe AV to hit in the mid game is 10 AV; at this point if you have a very high DV you can reasonably take hits to where you won't instantly splatter if you get hit by a hard-hitting attack. Any DV past 25 is better spent towards AV as the creatures that can hit 25 DV at all can hit it extremely easy due to the massive to-hit bonuses they have.
+
+Something to note about AV and DV is that the benefit you get from equipment is averaged across all limbs of the same type, rounded down. For example, all player characters have 2 arms. If you equip a snakeskin bracelet (an item that grants 2 DV) on one arm and nothing on the other, the net result is the average of the two arm slot bonuses (2 DV + 0 DV / 2 = 1 DV). If you equip a snakeskin bracelet on both arms, again the net result is the average of the two arm slot bonuses (2 DV + 2 DV / 2 = 2 DV).
+
+
+### Mental Armor (MA)
+
+The fifth and final number is your mental armor, which represents how resistant you are to mental attacks. Psychic abilities will roll against your MA instead of your AV, so this number is literally just your AV for mental attacks. This is improved by your Willpower modifier, the Mental Mirror mutation and by some pieces of high-level equipment, so generally speaking you can't do much about this for the majority of the game.
+
+
+## The Game Screen
+
+Let's bring back that image again for reference
+
+Below the date, you can see a number of icons. These are for mouse players and will explain their function if you hover over them with your mouse. If you play with your keyboard only, these won't do anything for you but don't worry; every bit of functionality found there has a keyboard-only analogue! We won't cover these now, but in a future article we'll talk about useful hotkeys so keep reading.
+
+To the left of these icons and below the majority of our statistics are two large bars, one green and one grey. As you might be able to tell by the text within the bars, the green bar is our current Hitpoints (HP) and the grey bar is our current level (LVL) and experience points (EXP) towards our next level. As you might imagine, if your HP is reduced to 0, your character dies and what happens next depends on the game mode you chose before starting the game:
+
+Other than this, there is no difference whatsoever between Classic and Roleplay game modes. You will not be locked out of any achievements, endings, secrets, anything at all if you did not pick Classic. With Wander, the only difference is the EXP drops and what creatures are hostile to you.
+
+  - If you picked Classic, the character is dead for good and the save is deleted.
+
+  - If you picked Roleplay or Wander, you will respawn at your last village checkpoint.
+
+
+### What Game Mode Should I Pick?
+
+This is a question of preference, so I can't answer it for you but I can give you some information to hopefully inform your own decision. Classic is a more difficult, hardcore experience suited to you if you want a challenge or if you earnestly wish to improve at the game. The series of articles on this website are directed at individuals playing on Classic mode; but this just means the advice is considering death to be the end and avoided at all costs.
+
+Roleplay is good if you have limited time to play and still wish to see all the content that Qud has to offer in a reasonable amount of time. It will potentially teach you some bad habits should you want to do more difficult challenges or play on Classic later, so do be aware. This mode also keeps intact the intended experience of the game.
+
+Wander mode is for those who aren't interested in combat and instead just want to explore the world and learn about the lore, or perhaps individuals that wish to make friends with all the factions instead of taking each one to a brutal death match in the salts. As you might imagine, this mode has even more potential to teach you bad habits than Roleplay but if you're not interested in the challenge to begin with it may not be an issue for you.
+
+The big rectangle below the EXP bar and on the left side of the screen is the main game screen. This is where you can see your character, the terrain of the world and the creatures that inhabit it. If this is your first time playing a game with a minimalist graphical style like Caves of Qud, it may take some time to get used to how things are represented. A common habit that you should get into is pressing the `l`ook key (default is "l") in order to read the description of creatures and learn information about them. In Qud, information is power and using `l`ook is one of the strongest things you can do.
+
+You might be curious why I'm writing `l`ook in that weird way. Well, that's because the key used for that functionality is the one in brackets (l). In the Qud community, it's very common to write functionality tied to keys in this way. If you see this in the future, just know that it means that key is the shortcut to that functionality!
+
+Beside the main game screen are two panels stacked on top of each other: a minimap of the zone you are currently in and a chat log of events that occur in the game. If you haven't fiddled with any of the settings, it's likely that you don't have a minimap visible. If you would like that, make sure to turn it on in the options (Esc > Options > UI > Show minimap). If something happens too fast for you to catch it, look at the chat log to see a log description of what happened.
+
+
+## The Bottom Bar
+
+Once more, let's bring back that image for reference
+
+There are actually 2 bars here, but the top one is skinny and easily missed. The top details 3 things:
+
+Finally, we have the `a`bilities bar. This is a subset of the current activated or toggleable `a`bilities you have. By pressing the key indicated in ` `, you can activate that ability. Ctrl + Tab will scroll the bar to the next set down, while Ctrl + Shift + Tab scrolls the bar up. If you want to reorder the abilities, you do so in the `a`bilities menu with `+` and `-`. This will grow out as you level up and learn more things that you can do.
+
+  - Active effects
+
+These are things that are currently ailing your character, and can be good or bad. You can see more detailed information by going to the effects menu ([x] > [e]).
+
+  - Current target
+
+This is information about the creature you have targeted. Unless done manually, this will be whatever you've been attacking. Look here to easily see how the combat is going for you.
+
+  - Missile weapon information
+
+If you have a missle weapon (bow or gun) equipped, you'll see a readout here of which weapon it is and how much ammunition you have left before needing to reload.
+
+
+============================================================
+PRACTICAL APPLICATION
+============================================================
+
+## Receiving the Quest
+
+Perhaps you've figured out how to start this quest already from a prior run that you've done, but humor me and keep reading. We're going to start out in Joppa handling the zone in the same way you should handle most zones. First, we're going to autoexplore by pressing the `Numpad 0` key (by default). If you've set up your automation settings like I've suggested, this will take you through everything interesting on the map and you will be stopped when anything hostile starts to threaten you so you don't have to worry about being attacked before you can react. Once the autoexplore ends, press the `backspace` key. This will bring up a menu of all of the points of interest on the map.
+
+This is the habit you get into when exploring new zones; especially if you think there might be something important in the zone. Autoexplore, then `backspace` and move from there!
+
+For Joppa, this will primarily be the main interesting NPCs; we're interested in speaking with Mehmet, so select Mehmet on the menu and you will automatically walk to him. Press the `spacebar` key to interact and you'll start up a conversation with Mehmet. We're interested in getting a job from him, so move through that dialogue to get the quest. Once you have the quest, you can press `q` to open up your `q`uest log and view what you need to do in order to complete the quest.
+
+
+### Water Ritual
+
+One thing you will notice as an option when you first talk to Mehmet is the option to perform the water ritual with him for 1 dram of fresh water. Particularly important creatures will have this option and doing the water ritual with them is the ultimate bond. It is globally frowned upon to kill a creature you have bonded with through the water ritual, so don't do that. Performing the water ritual will make factions that like the creature like you by proxy and factions that hate the creature hate you by proxy as well, so it's worth using `l`ook to check the factions that have opinions of the creature you are about to water ritual.
+
+The concept of factions and reputation is a huge topic, and massively complex. I have an article on the topic, but for now it's probably more in depth than is necessary. We'll be ignoring the water ritual for right now, but don't worry too much at the start about angering factions and just do the water ritual (or don't) when you feel like it.
+
+
+## Going to Red Rock
+
+At level 1 and especially as new players, tackling the Red Rock dungeon would be very dangerous and probably result in your death. We are still going to head in that direction, but we won't be entering it right away. First, go to the zone north of Joppa by walking to the edge of the screen and transitioning. Autoexplore that zone, and there will be a statue that tells you about a historic site. This is always here, and while we won't be covering its exploration you should try giving it a go once you finish up with this quest. Now, let's get to the dungeon.
+
+Press `-` to move to the world map, and move 1 parasang north of Joppa to the parasang pictured. We're 1 parasang south of Red Rock at this point, and you might be curious why we're not moving directly on to that parasang and entering from there. The reason is that there are often packs of bloodthirsty baboons around Red Rock and if we entered from the world map, we would be in the center zone. This means we could potentially be surrounded on all sides by baboons! In order to make sure we have somewhere to retreat to, we're going to approach from the parasang south of Red Rock.
+
+Enter the parasang pictured, and move to the zone to the north. This zone should still look similar to the last one. Autoexplore this zone and make sure there aren't any enemies here; kill them if there are. If there is anything in this zone besides crocs, glowfish or glowpads, be very very careful as that's a rare occurrence. Once this zone is clear, move to the zone to the north. This will bring us to the Red Rock parasang, completing a quest step and earning you some EXP.
+
+Once there, your map should look something similar to this. It's totally normal for there to not be any baboons, but these baboons are what we are here for. There are many different ways for you to level up at the very start of the game; some people say to kill glowfish as they hardly fight back, some people say to explore the salt dunes to the west, some say to go to the Six-Day Stilt to complete a quest for EXP. However, baboons are an excellent source of EXP and are not very dangerous once you know how to deal with them and we can learn some good techniques by taking them on.
+
+The baboons have a very simple strategy: they will throw rocks at you and move away from you constantly so that while you try and close the gap, they're getting free damage on you. The way to beat the baboons is to not let them play their game, and we can do this in 2 ways depending on how many baboons are attacking us.
+
+Option 1: Few baboons (1-2)
+
+If there are very few baboons attacking us at once, we simply stand there and let them toss their rocks at us. Here's the reasoning:
+
+Once the baboon is out of stones, they will try to attack in melee. This is where our character can simply kill them. While we're waiting, since we have a ranged attack we can use that; our Freezing Ray. This is actually quite likely to kill them outright, but if they survive they will be easily handled with our melee attack.
+
+Option 2: Many baboons (3+)
+
+If there are a lot of baboons attacking us at once, instead of letting them throw rocks at us and then all attack at the same time, we should instead drag them to us in a more favorable fight. Consider the following scenario:
+
+We are on the edge of the map (as you should be, it's one of the safest places to be on the overworld) and we have 3 dangerous looking baboons closing in (and more on the horizon not pictured). They will throw many rocks and then melee us with numbers if we do nothing, so instead we're going to move back to the prior zone and take 1 step away from the edge. At the risk of information overload, Caves of Qud will continue to simulate a zone that you've just come from (to a certain extent). This means that the baboons will follow us across the zone transition, but they won't actually be able to throw their stones until they are on the same screen as us. You CAN be melee attacked from something that is not on screen, but you cannot be ranged attacked by something not on screen. This is why we are going to back up a tile, like so:
+
+In this gif, I'm waiting (`Numpad 5`) until the baboon goes through the zone transition and gets right next to me. Then, I can simply attack it like I would anything else, but I don't have to worry about it running away or getting help from its friends because they're still in the other zone. This strategy is incredibly powerful; clear out a zone, and then draw enemies from another zone into the cleared out zone. There is one notable weakness to this strategy, and that is that creatures with followers will bring all of their followers with them when they transition zones, so be careful!
+
+While you're fighting, keep a close eye on your HP. Take note of how much damage your opponent is doing (hint: the chat log always has the precise amounts) and make sure not to let your HP fall too close to that number, try to leave a 2-3 hit threshold. Flee and regen your HP if you have to, or if things get really dicey use your healing items. As Marsh Taur, our only healing item will be witchwood bark which has a chance to confuse us which will jumble our screen. It only jumbles things visually though, so make sure to take a note of what tile your opponent is in before you eat it and continue to attack that tile if you get confused. A superior healing item is the salve injector which we'll get at the end of this quest, which doesn't have the confusion side-effect.
+
+Once you've defeated your baboon opponent, you will likely have sustained some injury and might have an ability on cooldown. First, heal up to full hitpoints by using the ``` key. This will pass turns until you're at full health again. Next, use `shift + w` to bring up the wait menu in case you have an ability on cooldown. It will prompt you for the amount of turns you want to wait, defaulting to 10 and remembering what you last set it to if you manually change it. If you have an ability on cooldown, it will automatically raise the counter to the amount of turns it would take for that ability to come off cooldown. For example, in this screenshot the Sprint ability is on a 78 turn cooldown, so my wait menu will automatically set itself to wait 78 turns.
+
+This is the habit you should get into when you finish with combat. It ensures that you always go into your next combat at full strength. Repeat this as much as it takes to clear out a zone of baboons and you will quickly level up as you do so. While you're leveling up, try and keep Freezing Ray and Multiple Legs at about even ranks, only putting points into Teleportation if you can't rank up the other two. At level 5 you get a rapid mutation, which increases a physical mutation's rank by 3 without spending any points to do so. This means that a rapidly advanced physical mutation can be higher than rank 10, the cap for points you can put into a mutation. Don't worry about this too much for right now, instead generally rapidly advance your most used or most powerful mutation. In our case, if you want my recommendation I would recommend putting the rapid advancement into Multiple Legs.
+
+  - A baboon will stand at the edge of their throw range to throw rocks. If you do not approach, they won't either and at this max range they will be less accurate.
+
+  - If we approach, they will run away. This will drag us into other baboons and now we will have multiple attacking us at once (bad).
+
+  - A baboon only has a few stones to throw. Once they are out, they will approach.
+
+
+### Hulking Baboons
+
+Eventually, you are very likely to run into one of these yellow-colored baboons. These are hulking baboons, and they are much stronger than the normal tan ones we've been running through. They have a single boulder they can throw for big damage (as well as the normal rocks), and they have higher Strength than other baboons meaning they can do a lot more damage. My advice is to not try and fight one of these until you're at least level 4. You're going to want to fight this guy differently than you do the rest, and you always want to fight it 1-1 without any of its buddies helping it out. First, you want to try and stay out of melee and just use your Freezing Ray to chip it down. This is easier to do with the Marsh Taur because it has enhanced move speed due to Multiple Legs. If it does get within melee with you, use your Dismember skill and then continue to try and back away. Don't forget to use Teleportation if it brings you under 50% HP.
+
+My biggest advice throughout this process (and in general!) is don't be afraid of using your cooldowns, but when you use your escape cooldowns make sure you get to a place where you can get them back! There's no penalty for playing slow; you'll have plenty of water and eating is free. Run away often if you need to, make sure you engage fights at full strength.
+
+
+## Into the Dungeon
+
+Once you've cleared out the 8 zones around the center, go to the center zone and clear it out and autoexplore. This zone will look a little different than the rest, and will have a set of stairs leading down. Press `+` to navigate to the stairs once you've found them and climb into the dungeon proper. I'll be expecting you to be level 5-7 from the baboons from here on in!
+
+Underground, there's no light from the sun so you can only see as far as your light source can extend. For us, that's our torch. If ever the light goes out, don't panic: open up your `e`quipment and equip a torch in one of your hands. We'll be handling the dungeon floors like we handle any other zone: with autoexplore! We'll run into various critters down here, some hostile and some not. Be sure to use `alt` to learn which is which. Make sure you don't forget to use Freezing Ray and buy combat skills (Freezing Ray is especially helpful for the giant centipedes, who are very dodgy). Pick up dropped equipment from snapjaws and try and find some upgrades, but make sure that torch stays equipped. For weapons, favor any Axe you find as our character already has skills for Axes. As for armor, try and pick the armor with the highest AV. Make sure to pick up any artifacts you find and try to identify them through e`x`amination. Keep them even if you break them, as you can pay tinkers to repair them!
+
+Once you're on strata 4, you can find the target of our quest: a girshling! This pink crawly just needs to be killed for our quest to be complete. We need the body somewhat intact, so don't burn it (not a problem for us). This girshling is a bit weaker than the hulking baboons we talked about earlier, so make sure you give it a good Freezing Ray hit and a Dismember and it shouldn't be long for this world. Once it's dead, pick up its corpse and make your way out of the dungeon (or skip to the next section if you're up for a challenge). Remember, you can quickly navigate to the stairs up by pressing `-`. Once we're on the overworld, press `-` again to go to the world map and return to Joppa. Once we're back cozy and safe in Joppa, press `backspace` and find Elder Irudad. Talk to him to show him the girshling corpse and he'll give you some valuable meds as a reward! Congratulations, you've just completed your first quest in Qud!
+
+You can turn in artifacts you found to Argyve for another quest, but before you do make sure to see how much they sell for at Tam and only give Argyve the cheap ones. You can also sell the girshling corpse now, you don't need it anymore.
+
+
+### The Waterlogged Tunnels
+
+If you're up for a bit of a challenge when you kill the girshling, instead of returning to Joppa via the path we already took, why not see where this tunnel leads to find out how these critters have been getting into the village to eat the watervine? At the south of this zone, instead of rock there will be an underground river that leads out of this zone and into another. Keep following this river until its end, then climb the stairs at the end of the river to the surface. The way back is fraught with dangerous creatures, ones I've not covered here (and won't). It's not without its rewards though, so take the plunge if this quest was too easy for you and you want to test yourself.
+
+
+============================================================
+CHEAT SHEET
+============================================================
+
+## Keybinds
+
+These are the most helpful and most-used keybinds for you to be familiar with.
+
+
+### Automation
+
+  - [Numpad 0] : Autoexplore
+
+  - [backspace] : Points of Interest
+
+  - [shift + w] : Wait menu
+
+  - [`] : Heal to full
+
+  - [shift + Numenter] : Move to screen edge
+
+
+### Combat
+
+  - [ctrl + (direction)] : Force attack direction
+
+  - [ctrl + a] : Autoattack target
+
+  - [shift + a] : Move to and attack nearest hostile
+
+
+### UI
+
+  - [q] : Quest Log
+
+  - [e] : Equipment
+
+  - [a] : Ability Menu
+
+  - [x] : Character Sheet
+
+  - [alt] : Hostility view
+
+  - [Numpad /] : Hide side bar (minimap, chat log, etc)
+
+
+## Adventuring
+
+  - AV = Armor Value, reduces damage when hit by normal weapons
+
+  - DV = Dodge Value, avoids damage entirely
+
+  - MA = Mental Armor, reduces damage from mental attacks
+
+  - QN = Quickness, higher means you do stuff faster
+
+  - MS = Move Speed, higher means move actions are faster
+
+  - Try to hit 8 AV
+
+  - Try to keep 128 - 194 drams of water
+
+  - 1 parasang = 9 zones
+
+  - 1 world map tile = 1 parasang
+
+  - 1 game screen = 1 zone
+
+  - Avoid Very Tough or harder creatures
+
+  - Don't be afraid to run away
+
+  - Always keep a ranged weapon equipped
+
+  - Keep a recoiler on you
+
+  - Health ranges: Badly Wounded > Wounded > Injured > Fine > Perfect
+
+  - Selling for 4x an items weight is "weight efficient"
+
+
+## Map Tiles
+
+The generic map tiles, sorted by difficulty. If they're marked as "avoid", there's really not any reason to explore them outside of quests.
+
+  - Salt Marsh: Level 1
+
+  - Desert Canyon: Level 5
+
+  - Salt Dunes: Level 5
+
+  - Hills: Avoid
+
+  - Mountains: Avoid
+
+  - Flower Fields: Level 12
+
+  - Jungles: Level 17
+
+  - Ruins: Level 20
+
+  - Rivers: Avoid
+
+  - Banana Groves: Avoid
+
+  - Rainbow Wood: Avoid
+
+  - Deep Jungles: Level 27
+
+  - Lake Hinnom: Level 27
+
+  - Palladium Reef: Level 30
+
+  - Baroque Ruins: Level 35
+
+  - Moon Stair: Level 40
+
+
+## Factions
+
+A simplified view of factions and reputation at your convenience.
+
+Raise reputation with the following:
+
+Avoid reducing reputation with the following:
+
+  - Seekers of the Sightless Way
+
+  - Consortium of Phyta
+
+  - Daughters of Exile
+
+  - Fellowship of Wardens
+
+  - Villagers of Ezra
+
+  - Villagers of Kyakukya
+
+
+============================================================
+QUD BUILDS (Build Making)
+============================================================
+
+## Tier 0 - Concept
+
+Before your run even begins, you should have a general plan of what type of build you want to go for. After all, this is going to shape everything from your attribute distribution to your mutations. I'll break down the broad categories of build by their weapon choices as this is going to be the greatest difference between builds. Each build will ideally have a primary and secondary style as backup strategies are always important.
+
+
+### Melee (Agility & Strength)
+
+Primary melee builds are very common and very powerful due to their reliability. The only "condition" to their power is whether or not they are next to the enemy, so it should be no surprise that once the choice of weapon is settled, you have a strategy for how this build is going to close the gap. Mutations and cybernetics should be focused on increasing your melee damage and increasing your options to get into the fight and stay there.
+
+Secondary melee builds are not going to be worried about how to close the gap and instead focused on how to increase the gap. This leaves Long Blades as the clear choice of weapon as you will get those utility tools to give your primary weapon the space it needs to go to work.
+
+
+### Ranged (Agility)
+
+Primary ranged builds have a very slow start until the arrival at Grit Gate since you will be heavily limited by ammunition. Because of this, builds usually transition into being primarily ranged instead of starting there. However, that doesn't mean you should design your character around your secondary style, it just means you'll be a bit weaker until your build can come online. Pistols in particular excel as primary ranged weapons because of the plethora of fantastic skills they get. These builds should focus on what to do when the enemy closes the gap, because eventually one will. High quickness or movement speed and force fields are fantastic ways to maintain or grow the gap to give your weapons space to work.
+
+Secondary ranged builds are interested in one thing: clearing out the trash. You're likely not specialized enough here to fight powerful enemies solely from a distance, so instead your goal is accurate, long-ranged weapons that can reliably clear out weaker enemies. This leaves rifles as a fantastic choice not only because they are long ranged and accurate, but also because they require very little skill investment.
+
+
+### Esper (Ego)
+
+Primary Esper builds are certainly not recommended because of the general unreliability of using nothing but mental mutations as your weapons. Since Esper powers require no skill investment whatsoever, you should instead have these powers as your secondary style. But, if you are bent on using mental mutations as your primary weapon, be ready to take things very slowly in order to allow your damage to come back online and relying on your secondary when enemies get too close while you're on cooldown.
+
+Secondary Esper builds are fantastic because they allow you to focus on your primary style entirely. The downside is that while they don't require any skill investment, they do require attribute investment. This leaves secondary Esper builds to pair extremely well with primary ranged builds since ranged combat only involves 1 attribute and many Esper attacks are ranged as well.
+
+Something to note with Esper builds is that you should still be wielding a gun and melee weapon, but the point is that the other parts of your build do not need to concern themselves with these. For example, if you are a ranged / Esper build, you should not consider a mutation like Stinger in order to improve your Axe Charges even if you are planning on wielding an Axe.
+
+
+## Tier 1 - Weapons
+
+Once you've decided the type of build you're going for, you need to narrow down the types of weapons you're going to use. There's a lot of decisions here for builds using melee, so make sure to consider all the options.
+
+
+### Melee Weapons
+
+With melee weapons, you also need to consider whether you are Multiweapon Fighting or Single Weapon Fighting. I'll break it down like this:
+
+If you are Multiweapon Fighting, your offhand should always be a Short Blade. The only exception is when you are Multiweapon Fighting Cudgels to try and get more chances for a stun, but even here using an offhand Short Blade and investing in Short Blades would be preferable.
+
+If you are using a Shield, you should use anything except a Short Blade. Cudgels and Long Blades are particularly effective with a Shield. You're probably best off Single Weapon Fighting with the ceremonial vibrokhopesh in the long-term with a Shield, but Multiweapon Fighting builds work well with Shields as well. If you are using helping hands, ensure your Shield is in one of your robo-hands.
+
+If you are not Multiweapon Fighting or using a Shield, you should be using a two-handed weapon with Single Weapon Fighting. Even those who are making a Multiweapon Fighting build, until your build comes online (Jab + Multiweapon Expertise) you should be using a two-handed weapon. Only use Shields if you are investing in them.
+
+
+### Ranged Weapons
+
+As primary weapons, you'll probably swap between using Bow and Rifles early to using Pistols mid/late game. The earliest Pistols you can acquire are very underpowered in comparison to the rifles you can get and these rifles will stay better until you get sufficiently skilled and geared with Pistols. A similar story also applies to Heavy Weapons, only Heavy Weapons are extremely hard to find and the most common Heavy Weapons use ammunition like grenades and missiles which are also rare and heavy.
+
+Rifles can be used to great effectiveness without any skills at all - literally none. Of course, if you find yourself using rifles often you'll want to get the basic skills inside and especially if you are primarily using ranged weapons. If you are capable of disarming weapons and you have an internal power source, jacked chain lasers can be reliably found in the mid-game and are extremely powerful weapons to use. There's a lot of options here, but by the late game the king of damage builds will be one that uses Pistols.
+
+
+## Tier 2 - Strategy
+
+Once you know the weapons you'll use and how often you plan on using them, you should consider your plan for the game and what the build tries to accomplish. Your strategy can be largely reduced to 3 different parts. While these will be described as being very general parts of your build, the more you know about the game the more you'll be able to identify where your build will struggle and you can get more and more specific with each part.
+
+
+### Gimmick
+
+This part of your strategy is at the core of your build. It focuses on a single idea and tries to do it as best as possible. It should not be extremely specific, but should not be so general as to reduce its effectiveness. If you're a ranged build, perhaps your gimmick is high movement speed to always be a step away from the enemy with Multiple Legs, or perhaps your gimmick is Phasing with gear modded to be phase-conjugate / harmonic. This doesn't necessarily need to be online right at the start, but should be usable in some lesser version at every point in the game. This will be your go-to plan whenever you find a noteworthy enemy.
+
+
+### Escape
+
+This part of your strategy should be extremely reliable with as few conditions as possible. This is something you save normally and only use when you find yourself backed into a corner. This can be a part of your build or an item you plan on acquiring or both. For example, a melee build may take the Force Bubble mutation in order to escape with a recoiler, or perhaps they use a combination of the Sprint speed increase from Wings and Juke in order to get away from enemies.
+
+
+### Solutions
+
+This part of your strategy is solely there for when your gimmick simply doesn't work. With time comes a better understanding of what will counter your gimmick, but you need to have a solution in place for when that time comes. For example, your main gimmick may be to rely on Corrosive Gas Generation to deal heavy damage and support that with stuns from Cudgels to keep them in the gas. What do you do when an enemy resists your stuns or is immune to acid? These are the scenarios you need a solution for. If an enemy resists my stuns, perhaps I also have freeze grenades and high cold resistance. If an enemy is immune to acid, perhaps I fall back on my high-damage rifle.
+
+
+## Tier 3 - Skills
+
+When you're in the run itself, you will organically start to choose skills as you find necessary to deal with the challenges of the build. These should not be planned rigidly and instead flex to integrate the kinds of equipment you find and the enemies you're fighting. Even though there usually is not a rigidly defined sequence of skills to pick up, there is a loose hierarchy to order which skills to pick up first.
+
+
+### Priority 1 - Offense
+
+As the old saying goes, the best defense is a good offense and this holds true in Qud as well. If the enemy is dead, they can't kill you. The skills you want are going to be shaped from the style of build you're going for, but early on they will almost always focus on the first few melee weapon skills. Melee builds should also go for Charge.
+
+
+### Priority 2 - Survivability
+
+Once you have your basic weapon skills and you get to the point where you need to start saving up skill points for the next buy or don't meet the prerequisites is when you should start branching out into survivability skills. These are skills like Mind's Compass, Shake It Off, Weathered and Swift Reflexes.
+
+
+### Priority 3 - Accessories
+
+If your build is flowing well; you're survivable and your combat feels good, start branching off to accessory skills like the Tinkering tree and secondary weapons. These are designed to let your build "win more" as opposed to getting it online, so be sure that your build is online in some capacity before looking here. Note that your build doesn't have to be complete, just functional.
+
+
+## Tier 4 - Point Spread
+
+During your run, you will have a number of points to use to improve your character. For true kin, this is solely attribute points as cybernetics by their nature are flexible and dynamic. Cybernetics should be adopted as part or support of of the strategy of the build. For mutants, the point spread is both attribute points and mutation points.
+
+
+### Attribute Points
+
+All attribute points are useful and important, but some to a lesser degree than others. Based off of your builds weapon choices, you will have a primary and secondary attribute: melee ties to Strength, ranged ties to Agility and Esper ties to Ego. Melee also uniquely has a secondary attribute of Agility, but often times melee builds will secondary into ranged and are covered there. If you are a melee build with a secondary Esper, you then have two secondary attributes in Agility and Ego which may tighten your attribute spread.
+
+Identifying your primary and secondary attributes are important as you'll want to keep them high. Typically, this means your primary attribute sits 2+ points above your secondary, which sits 1+ points above your next highest attribute. This third tier of attribute is typically where Toughness sits as all builds benefit from it, but may flex to fourth depending on the attribute needs and skill of the player.
+
+Intelligence and Willpower typically sit relative to one another unless the build calls for one to be higher for part of the strategy, typically beneath or equal to Toughness. For non-Esper builds, Ego sits at the bottom.
+
+These are loose guidelines and meant to be bent to fit the build. However, the bending of the guidelines should come when you have experience and know what thresholds are important for your build and why. So until then, sticking within these ranges should help with consistency.
+
+
+### Mutation Points
+
+If you are a mutant, you have the additional task of managing the mutation points you gain on each level up. You spend these mutation points to rank up your mutations OR you may spend 4 to gain a new mutation. Typically, it is more effective for your build to spend those 4 mutation points on your existing mutations than to gain another mutation.
+
+Additionally, when making your build you should be careful about choosing too many mutations that hunger for ranks in order to be effective. 3 rank-hungry mutations is the sweet spot, 4 will stretch you just a bit and anything more will start to dilute your power relative to other more focused builds.
+
+Due to the above reason, gaining a new mutation with 4 mutation points not only uses those points not to improve your existing mutations, but also potentially adds another mutation that needs ranks which can really start to stretch you thin. Chimera builds should plan with this in mind and be careful about taking even 3 mutations that hunger for ranks as you'll want to gain as many mutations as possible to grow limbs.
+
+As far as actually spending mutation points goes, rank up your mutations that get your build online first and once they're strong or can't rank up anymore, your supporting mutations can then get ranks. Rapid advancements should be placed in mutations that gain real benefit from going past 10; which is typically going to be your core mutation that your build centers around.
+
+For example, I may have a build that combines the tankiness of Carapace with the damage of Corrosive Gas Generation with the safety and utility of Wings. I would rapidly advance Carapace and Corrosive Gas Generation since these hunger for ranks more and really benefit from going past 10, while Wings can sit at 6. I might rank Wings to 6 first though because it needs to hit that threshold to meet its role in the build, and then evenly distribute mutation points between Carapace and Corrosive Gas Generation.
+
+
+## Armor Value and Dodge Value
+
+While any build can use pretty much any equipment in the game and by extension get any AV or DV they want, some builds are better equipped going a particular route. Even further than that, whether you choose to focus on AV or DV largely comes down to your playstyle and how you prefer to play the game. I'll be breaking down each of these and explaining what exactly they do and the idea behind increasing one or the other.
+
+
+### Armor Value (AV)
+
+AV is the more reliable stat of the two and is much less polarizing than DV. That is to say, there are grades of effectiveness to AV and it will be very reliable within its grade. Whenever you are hit by an attack, the game will calculate whether or not that attack penetrates your armor and therefore deals damage. The calculation for this is rather complex, so I won't be covering it in all of its detail here but I'll give the simplified version. Essentially, the greater the weapons Penetration Value (PV) is compared to your AV, the higher chance it will penetrate. When a weapon penetrates, it deals its damage and any on-penetrate effects. The game then reduces the PV of the weapon and then checks if it penetrates again. If it does, the weapon deals its damage again and then reduces the PV and cycles in this way until the weapon doesn't penetrate. This is why you may see those x4 or x5 numbers by the damage dealt in the chat log; this refers to the number of penetrations that occurred. As you may imagine, we want the number of penetrations to be as few as possible and that's what AV is all about.
+
+By having higher AV, you reduce the effectiveness of each hit when you get hit. With very high AV, you can reliably take no damage at all from nearly any attack. A good rule of thumb is to have 2 higher AV than the enemy has PV. The math works out to where you will usually only take a single penetration and rarely a second. Even having equal AV to the enemy's PV is quite good, but does result in a fairly common (50%) chance of a second penetration.
+
+AV comes at a cost, however. Most equipment that raises AV will actively decrease DV. There is a lot to be said about a build that sacrifices all attempts at increasing DV and instead just focuses on AV. These builds tend to be very survivable until they meet a counter to AV, but that's not to say they're building wrong. In fact, if you use even a single item that reduces DV, unless you really know what you're doing around these stats you'll probably just want to entirely focus on AV. There are exceptions of course, but we'll talk more about that in the DV section.
+
+While having high AV can potentially net you invulnerability to conventional attacks, not all attacks are conventional. It is these scenarios where your defenses will be tested.
+
+  - Elemental damage (oozes)
+
+  - Explosions (robots)
+
+  - Vibro weapons (saw-hander, ickslugs)
+
+  - On-Hit effects (stun)
+
+  - Penetrating Strikes
+
+
+### Dodge Value (DV)
+
+DV is less reliable in terms of how absolutely you can rely on it, but is balanced by the fact that when it works, you take no damage at all. You can also get improved DV in ways outside of your equipment by having higher Agility: you get a DV bonus equal to your Agility modifier. The good thing about DV is once you get it high enough, virtually no further improvement to it is beneficial so you can transition to AV improvements. The bad thing is that number is actually quite high.
+
+How attacks work in Qud is that a random number from 1-20 is rolled. The game will add the attacker's Agility modifier to it and that's usually all that will be added. However, certain skills and weapons will give a bonus to hit and in those cases the bonus will be applied. This is somewhat rare for creatures to have though. That sum will be compared to the defenders DV and if it exceeds it the attack will hit.
+
+For melee attacks if a 20 is rolled, the attack will always hit. Regardless of your DV, the attack will hit. Only the player's attacks are guaranteed to penetrate on a crit, so we didn't need to worry about that with AV. However, critical hits are very troublesome for DV focused builds. We'll put those aside for now, but don't forget it: critical hits are the bane of DV builds.
+
+Most creatures actually don't have very high Agility. In fact, even most endgame creatures have less than a +5 to their Agility. So having a DV of 15 or above nets you fairly reliable odds to dodge many attacks. Of course, this is still too low to be a DV focused build, but it's a good starting place. Our goal for DV builds is to ensure that nothing hits us ever. Once your DV reaches 22 or so, you become virtually untouchable. The maximum DV you should shoot for is 25, as if you also have the Swift Reflexes skill you will become invincible to all projectile attacks. Anything higher than this and you are really hurting yourself with the investment instead of investing into AV, as melee critical hits will still hit you and without the AV to withstand them, it will hurt.
+
+Regardless of how high you go into DV, it is foolish to rely on DV alone. Eventually, you will be hit and in these scenarios you have to have some kind of AV in order to not be completely blasted apart. Pure DV equipment is a trap and only should be worn if you have sufficient AV already. You'll want to get around 8 AV as soon as possible as this is a fairly decent middling AV that will allow you to take the occasional hit when it comes. As long as you otherwise maximize your DV, 8 AV is actually a fairly comfortable place to be for most of the game. Some items will reduce your DV and give you AV. Pay special attention to these as if your build focuses on DV, many of these will be too crippling. It is only when you arrive at the flawless crysteel tier of armors that the DV decrease does not outweigh the AV increase (there's a compelling argument for simple crysteel, but leave that for the more advanced builds). Even then, you want to ensure you still have enough DV for your build to function so limit this to only a few pieces of armor.
+
+Critical hits are the obvious bane for a DV build. However, it's not the only one. There are a number of dangers that you must absolutely have a solution for when they appear. Note that even though there are more items in this list, these typically are far easier to have solutions for or are far rarer than those than counter AV.
+
+  - Abilities that always hit (sting, Hook and Drag)
+
+  - Explosions (robots)
+
+  - Breath weapons (unshelled reptiles)
+
+  - Status conditions (stunned, stuck, frozen, etc)
+
+  - Critical hits
+
+  - High to-hit bonuses (cherubim, chrome pyramid)
+
+
+## Build Conclusions
+
+Any build can be effective in the game, this is something that I've spent many hours trying to verify myself. After raising every preset mutant to be capable of running the cherubim gauntlet and beating the game without using any equipment at all, I truly am satisfied that the conclusion is that any build can be successful.
+
+Certain builds will of course be more powerful than others, but determining which build is the most powerful is not going to help you improve. The best build to beat the game with is one that you understand how to use and understand the limitations of. Keep it simple at the start and as you learn more about the game you can branch to more and more specialized builds.
