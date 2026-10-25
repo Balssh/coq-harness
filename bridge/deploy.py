@@ -213,7 +213,7 @@ def start_bridge(python_path: str | None = None) -> None:
     args = (
         f"-m bridge.server --connect localhost:{RELAY_BRIDGE_PORT} "
         f"--window-title {WINDOW_TITLE} --log-region {LOG_REGION} "
-        f"--log-file '{log_file}'"
+        f"--log-file {log_file}"
     )
 
     # Start hidden — bridge redirects its own output to bridge.log
