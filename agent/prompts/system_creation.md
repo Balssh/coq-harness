@@ -34,13 +34,22 @@ Here is the exact verified flow:
 
 1. **Title screen** → report `"screen": "title"` → `confirm()` — selects "New Game"
 2. **Mode select** → report `"screen": "mode_select"` → `confirm()` — selects "Classic"
-3. **Character Type** → report `"screen": "chargen"` → `confirm()` — selects a preset
-4. **Attributes screen** → `next()` — proceeds past the attributes summary
-5. **Customize screen (Name: <random>)** → `next()` — the random name is already
+3. **Character Type (Presets tab)** → report `"screen": "chargen"` → `confirm()` —
+   selects a preset (e.g. Gunwing, Praetorian, Marsh Taur)
+4. **Choose Genotype** → `confirm()` — selects the genotype (e.g. "Mutated Human"
+   or "True Kin"). The highlighted option is already correct for your preset.
+   If you see "You must make a selection before advancing", press `confirm()`.
+5. **Attributes screen** → `next()` — proceeds past the attributes summary
+6. **Customize screen (Name: <random>)** → `next()` — the random name is already
    filled in, just press Num9 to proceed. Do NOT press `confirm()` here!
-6. **Starting Location** → `confirm()` — selects a location (e.g. Joppa)
-7. **World generation** → wait for the game world to appear
-8. Report `"screen": "play"`
+7. **Starting Location** → `confirm()` — selects a location (e.g. Joppa)
+8. **World generation** → wait for the game world to appear
+9. Report `"screen": "play"`
+
+**IMPORTANT**: After selecting a preset, the game may show a "Choose Genotype"
+screen. The correct genotype for your preset is already highlighted. Just press
+`confirm()` (Enter) to accept it. If you see an error "You must make a selection
+before advancing", it means you need to press `confirm()` first.
 
 ### Name Screen — CRITICAL
 
@@ -59,10 +68,14 @@ The flow is very simple:
 ### Critical Rules
 
 - **`confirm()` (Enter)** selects the highlighted option. Use it on the title
-  screen (New Game), mode select (Classic), character-type screen, and
-  starting-location screen. **NOT on the Customize screen.**
+  screen (New Game), mode select (Classic), character-type screen, genotype
+  screen, and starting-location screen. **NOT on the Customize screen.**
 - **`next()` (Num 9)** advances to the next chargen screen. Use it on the
   Attributes screen and the Customize screen.
+- **Use the semantic tools (`confirm`, `next`, `select`, `back`)** — do NOT
+  use `press()` with raw keys during chargen. The semantic tools send the
+  correct keys for each screen. If you use `press("space")` when the game
+  expects Enter, you will get errors like "You must make a selection."
 - **Do NOT use `select(left/right)` to switch tabs** — use `next()` instead.
 - **Do NOT use `quit`, `abandon`, or `restart_run`** — they are disabled during
   chargen.
