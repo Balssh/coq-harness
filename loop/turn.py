@@ -170,9 +170,24 @@ def run_turn(phase: str = "play") -> tuple[Decision, bool]:
             f"If you are in a menu or dialogue, use the appropriate key or tool to "
             f"exit. DO NOT repeat the same action again. ***"
         )
+    # In freeplay mode, only show keys (not tool/key/args) to avoid confusion
+    if _freeplay:
+        decision_dump = {
+            "reasoning": decision.reasoning,
+            "keys": decision.keys,
+            "screen": decision.screen,
+            "goal": decision.goal,
+            "hp": decision.hp,
+            "max_hp": decision.max_hp,
+            "hunger": decision.hunger,
+            "location": decision.location,
+            "journal_note": decision.journal_note,
+        }
+    else:
+        decision_dump = decision.model_dump()
     _conversation.append({
         "role": "assistant",
-        "content": json.dumps(decision.model_dump(), ensure_ascii=False),
+        "content": json.dumps(decision_dump, ensure_ascii=False),
     })
     _conversation.append({
         "role": "user",

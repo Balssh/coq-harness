@@ -263,6 +263,18 @@ def decide(
 
     # All retries exhausted — fallback
     print("[decide] All retries exhausted, falling back")
+    if _FREEPLAY:
+        # In freeplay, fall back to pressing space (dismisses prompts, advances menus)
+        return Decision(
+            reasoning="Failed to get a valid decision after 3 retries. Falling back to space key.",
+            keys=["space"],
+            screen=state.screen or "unknown",
+            goal=state.goal,
+            hp=state.hp,
+            max_hp=state.max_hp,
+            hunger=state.hunger,
+            location=state.location,
+        )
     if phase == "chargen":
         return Decision(
             reasoning="Failed to get a valid decision after 3 retries. Falling back to confirm.",
