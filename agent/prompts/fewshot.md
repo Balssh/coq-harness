@@ -186,3 +186,47 @@ unexplored salt marsh with some creatures visible.
   "journal_note": null
 }
 ```
+
+## Example 8: After Auto-Explore Stops — Check Points of Interest
+
+**Situation**: Auto-explore just stopped. The message log says "Auto-explore
+stopped: hostile nearby" or similar. You are in the salt marsh wilderness.
+
+```json
+{
+  "reasoning": "Auto-explore stopped. I need to see what's interesting nearby — stairs, items, NPCs, landmarks. Press backspace to open the points-of-interest menu, then I'll pick something to investigate.",
+  "tool": "",
+  "key": "backspace",
+  "args": {},
+  "wait_for_turn": true,
+  "screen": "play",
+  "goal": "Check points of interest after auto-explore, navigate to stairs or items",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Salt marsh (east of Joppa)",
+  "journal_note": null
+}
+```
+
+## Example 9: Leaving Joppa — First Wilderness Action
+
+**Situation**: You've finished talking to all NPCs in Joppa. You step outside
+the town gates onto open salt marsh terrain. The screen shows grass, dirt,
+and some creatures in the distance. No buildings nearby.
+
+```json
+{
+  "reasoning": "I'm outside Joppa now — this is wilderness. I should NOT walk tile-by-tile. Auto-explore is the right tool: it will move me through the whole area automatically and stop when something interesting happens. Let me start.",
+  "tool": "auto_explore",
+  "args": {},
+  "wait_for_turn": true,
+  "screen": "play",
+  "goal": "Auto-explore the salt marsh to discover areas, find weak enemies for XP, and locate points of interest",
+  "hp": 25,
+  "max_hp": 25,
+  "hunger": "Satiated",
+  "location": "Salt marsh (outside Joppa)",
+  "journal_note": "Left Joppa to explore the salt marsh. Will auto-explore, fight weak enemies (snapjaws), and avoid crocs near water."
+}
+```

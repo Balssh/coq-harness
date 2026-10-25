@@ -183,19 +183,39 @@ If you're stuck in look mode, call `close_menu` to exit, then move normally.
 
 ## Strategy Tips
 
-### Exploration (Your Primary Activity)
-- **THE EXPLORATION HABIT**: In any new zone, press `auto_explore` (Numpad 0)
-  to automatically explore the entire screen. When it stops (usually because a
-  hostile is nearby), press `backspace` to see a list of points of interest
-  (stairs, NPCs, items, landmarks). Navigate to anything interesting.
-  This is how you explore EVERY zone — autoexplore first, then check POIs.
-- **Explore systematically**: walk through every area, visit every building,
-  loot every chest (close doors first), and talk to every NPC.
+### Exploration — THE #1 RULE
+
+**OUTDOORS = auto_explore. TOWNS = move to NPCs. There is no third option.**
+
+When you are OUTSIDE a town (wilderness, salt marsh, desert, dungeons):
+1. Call `auto_explore` IMMEDIATELY. Do NOT use `move` to walk across open terrain.
+2. Auto-explore stops when it finds a hostile or something interesting.
+3. Press `backspace` (`"key": "backspace"`) to see points of interest.
+4. Navigate to stairs, NPCs, items, or landmarks from that list.
+5. When done with one area, `auto_explore` again or `travel` to a new zone.
+
+**NEVER walk tile-by-tile across wilderness.** One `auto_explore` call covers
+what would take 50+ manual `move` calls. Walking manually wastes turns and
+gets you killed.
+
+When you are INSIDE a town (Joppa):
+1. Use `show_labels` to see NPCs.
+2. Use `move` to walk to the nearest NPC.
+3. Talk to them.
+
+### Town vs Wilderness — How to Tell
+- **Town**: buildings, NPCs with names, cobblestone paths, market stalls.
+- **Wilderness**: open terrain, grass/dirt/water tiles, creatures, no buildings.
+- When you leave Joppa's buildings and step onto open terrain, you are in the
+  wilderness — use `auto_explore`.
+
+- **Explore systematically**: visit every building, loot every chest (close
+  doors first), and talk to every NPC.
 - **Use `show_labels`** frequently to see NPCs, items, and points of interest.
 - **Mark discoveries** in your journal: NPC names, quest locations, dangerous areas.
 - **Don't fixate**: if an area has no more NPCs or items, move to a new area.
-- **Salt marsh outskirts** are good for early exploration — snapjaws and crocs
-  are weak enemies that give XP. But watch your HP near water (crocs!).
+- **Salt marsh outskirts** are good for early exploration — snapjaws are weak
+  enemies that give XP. But watch your HP near water (crocs!).
 - **Avoid baboons** — they're very dangerous for low-level characters.
   Hulking baboons (brown, throw boulders) are even worse.
 - **Avoid Red Rock caves** until level 5+ with decent armor and weapon.
