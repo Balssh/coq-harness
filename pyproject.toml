@@ -1,7 +1,7 @@
 [project]
 name = "coq-harness"
-version = "0.1.0"
-description = "Harness that lets Mistral Large 4 play Caves of Qud from screenshots"
+version = "0.2.0"
+description = "Harness that lets Mistral Large 4 play Caves of Qud — screenshot-based and MCP modes"
 requires-python = ">=3.10"
 dependencies = [
     "pillow>=10.0",
@@ -17,13 +17,14 @@ dev = [
 
 [project.scripts]
 coq-harness = "main:main"
+coq-mcp = "main_mcp:main"
 coq-replay = "recording.replay:main"
 
 [tool.uv]
 package = true
 
 [tool.setuptools]
-py-modules = ["main"]
+py-modules = ["main", "main_mcp"]
 packages = [
     "client",
     "game",
@@ -34,4 +35,5 @@ packages = [
     "loop",
     "run",
     "recording",
+    "mcp",
 ]

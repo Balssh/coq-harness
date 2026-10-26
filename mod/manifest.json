@@ -1,0 +1,9 @@
+{
+  "ID": "Balssh_CoQMcpBridge",
+  "LoadOrder": 0,
+  "Title": "CoQ MCP Bridge",
+  "Description": "MCP server for external AI agents. Exposes game state and accepts commands over HTTP on 127.0.0.1:47321.",
+  "Version": "0.1.0",
+  "Author": "Balssh",
+  "Tags": "Tool,AI,MCP"
+}
