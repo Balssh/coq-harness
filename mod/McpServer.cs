@@ -32,11 +32,13 @@ namespace CoQMcpBridge
         {
             if (_running) return;
             _running = true;
-            _listener = new TcpListener(IPAddress.Loopback, Port);
+            // Bind all interfaces: the harness runs in WSL (NAT mode), where the
+            // Windows host is reached via the gateway IP, not via shared loopback.
+            _listener = new TcpListener(IPAddress.Any, Port);
             _listener.Start();
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true, Name = "McpAccept" };
             _acceptThread.Start();
-            Log($"MCP server listening on 127.0.0.1:{Port}");
+            Log($"MCP server listening on 0.0.0.0:{Port}");
         }
 
         public void Stop()

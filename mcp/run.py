@@ -53,7 +53,7 @@ def _log_event(run_dir: Path, event: dict) -> None:
 
 def run_episode(
     episode_num: int,
-    mcp_host: str = "127.0.0.1",
+    mcp_host: str | None = None,
     mcp_port: int = 47321,
     skip_chargen: bool = False,
 ) -> None:
@@ -198,7 +198,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="CoQ MCP Harness — ML4 plays Caves of Qud via in-game MCP server"
     )
-    parser.add_argument("--host", default="127.0.0.1", help="MCP server host")
+    parser.add_argument("--host", default=None, help="MCP server host (default: auto-detect)")
     parser.add_argument("--port", type=int, default=47321, help="MCP server port")
     parser.add_argument("--episode", type=int, default=1, help="Starting episode number")
     parser.add_argument("--skip-chargen", action="store_true",

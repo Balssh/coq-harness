@@ -17,7 +17,7 @@ import time
 from mcp.client import McpClient, McpError, GameStateData
 
 
-def test_connection(host: str = "127.0.0.1", port: int = 47321) -> bool:
+def test_connection(host: str | None = None, port: int = 47321) -> bool:
     print(f"[test] Connecting to {host}:{port}...")
     try:
         client = McpClient(host=host, port=port, timeout=10.0)
@@ -65,7 +65,7 @@ def test_connection(host: str = "127.0.0.1", port: int = 47321) -> bool:
         return False
 
 
-def test_command(host: str = "127.0.0.1", port: int = 47321) -> bool:
+def test_command(host: str | None = None, port: int = 47321) -> bool:
     """Test sending a command (wait 1 turn)."""
     print(f"\n[test] Testing command (wait 1 turn)...")
     try:
@@ -95,7 +95,7 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Test CoQ MCP client")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default=None, help="MCP server host (default: auto-detect)")
     parser.add_argument("--port", type=int, default=47321)
     parser.add_argument("--command", action="store_true",
                         help="Also test sending a command (wait 1 turn)")

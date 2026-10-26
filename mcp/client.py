@@ -14,6 +14,7 @@ import itertools
 import json
 import socket
 import struct
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -22,6 +23,36 @@ from typing import Any
 
 class McpError(Exception):
     pass
+
+
+def resolve_host(port: int = 47321) -> str:
+    """Pick the MCP server host: localhost if reachable, else the WSL gateway.
+
+    Qud runs on Windows. In WSL mirrored mode, localhost is shared; in NAT mode
+    the Windows host is reachable via the default gateway (from `ip route`).
+    """
+    candidates = ["127.0.0.1"]
+    try:
+        out = subprocess.run(["ip", "route"], capture_output=True, text=True, timeout=5)
+        for line in out.stdout.splitlines():
+            if line.startswith("default via"):
+                candidates.append(line.split()[2])
+    except Exception:
+        pass
+    try:
+        with open("/etc/resolv.conf", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("nameserver"):
+                    candidates.append(line.split()[1])
+    except OSError:
+        pass
+    for host in candidates:
+        try:
+            with socket.create_connection((host, port), timeout=1.0):
+                return host
+        except OSError:
+            continue
+    return candidates[0]
 
 
 _cmd_counter = itertools.count()
@@ -116,6 +147,10 @@ class GameStateData:
     @property
     def in_combat(self) -> bool:
         return self.player.get("inCombat", False)
+
+    @property
+    def screen(self) -> str | None:
+        return self.raw.get("screen")
 
     @property
     def in_game(self) -> bool:
@@ -255,11 +290,11 @@ class McpClient:
 
     def __init__(
         self,
-        host: str = "127.0.0.1",
+        host: str | None = None,
         port: int = 47321,
         timeout: float = 30.0,
     ) -> None:
-        self.host = host
+        self.host = host or resolve_host(port)
         self.port = port
         self.timeout = timeout
         self._sock: socket.socket | None = None
@@ -420,7 +455,7 @@ def get_client() -> McpClient:
 
 
 def init_client(
-    host: str = "127.0.0.1",
+    host: str | None = None,
     port: int = 47321,
     timeout: float = 30.0,
 ) -> McpClient:

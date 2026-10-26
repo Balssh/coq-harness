@@ -30,6 +30,7 @@ namespace CoQMcpBridge
                             s.Start();
                             _server = s;
                             StartFocusKeeper();
+                            StartPump();
                         }
                     }
                 }
@@ -40,6 +41,7 @@ namespace CoQMcpBridge
         public static void EnsureStarted()
         {
             var _ = Server;
+            BridgeMainThread.EnsureCreated();
         }
 
         private static void OnPayload(string json)
@@ -49,10 +51,12 @@ namespace CoQMcpBridge
 
         public static void Tick(GameObject player)
         {
-            var server = Server;
-            if (server == null || server.ClientCount == 0) return;
+            var server = _server;
+            if (server == null) return;
 
             DrainCommands(player);
+
+            if (server.ClientCount == 0) return;
 
             string state = GameStateSnapshot.BuildFullState(player);
             PublishToClients(state);
@@ -60,10 +64,12 @@ namespace CoQMcpBridge
 
         public static void TickRender(GameObject player)
         {
-            var server = Server;
-            if (server == null || server.ClientCount == 0) return;
+            var server = _server;
+            if (server == null) return;
 
             DrainCommands(player);
+
+            if (server.ClientCount == 0) return;
 
             long now = DateTime.UtcNow.Ticks;
             if (now - Interlocked.Read(ref _lastPublishTicks) < PublishThrottleMs * TimeSpan.TicksPerMillisecond)
@@ -76,8 +82,8 @@ namespace CoQMcpBridge
 
         public static void TickAction(GameObject player)
         {
-            var server = Server;
-            if (server == null || server.ClientCount == 0) return;
+            var server = _server;
+            if (server == null) return;
 
             DrainCommands(player);
         }
@@ -87,7 +93,10 @@ namespace CoQMcpBridge
             var server = _server;
             if (server == null) return;
 
-            GameActions.DrainPendingCommands();
+            // When called from the pump thread, player is null — look up the
+            // real player so get_state returns full data even during modal states.
+            if (player == null)
+                player = GameStateSnapshot.Player();
 
             while (server.Incoming.TryDequeue(out string json))
             {
@@ -144,7 +153,7 @@ namespace CoQMcpBridge
                         if (_server != null && _server.ClientCount > 0)
                         {
                             XRLCore.bThreadFocus = true;
-                            XRL.GameManager.focused = true;
+                            GameManager.focused = true;
                         }
                         Thread.Sleep(50);
                     }
@@ -152,6 +161,48 @@ namespace CoQMcpBridge
                 }
             }) { IsBackground = true, Name = "McpFocusKeeper" };
             _focusKeeper.Start();
+        }
+
+        // Drains MCP messages on a background thread so commands are processed
+        // even when the game is in a modal state (look mode, menus, chargen)
+        // where the BridgePart events don't fire. Thread-safe: both this and
+        // the BridgePart tick use ConcurrentQueue.TryDequeue.
+        private static Thread _pump;
+
+        private static void StartPump()
+        {
+            if (_pump != null) return;
+            _pump = new Thread(() =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        var server = _server;
+                        if (server == null) { Thread.Sleep(200); continue; }
+
+                        DrainCommands(null);
+                        Thread.Sleep(15);
+                    }
+                    catch { Thread.Sleep(200); }
+                }
+            }) { IsBackground = true, Name = "McpPump" };
+            _pump.Start();
+        }
+    }
+
+    // Invoked by the game during startup (end of ModManager.Init and again in
+    // XRLCore.LoadEverything), before the main menu — so the MCP server is up
+    // for character creation as well as for play.
+    [HasModSensitiveStaticCache]
+    public class BridgeBootstrap
+    {
+        [ModSensitiveCacheInit]
+        [PreGameCacheInit]
+        public static void Start()
+        {
+            try { Bridge.EnsureStarted(); }
+            catch { }
         }
     }
 }

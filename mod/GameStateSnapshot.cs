@@ -12,7 +12,15 @@ namespace CoQMcpBridge
         public static string BuildFullState(GameObject player)
         {
             if (player == null)
-                return "{\"error\":\"no player\"}";
+            {
+                return "{\"type\":\"state\","
+                    + Json.Str("protocol", Protocol.ProtocolVersion.ToString()) + ","
+                    + Json.Str("version", Protocol.Version) + ","
+                    + Json.Str("screen", SafeGet(() => GameManager.Instance?.CurrentGameView ?? "")) + ","
+                    + Json.Bool("inGame", false) + ","
+                    + Json.Bool("isDead", false)
+                    + "}";
+            }
 
             var sb = new StringBuilder(8192);
             sb.Append("{");
@@ -21,9 +29,11 @@ namespace CoQMcpBridge
             sb.Append(",");
             sb.Append(Json.Str("version", Protocol.Version));
             sb.Append(",");
-            sb.Append(Json.Bool("inGame", SafeGet(() => The.Game?.Player != null && The.Game.Player.CurrentCell != null, false)));
+            sb.Append(Json.Str("screen", SafeGet(() => GameManager.Instance?.CurrentGameView ?? "")));
             sb.Append(",");
-            sb.Append(Json.Bool("isDead", SafeGet(() => player.IsDead(), false)));
+            sb.Append(Json.Bool("inGame", SafeGet(() => The.Game?.Player?.Body?.CurrentCell != null, false)));
+            sb.Append(",");
+            sb.Append(Json.Bool("isDead", SafeGet(() => player.hitpoints <= 0, false)));
             sb.Append(",");
 
             AppendPlayer(sb, player);
@@ -161,10 +171,7 @@ namespace CoQMcpBridge
                     var cell = zone.GetCell(x, y);
                     if (cell == null) continue;
 
-                    var objects = cell.GetObjects();
-                    if (objects == null || objects.Count == 0) continue;
-
-                    foreach (var obj in objects)
+                    foreach (var obj in cell.GetObjects())
                     {
                         if (obj == null) continue;
                         if (obj == player) continue;
@@ -220,34 +227,30 @@ namespace CoQMcpBridge
 
         private static void AppendMessages(StringBuilder sb)
         {
-            int msgCount = 0;
-            sb.Append("\"messages\":[");
+            var msgs = new List<string>();
             try
             {
-                var game = The.Game;
-                var messages = game?.Player?.Messages;
-                if (messages?.Messages != null)
+                var messages = The.Game?.Player?.Messages;
+                if (messages != null)
                 {
-                    int count = messages.Messages.Count;
-                    msgCount = count;
-                    int start = Math.Max(0, count - 40);
-                    bool first = true;
-                    for (int i = start; i < count; i++)
+                    foreach (var msg in messages.Messages)
                     {
-                        var msg = messages.Messages[i];
-                        if (msg == null) continue;
-                        string text = msg.Text ?? "";
-                        if (string.IsNullOrEmpty(text)) continue;
-
-                        if (!first) sb.Append(",");
-                        first = false;
-                        sb.Append("\"").Append(Json.Escape(StripMarkup(text))).Append("\"");
+                        if (string.IsNullOrEmpty(msg)) continue;
+                        msgs.Add(StripMarkup(msg));
                     }
                 }
             }
             catch { }
+
+            sb.Append("\"messages\":[");
+            int start = Math.Max(0, msgs.Count - 40);
+            for (int i = start; i < msgs.Count; i++)
+            {
+                if (i > start) sb.Append(",");
+                sb.Append("\"").Append(Json.Escape(msgs[i])).Append("\"");
+            }
             sb.Append("],");
-            sb.Append(Json.Num("msgCount", msgCount));
+            sb.Append(Json.Num("msgCount", msgs.Count));
         }
 
         private static void AppendEffects(StringBuilder sb, GameObject player)
@@ -258,7 +261,7 @@ namespace CoQMcpBridge
             {
                 if (player.Effects != null)
                 {
-                    foreach (var effect in player.Effects)
+                    foreach (var effect in player.Effects.GetArray())
                     {
                         if (effect == null) continue;
                         if (!first) sb.Append(",");
@@ -332,9 +335,9 @@ namespace CoQMcpBridge
             try
             {
                 var activated = player.GetPart<ActivatedAbilities>();
-                if (activated != null && activated.AbilityList != null)
+                if (activated != null)
                 {
-                    foreach (var ability in activated.AbilityList)
+                    foreach (var ability in activated.GetAbilityListOrderedByPreference())
                     {
                         if (ability == null) continue;
                         if (!first) sb.Append(",");
@@ -344,7 +347,7 @@ namespace CoQMcpBridge
                         sb.Append(",");
                         sb.Append(Json.Str("command", SafeGet(() => ability.Command)));
                         sb.Append(",");
-                        sb.Append(Json.Str("hotkey", SafeGet(() => ability.Hotkey)));
+                        sb.Append(Json.Str("hotkey", SafeGet(() => ability.DisplayForHotkey)));
                         sb.Append("}");
                     }
                 }
@@ -358,19 +361,15 @@ namespace CoQMcpBridge
             sb.Append("\"time\":{");
             try
             {
-                var calendar = The.Game?.Calendar;
-                if (calendar != null)
-                {
-                    sb.Append(Json.Num("segment", SafeGet(() => calendar.CurrentSegment, 0)));
-                    sb.Append(",");
-                    sb.Append(Json.Num("segmentsPerDay", 12000));
-                    sb.Append(",");
-                    sb.Append(Json.Bool("isDay", SafeGet(() => calendar.IsDay(), true)));
-                    sb.Append(",");
-                    sb.Append(Json.Num("day", SafeGet(() => calendar.GetCurrentDay(), 0)));
-                    sb.Append(",");
-                    sb.Append(Json.Num("hour", SafeGet(() => calendar.GetCurrentHour(), 0)));
-                }
+                sb.Append(Json.Num("segment", Calendar.CurrentDaySegment));
+                sb.Append(",");
+                sb.Append(Json.Num("segmentsPerDay", Calendar.TurnsPerDay));
+                sb.Append(",");
+                sb.Append(Json.Bool("isDay", Calendar.IsDay()));
+                sb.Append(",");
+                sb.Append(Json.Num("day", Calendar.GetDayOfYear(Calendar.TotalTimeTicks)));
+                sb.Append(",");
+                sb.Append(Json.Num("hour", Calendar.CurrentDaySegment / Calendar.TurnsPerHour));
             }
             catch { }
             sb.Append("}");
@@ -397,7 +396,7 @@ namespace CoQMcpBridge
                 var stomach = player.GetPart<Stomach>();
                 if (stomach != null)
                 {
-                    return HungerLevelToString((int)stomach.HungerLevel);
+                    return HungerLevelToString(stomach.HungerLevel);
                 }
             }
             catch { }
@@ -411,7 +410,7 @@ namespace CoQMcpBridge
                 var stomach = player.GetPart<Stomach>();
                 if (stomach != null)
                 {
-                    return ThirstLevelToString((int)stomach.ThirstLevel);
+                    return stomach.WaterStatus() ?? "unknown";
                 }
             }
             catch { }
@@ -427,19 +426,6 @@ namespace CoQMcpBridge
                 case 2: return "hungry";
                 case 3: return "very hungry";
                 case 4: return "starving";
-                default: return "unknown";
-            }
-        }
-
-        private static string ThirstLevelToString(int level)
-        {
-            switch (level)
-            {
-                case 0: return "hydrated";
-                case 1: return "thirsty";
-                case 2: return "very thirsty";
-                case 3: return "parched";
-                case 4: return "dehydrated";
                 default: return "unknown";
             }
         }
@@ -471,6 +457,12 @@ namespace CoQMcpBridge
             return false;
         }
 
+        internal static GameObject Player()
+        {
+            try { return The.Game?.Player?.Body; }
+            catch { return null; }
+        }
+
         private static bool IsHostileToPlayer(GameObject obj)
         {
             try
@@ -478,7 +470,9 @@ namespace CoQMcpBridge
                 if (!obj.IsCreature) return false;
                 var brain = obj.GetPart<Brain>();
                 if (brain == null) return false;
-                return brain.IsHostileToPlayer();
+                var player = Player();
+                if (player == null) return false;
+                return brain.IsHostileTowards(player);
             }
             catch { }
             return false;
@@ -491,7 +485,9 @@ namespace CoQMcpBridge
                 if (!obj.IsCreature) return false;
                 var brain = obj.GetPart<Brain>();
                 if (brain == null) return false;
-                return brain.IsFriendlyToPlayer();
+                var player = Player();
+                if (player == null) return false;
+                return brain.GetFeelingLevel(player) == Brain.FeelingLevel.Allied;
             }
             catch { }
             return false;
@@ -504,7 +500,9 @@ namespace CoQMcpBridge
                 if (!obj.IsCreature) return false;
                 var brain = obj.GetPart<Brain>();
                 if (brain == null) return false;
-                return brain.IsNeutralToPlayer();
+                var player = Player();
+                if (player == null) return false;
+                return brain.IsNeutralTowards(player);
             }
             catch { }
             return false;
@@ -514,8 +512,9 @@ namespace CoQMcpBridge
         {
             try
             {
-                var faction = obj.GetPart<Factions>()?.GetFaction();
-                return faction?.DisplayName ?? "";
+                var brain = obj.GetPart<Brain>();
+                if (brain == null) return "";
+                return brain.GetPrimaryFactionName() ?? "";
             }
             catch { }
             return "";

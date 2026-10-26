@@ -13,11 +13,35 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MOD_SRC = PROJECT_ROOT / "mod"
+
+
+def _windows_user_dir() -> Path | None:
+    """Windows user profile dir when running under WSL (Qud runs on Windows)."""
+    if not Path("/mnt/c").exists():
+        return None
+    try:
+        out = subprocess.run(
+            ["cmd.exe", "/c", "echo %USERPROFILE%"],
+            capture_output=True, text=True, timeout=15,
+        )
+        profile = out.stdout.strip().splitlines()[-1].strip()
+        if profile and ":" in profile:
+            _, _, rest = profile.partition(":")
+            return Path("/mnt/c") / rest.replace("\\", "/").lstrip("/")
+    except Exception:
+        pass
+    users = Path("/mnt/c/Users")
+    if users.exists():
+        for child in sorted(users.iterdir()):
+            if (child / "AppData" / "LocalLow" / "Freehold Games" / "CavesOfQud").is_dir():
+                return child
+    return None
 
 
 def get_mods_dir() -> Path:
@@ -27,7 +51,11 @@ def get_mods_dir() -> Path:
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / "com.FreeholdGames.CavesOfQud"
     else:
-        base = Path.home() / ".config" / "unity3d" / "Freehold Games" / "CavesOfQud"
+        win = _windows_user_dir()
+        if win is not None:
+            base = win / "AppData" / "LocalLow" / "Freehold Games" / "CavesOfQud"
+        else:
+            base = Path.home() / ".config" / "unity3d" / "Freehold Games" / "CavesOfQud"
 
     return base / "Mods" / "CoQMcpBridge"
 
