@@ -10,6 +10,7 @@ The server broadcasts state snapshots after every turn.
 The client sends commands and receives command results.
 """
 
+import itertools
 import json
 import socket
 import struct
@@ -21,6 +22,9 @@ from typing import Any
 
 class McpError(Exception):
     pass
+
+
+_cmd_counter = itertools.count()
 
 
 def _recv_exactly(sock: socket.socket, n: int) -> bytes:
@@ -59,12 +63,7 @@ class GameStateData:
 
     @property
     def msg_count(self) -> int:
-        msgs = self.raw.get("messages", [])
-        if isinstance(msgs, list):
-            for item in msgs:
-                if isinstance(item, dict) and "msgCount" in item:
-                    return item["msgCount"]
-        return 0
+        return self.raw.get("msgCount", 0)
 
     @property
     def effects(self) -> list[dict]:
@@ -117,6 +116,18 @@ class GameStateData:
     @property
     def in_combat(self) -> bool:
         return self.player.get("inCombat", False)
+
+    @property
+    def in_game(self) -> bool:
+        return self.raw.get("inGame", True)
+
+    @property
+    def is_dead(self) -> bool:
+        return self.raw.get("isDead", False)
+
+    @property
+    def segment(self) -> int | None:
+        return self.time.get("segment")
 
     def creatures_nearby(self, max_distance: int = 10) -> list[dict]:
         return [
@@ -302,8 +313,13 @@ class McpClient:
                 data = json.loads(payload.decode("utf-8"))
                 self._handle_message(data)
             except (McpError, OSError, json.JSONDecodeError):
-                if self._running:
-                    time.sleep(0.1)
+                if not self._running:
+                    break
+                self._sock = None
+                self._state_event.set()
+                for ev in self._result_events.values():
+                    ev.set()
+                break
 
     def _handle_message(self, data: dict) -> None:
         msg_type = data.get("type", "")
@@ -322,43 +338,60 @@ class McpClient:
 
     def get_state(self, timeout: float = 10.0) -> GameStateData:
         """Request a fresh state snapshot and wait for it."""
+        if self._sock is None:
+            raise McpError("Not connected — server disconnected")
         self._state_event.clear()
         self._send({"type": "get_state"})
         if self._state_event.wait(timeout=timeout):
+            if self._sock is None:
+                raise McpError("Disconnected while waiting for state")
             if self._latest_state is not None:
                 return self._latest_state
         raise McpError("Timed out waiting for state")
 
     def send_command(self, action: str, **params) -> dict:
         """Send a command and wait for the result."""
-        cmd_id = f"{action}_{int(time.time() * 1000000)}"
-        cmd = {"type": "command", "action": action, "cmdId": cmd_id, **params}
+        cmd_id = f"{action}_{next(_cmd_counter)}"
+        cmd = {"type": "command", "cmdId": cmd_id, **params, "action": action}
 
         event = threading.Event()
         self._result_events[cmd_id] = event
 
+        if self._sock is None:
+            self._result_events.pop(cmd_id, None)
+            raise McpError("Not connected — server disconnected")
+
         self._send(cmd)
 
         if event.wait(timeout=self.timeout):
-            result = self._command_results.pop(cmd_id, {})
             self._result_events.pop(cmd_id, None)
+            if self._sock is None and cmd_id not in self._command_results:
+                raise McpError("Disconnected while waiting for command result")
+            result = self._command_results.pop(cmd_id, {})
             return result
         else:
             self._result_events.pop(cmd_id, None)
             raise McpError(f"Timed out waiting for command result: {action}")
 
     def wait_for_turn(self, timeout: float = 30.0) -> GameStateData:
-        """Wait for the next state broadcast (after a turn resolves)."""
+        """Wait for the game segment (turn counter) to advance."""
         old_state = self._latest_state
+        old_segment = old_state.segment if old_state else None
         old_msg_count = old_state.msg_count if old_state else 0
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             time.sleep(0.1)
-            if self._latest_state is not None and self._latest_state is not old_state:
-                return self._latest_state
-            if self._latest_state is not None and self._latest_state.msg_count > old_msg_count:
-                return self._latest_state
+            current = self._latest_state
+            if current is None:
+                continue
+            new_segment = current.segment
+            if new_segment is not None and old_segment is not None and new_segment > old_segment:
+                return current
+            if new_segment is not None and old_segment is None:
+                return current
+            if current.msg_count > old_msg_count and current is not old_state:
+                return current
 
         if self._latest_state is not None:
             return self._latest_state

@@ -39,7 +39,8 @@ namespace CoQMcpBridge
     {
         public void mutate(GameObject player)
         {
-            player.AddPart(new BridgePart());
+            if (!player.HasPart<BridgePart>())
+                player.AddPart(new BridgePart());
             Bridge.EnsureStarted();
         }
     }

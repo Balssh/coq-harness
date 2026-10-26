@@ -221,8 +221,9 @@ namespace CoQMcpBridge
 
         private static Node ParseBool(string s, ref int pos)
         {
-            if (s.Substring(pos).StartsWith("true")) { pos += 4; return new Bool(true); }
-            pos += 5; return new Bool(false);
+            if (pos + 4 <= s.Length && s.Substring(pos, 4) == "true") { pos += 4; return new Bool(true); }
+            if (pos + 5 <= s.Length && s.Substring(pos, 5) == "false") { pos += 5; return new Bool(false); }
+            return new Null();
         }
     }
 }

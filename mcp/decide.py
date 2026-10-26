@@ -4,6 +4,7 @@ No images — the agent sees structured game state as text.
 """
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from mcp.client import GameStateData
@@ -21,9 +22,10 @@ def _load_prompt(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _format_tools() -> str:
+def _format_tools(tools=None) -> str:
+    tools = tools or all_tools()
     lines = []
-    for t in all_tools():
+    for t in tools:
         args_desc = ""
         if t.parameters.get("properties"):
             props = t.parameters["properties"]
@@ -39,12 +41,23 @@ def _format_tools() -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt() -> str:
+@lru_cache(maxsize=1)
+def _cached_system_prompt() -> str:
     base = _load_prompt("system_base.md")
     base = base.replace("{TOOLS}", _format_tools())
     fewshot = _load_prompt("fewshot.md")
     play = _load_prompt("system_play.md")
     return "\n\n".join([base, fewshot, play])
+
+
+def build_system_prompt() -> str:
+    return _cached_system_prompt()
+
+
+def _detect_screen(state: GameStateData) -> str:
+    if not state.in_game:
+        return "menu"
+    return "play"
 
 
 def decide(
@@ -73,7 +86,8 @@ def decide(
     messages.extend(conversation)
     messages.append({"role": "user", "content": turn_text})
 
-    available_tools = all_tools()
+    screen = _detect_screen(state)
+    available_tools = tools_for_screen(screen)
     available_names = ", ".join(sorted(t.name for t in available_tools))
 
     for attempt in range(MAX_RETRIES):
@@ -94,11 +108,21 @@ def decide(
 
         tool = get_tool(decision.tool)
         if tool is None:
-            all_names = ", ".join(sorted(t.name for t in all_tools()))
             messages.append({"role": "assistant", "content": raw})
             messages.append({
                 "role": "user",
-                "content": f"Tool '{decision.tool}' does not exist. Available tools: {all_names}",
+                "content": f"Tool '{decision.tool}' does not exist. Available tools: {available_names}",
+            })
+            continue
+
+        if tool.screens is not None and screen not in tool.screens:
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"Tool '{decision.tool}' is not available on the '{screen}' screen. "
+                    f"Available tools: {available_names}"
+                ),
             })
             continue
 

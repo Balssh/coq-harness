@@ -8,10 +8,11 @@ namespace CoQMcpBridge
 {
     public static class Bridge
     {
+        private const int PublishThrottleMs = 66;
+
         private static McpServer _server;
         private static readonly object _gate = new object();
-        private static long _lastTurnSegment = -1;
-        private static bool _gameLive;
+        private static long _lastPublishTicks;
 
         public static McpServer Server
         {
@@ -51,33 +52,7 @@ namespace CoQMcpBridge
             var server = Server;
             if (server == null || server.ClientCount == 0) return;
 
-            _gameLive = true;
-
-            while (server.Incoming.TryDequeue(out string json))
-            {
-                try
-                {
-                    var cmd = MiniJson.Parse(json) as MiniJson.Obj;
-                    if (cmd == null) continue;
-
-                    string type = cmd.GetStr("type", "");
-
-                    if (type == "command")
-                    {
-                        string result = GameActions.ExecuteCommand(player, json);
-                        PublishToClients("{\"type\":\"command_result\",\"result\":" + result + "}");
-                    }
-                    else if (type == "get_state")
-                    {
-                        string state = GameStateSnapshot.BuildFullState(player);
-                        PublishToClients(state);
-                    }
-                }
-                catch (Exception e)
-                {
-                    PublishToClients("{\"type\":\"error\",\"message\":\"" + Json.Escape(e.Message) + "\"}");
-                }
-            }
+            DrainCommands(player);
 
             string state = GameStateSnapshot.BuildFullState(player);
             PublishToClients(state);
@@ -88,6 +63,32 @@ namespace CoQMcpBridge
             var server = Server;
             if (server == null || server.ClientCount == 0) return;
 
+            DrainCommands(player);
+
+            long now = DateTime.UtcNow.Ticks;
+            if (now - Interlocked.Read(ref _lastPublishTicks) < PublishThrottleMs * TimeSpan.TicksPerMillisecond)
+                return;
+            Interlocked.Exchange(ref _lastPublishTicks, now);
+
+            string state = GameStateSnapshot.BuildFullState(player);
+            PublishToClients(state);
+        }
+
+        public static void TickAction(GameObject player)
+        {
+            var server = Server;
+            if (server == null || server.ClientCount == 0) return;
+
+            DrainCommands(player);
+        }
+
+        private static void DrainCommands(GameObject player)
+        {
+            var server = _server;
+            if (server == null) return;
+
+            GameActions.DrainPendingCommands();
+
             while (server.Incoming.TryDequeue(out string json))
             {
                 try
@@ -99,8 +100,10 @@ namespace CoQMcpBridge
 
                     if (type == "command")
                     {
+                        string cmdId = cmd.GetStr("cmdId", "");
                         string result = GameActions.ExecuteCommand(player, json);
-                        PublishToClients("{\"type\":\"command_result\",\"result\":" + result + "}");
+                        string resultWithId = InjectCmdId(result, cmdId);
+                        PublishToClients("{\"type\":\"command_result\",\"result\":" + resultWithId + "}");
                     }
                     else if (type == "get_state")
                     {
@@ -115,36 +118,11 @@ namespace CoQMcpBridge
             }
         }
 
-        public static void TickAction(GameObject player)
+        private static string InjectCmdId(string resultJson, string cmdId)
         {
-            var server = Server;
-            if (server == null || server.ClientCount == 0) return;
-
-            while (server.Incoming.TryDequeue(out string json))
-            {
-                try
-                {
-                    var cmd = MiniJson.Parse(json) as MiniJson.Obj;
-                    if (cmd == null) continue;
-
-                    string type = cmd.GetStr("type", "");
-
-                    if (type == "command")
-                    {
-                        string result = GameActions.ExecuteCommand(player, json);
-                        PublishToClients("{\"type\":\"command_result\",\"result\":" + result + "}");
-                    }
-                    else if (type == "get_state")
-                    {
-                        string state = GameStateSnapshot.BuildFullState(player);
-                        PublishToClients(state);
-                    }
-                }
-                catch (Exception e)
-                {
-                    PublishToClients("{\"type\":\"error\",\"message\":\"" + Json.Escape(e.Message) + "\"}");
-                }
-            }
+            if (string.IsNullOrEmpty(cmdId)) return resultJson;
+            if (!resultJson.StartsWith("{")) return resultJson;
+            return resultJson.Substring(0, 1) + Json.Str("cmdId", cmdId) + "," + resultJson.Substring(1);
         }
 
         private static void PublishToClients(string json)

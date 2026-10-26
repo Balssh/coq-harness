@@ -4,6 +4,7 @@ Simpler than the screenshot-based version — no bridge, no relay, no WSL.
 Just connect to the in-game MCP server on localhost:47321.
 """
 
+import json
 import sys
 import time
 from datetime import datetime
@@ -57,12 +58,19 @@ def run_episode(
     skip_chargen: bool = False,
 ) -> None:
     """Run one full episode."""
-    import json
-
     client = init_client(host=mcp_host, port=mcp_port)
     print(f"[run] Connected to MCP server at {mcp_host}:{mcp_port}")
 
     wait_for_game(client)
+
+    if not skip_chargen:
+        state = client.get_state(timeout=10.0)
+        if not state.in_game:
+            print("[run] WARNING: Game is not in an active play state (title screen or chargen).")
+            print("[run] MCP mode does not support character creation yet.")
+            print("[run] Please start or load a game in Qud, then restart the agent.")
+            print("[run] Use --skip-chargen to suppress this check.")
+            return
 
     clear_conversation()
 
@@ -144,7 +152,15 @@ def run_episode(
                 print(f"[run] Turn {turn_count}: HP {new_state.hp}/{new_state.hp_max}, "
                       f"Level {new_state.level}, Location: {new_state.location}")
 
-            if new_state.hp is not None and new_state.hp <= 0:
+            death_msgs = ("you die", "you are dead", "game over", "rest in peace",
+                          "tombstone", "your journey ends")
+            recent_msgs = " ".join(state.messages[-5:]).lower() if (state := new_state) else ""
+            died = (
+                new_state.is_dead
+                or (new_state.hp is not None and new_state.hp <= 0)
+                or any(dm in recent_msgs for dm in death_msgs)
+            )
+            if died:
                 print("[run] Player died!")
                 break
 

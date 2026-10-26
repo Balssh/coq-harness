@@ -21,6 +21,10 @@ namespace CoQMcpBridge
             sb.Append(",");
             sb.Append(Json.Str("version", Protocol.Version));
             sb.Append(",");
+            sb.Append(Json.Bool("inGame", SafeGet(() => The.Game?.Player != null && The.Game.Player.CurrentCell != null, false)));
+            sb.Append(",");
+            sb.Append(Json.Bool("isDead", SafeGet(() => player.IsDead(), false)));
+            sb.Append(",");
 
             AppendPlayer(sb, player);
             sb.Append(",");
@@ -93,9 +97,9 @@ namespace CoQMcpBridge
             sb.Append(Json.Str("location", SafeGet(() => cell?.ParentZone?.DisplayName ?? "unknown")));
 
             sb.Append(",");
-            sb.Append(Json.Num("hunger", SafeGet(() => GetHungerLevel(player), -1)));
+            sb.Append(Json.Str("hunger", SafeGet(() => GetHungerString(player), "unknown")));
             sb.Append(",");
-            sb.Append(Json.Num("thirst", SafeGet(() => GetThirstLevel(player), -1)));
+            sb.Append(Json.Str("thirst", SafeGet(() => GetThirstString(player), "unknown")));
             sb.Append(",");
             sb.Append(Json.Num("temperature", SafeGet(() => player.pPhysics?.Temperature ?? 0, 0)));
             sb.Append(",");
@@ -216,6 +220,7 @@ namespace CoQMcpBridge
 
         private static void AppendMessages(StringBuilder sb)
         {
+            int msgCount = 0;
             sb.Append("\"messages\":[");
             try
             {
@@ -224,6 +229,7 @@ namespace CoQMcpBridge
                 if (messages?.Messages != null)
                 {
                     int count = messages.Messages.Count;
+                    msgCount = count;
                     int start = Math.Max(0, count - 40);
                     bool first = true;
                     for (int i = start; i < count; i++)
@@ -237,12 +243,11 @@ namespace CoQMcpBridge
                         first = false;
                         sb.Append("\"").Append(Json.Escape(StripMarkup(text))).Append("\"");
                     }
-                    sb.Append(",");
-                    sb.Append(Json.Num("msgCount", count));
                 }
             }
             catch { }
-            sb.Append("]");
+            sb.Append("],");
+            sb.Append(Json.Num("msgCount", msgCount));
         }
 
         private static void AppendEffects(StringBuilder sb, GameObject player)
@@ -385,32 +390,58 @@ namespace CoQMcpBridge
             return sb.ToString();
         }
 
-        private static int GetHungerLevel(GameObject player)
+        private static string GetHungerString(GameObject player)
         {
             try
             {
                 var stomach = player.GetPart<Stomach>();
                 if (stomach != null)
                 {
-                    return (int)stomach.HungerLevel;
+                    return HungerLevelToString((int)stomach.HungerLevel);
                 }
             }
             catch { }
-            return -1;
+            return "unknown";
         }
 
-        private static int GetThirstLevel(GameObject player)
+        private static string GetThirstString(GameObject player)
         {
             try
             {
                 var stomach = player.GetPart<Stomach>();
                 if (stomach != null)
                 {
-                    return (int)stomach.ThirstLevel;
+                    return ThirstLevelToString((int)stomach.ThirstLevel);
                 }
             }
             catch { }
-            return -1;
+            return "unknown";
+        }
+
+        private static string HungerLevelToString(int level)
+        {
+            switch (level)
+            {
+                case 0: return "satiated";
+                case 1: return "peckish";
+                case 2: return "hungry";
+                case 3: return "very hungry";
+                case 4: return "starving";
+                default: return "unknown";
+            }
+        }
+
+        private static string ThirstLevelToString(int level)
+        {
+            switch (level)
+            {
+                case 0: return "hydrated";
+                case 1: return "thirsty";
+                case 2: return "very thirsty";
+                case 3: return "parched";
+                case 4: return "dehydrated";
+                default: return "unknown";
+            }
         }
 
         private static bool IsInCombat(GameObject player)

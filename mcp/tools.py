@@ -65,6 +65,18 @@ def execute_tool(name: str, args: dict) -> ToolResult:
             text=f"Unknown tool: {name!r}. Available tools: {', '.join(sorted(_REGISTRY))}",
         )
 
+    if args is None:
+        args = {}
+
+    import jsonschema
+    try:
+        jsonschema.validate(args, tool.parameters)
+    except jsonschema.ValidationError as exc:
+        return ToolResult(
+            error=True,
+            text=f"Invalid arguments for '{name}': {exc.message} (at {list(exc.absolute_path)})",
+        )
+
     try:
         client = get_client()
         result = client.send_command(tool.name, **args)
@@ -183,13 +195,13 @@ class UseItemTool(Tool):
                 "type": "string",
                 "description": "Name of the item (partial match is OK)",
             },
-            "action": {
+            "item_action": {
                 "type": "string",
                 "enum": ["equip", "drop", "quaff", "eat", "unequip"],
                 "description": "What to do with the item",
             },
         },
-        "required": ["item", "action"],
+        "required": ["item", "item_action"],
     }
     advances_turn = True
     screens = _PLAY_SCREENS
@@ -221,7 +233,8 @@ class PressCommandTool(Tool):
     name = "press_command"
     description = (
         "Send a raw Qud command by ID. Use for commands not covered by "
-        "dedicated tools (e.g. 'CmdFire' to shoot, 'CmdReload', 'CmdSoar')."
+        "dedicated tools (e.g. 'CmdFire' to shoot, 'CmdReload', 'CmdSoar'). "
+        "Set advances_turn=true if the command consumes a turn (e.g. CmdFire)."
     )
     parameters = {
         "type": "object",
@@ -229,7 +242,12 @@ class PressCommandTool(Tool):
             "command": {
                 "type": "string",
                 "description": "Qud command ID (e.g. 'CmdFire', 'CmdReload')",
-            }
+            },
+            "advances_turn": {
+                "type": "boolean",
+                "default": False,
+                "description": "Whether this command advances the game turn",
+            },
         },
         "required": ["command"],
     }

@@ -93,7 +93,7 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
 {"type": "command", "action": "interact", "direction": "right", "cmdId": "interact_789"}
 {"type": "command", "action": "press_key", "key": " ", "cmdId": "key_101"}
 {"type": "command", "action": "press_command", "command": "CmdFire", "cmdId": "cmd_102"}
-{"type": "command", "action": "use_item", "item": "vinewafer", "action": "eat", "cmdId": "item_103"}
+{"type": "command", "action": "use_item", "item": "vinewafer", "item_action": "eat", "cmdId": "item_103"}
 {"type": "command", "action": "auto_explore", "cmdId": "explore_104"}
 {"type": "command", "action": "travel", "direction": "right", "cmdId": "travel_105"}
 {"type": "command", "action": "go_stairs", "direction": "down", "cmdId": "stairs_106"}
@@ -184,7 +184,7 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
 | `wait(turns?)` | Yes | Wait/rest to heal |
 | `interact(direction)` | Yes | Interact with adjacent tile |
 | `get()` | Yes | Pick up items on current tile |
-| `use_item(item, action)` | Yes | Use inventory item (equip/drop/quaff/eat/unequip) |
+| `use_item(item, item_action)` | Yes | Use inventory item (equip/drop/quaff/eat/unequip) |
 | `press_key(key)` | No | Press a single key |
 | `press_command(command)` | Varies | Send raw Qud command (e.g. CmdFire) |
 | `open_screen(screen)` | No | Open inventory/equipment/skills/etc. |

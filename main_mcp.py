@@ -7,7 +7,6 @@ Usage:
 """
 
 import argparse
-import sys
 
 
 def main() -> None:
@@ -38,14 +37,31 @@ def main() -> None:
         deploy(force=args.force_deploy)
         print()
 
-    from mcp.run import main as run_main
-    sys.argv = [
-        "mcp.run",
-        "--host", args.host,
-        "--port", str(args.port),
-        "--episode", str(args.episode),
-    ]
-    run_main()
+    from mcp.run import run_episode
+    episode_num = args.episode
+    while True:
+        try:
+            run_episode(
+                episode_num,
+                mcp_host=args.host,
+                mcp_port=args.port,
+            )
+        except RuntimeError as exc:
+            print(f"\n[run] Error: {exc}")
+            try:
+                input("Press Enter to retry, or Ctrl+C to quit...")
+            except (KeyboardInterrupt, EOFError):
+                break
+        except KeyboardInterrupt:
+            print("\n[run] Interrupted by user.")
+            break
+
+        print(f"\n--- Episode {episode_num} ended ---")
+        try:
+            input("Press Enter to start a new episode, or Ctrl+C to quit...")
+        except (KeyboardInterrupt, EOFError):
+            break
+        episode_num += 1
 
 
 if __name__ == "__main__":

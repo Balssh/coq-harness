@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -11,6 +12,10 @@ namespace CoQMcpBridge
     public sealed class McpServer
     {
         private const int Port = 47321;
+        private const int MaxFrameBytes = 16 << 20;
+        private const int WriteStallMs = 5000;
+        private const int WriteChunkBytes = 64 * 1024;
+
         private TcpListener _listener;
         private Thread _acceptThread;
         private volatile bool _running;
@@ -49,7 +54,12 @@ namespace CoQMcpBridge
             {
                 TcpClient client;
                 try { client = _listener.AcceptTcpClient(); }
-                catch { if (!_running) break; else continue; }
+                catch
+                {
+                    if (!_running) break;
+                    Thread.Sleep(100);
+                    continue;
+                }
 
                 client.NoDelay = true;
                 ClientConn conn;
@@ -95,9 +105,11 @@ namespace CoQMcpBridge
         {
             private readonly McpServer _srv;
             private readonly TcpClient _tcp;
+            private readonly Socket _sock;
             private readonly NetworkStream _stream;
             private readonly AutoResetEvent _wake = new AutoResetEvent(false);
-            private byte[] _pending;
+            private readonly Queue<byte[]> _outbox = new Queue<byte[]>();
+            private readonly object _outboxLock = new object();
             private volatile bool _alive = true;
             private int _killed;
 
@@ -105,6 +117,7 @@ namespace CoQMcpBridge
             {
                 _srv = srv;
                 _tcp = tcp;
+                _sock = tcp.Client;
                 _stream = tcp.GetStream();
             }
 
@@ -117,7 +130,7 @@ namespace CoQMcpBridge
             public void Offer(byte[] frame)
             {
                 if (!_alive) return;
-                Interlocked.Exchange(ref _pending, frame);
+                lock (_outboxLock) _outbox.Enqueue(frame);
                 try { _wake.Set(); } catch { }
             }
 
@@ -127,10 +140,37 @@ namespace CoQMcpBridge
                 {
                     while (_alive)
                     {
-                        _wake.WaitOne();
-                        byte[] frame = Interlocked.Exchange(ref _pending, null);
-                        if (frame == null) continue;
-                        _stream.Write(frame, 0, frame.Length);
+                        byte[] frame = null;
+                        lock (_outboxLock)
+                        {
+                            if (_outbox.Count > 0)
+                                frame = _outbox.Dequeue();
+                        }
+
+                        if (frame == null)
+                        {
+                            _wake.WaitOne(100);
+                            continue;
+                        }
+
+                        if (!_sock.Poll(WriteStallMs * 1000, SelectMode.SelectWrite))
+                        {
+                            break;
+                        }
+
+                        int offset = 0;
+                        while (offset < frame.Length && _alive)
+                        {
+                            int chunk = Math.Min(WriteChunkBytes, frame.Length - offset);
+                            if (!_sock.Poll(WriteStallMs * 1000, SelectMode.SelectWrite))
+                                break;
+                            _stream.Write(frame, offset, chunk);
+                            offset += chunk;
+                        }
+
+                        if (offset < frame.Length)
+                            break;
+
                         _stream.Flush();
                     }
                 }
@@ -147,7 +187,7 @@ namespace CoQMcpBridge
                     {
                         if (!ReadFully(_stream, lenBuf, 4)) break;
                         int len = (lenBuf[0] << 24) | (lenBuf[1] << 16) | (lenBuf[2] << 8) | lenBuf[3];
-                        if (len < 0 || len > (16 << 20)) break;
+                        if (len < 0 || len > MaxFrameBytes) break;
                         var payload = new byte[len];
                         if (!ReadFully(_stream, payload, len)) break;
                         string s = Encoding.UTF8.GetString(payload);

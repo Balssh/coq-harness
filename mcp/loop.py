@@ -67,9 +67,9 @@ def run_turn(
         on_result(decision, result)
 
     tool = get_tool(decision.tool)
-    should_wait = (tool and tool.advances_turn) or decision.tool in (
-        "auto_explore", "travel", "go_stairs"
-    )
+    should_wait = bool(tool and tool.advances_turn)
+    if decision.tool == "press_command" and decision.args.get("advances_turn"):
+        should_wait = True
 
     if should_wait:
         try:

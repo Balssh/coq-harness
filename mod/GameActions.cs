@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using XRL;
 using XRL.World;
 using ConsoleLib.Console;
@@ -7,6 +8,28 @@ namespace CoQMcpBridge
 {
     public static class GameActions
     {
+        private static readonly Queue<string> _pendingCommands = new Queue<string>();
+        private static readonly object _pendingLock = new object();
+
+        public static void EnqueueFollowUp(string command)
+        {
+            lock (_pendingLock) _pendingCommands.Enqueue(command);
+        }
+
+        public static void DrainPendingCommands()
+        {
+            while (true)
+            {
+                string cmd;
+                lock (_pendingLock)
+                {
+                    if (_pendingCommands.Count == 0) return;
+                    cmd = _pendingCommands.Dequeue();
+                }
+                Keyboard.PushCommand(cmd);
+            }
+        }
+
         public static string ExecuteCommand(GameObject player, string commandJson)
         {
             if (player == null)
@@ -31,7 +54,7 @@ namespace CoQMcpBridge
                     case "get":
                         return Get(player);
                     case "use_item":
-                        return UseItem(player, cmd.GetStr("item", ""), cmd.GetStr("action", ""));
+                        return UseItem(player, cmd.GetStr("item", ""), cmd.GetStr("item_action", ""));
                     case "press_key":
                         return PressKey(cmd.GetStr("key", ""));
                     case "press_command":
@@ -92,8 +115,7 @@ namespace CoQMcpBridge
                 return "{\"error\":\"invalid direction: " + direction + "\"}";
 
             Keyboard.PushCommand("CmdInteract");
-            Thread_Sleep(50);
-            Keyboard.PushCommand(cmd);
+            EnqueueFollowUp(cmd);
             return "{\"ok\":true,\"action\":\"interact\",\"direction\":\"" + direction + "\"}";
         }
 
@@ -149,8 +171,7 @@ namespace CoQMcpBridge
             }
 
             Keyboard.PushCommand("CmdInventory");
-            Thread_Sleep(50);
-            CommandEvent.Send(player, cmd, item);
+            EnqueueFollowUp("__USE_ITEM__" + cmd + "__" + item.Blueprint);
             return "{\"ok\":true,\"action\":\"use_item\",\"item\":\"" + Json.Escape(itemName) + "\",\"itemAction\":\"" + action + "\"}";
         }
 
@@ -159,8 +180,30 @@ namespace CoQMcpBridge
             if (string.IsNullOrEmpty(key))
                 return "{\"error\":\"no key specified\"}";
 
-            Keyboard.PushKey(key.Length == 1 ? key[0] : '\0', bAllowMap: true);
+            char c = MapKeyName(key);
+            if (c == '\0')
+                return "{\"error\":\"unknown key: " + key + "\"}";
+
+            Keyboard.PushKey(c, bAllowMap: true);
             return "{\"ok\":true,\"action\":\"press_key\",\"key\":\"" + Json.Escape(key) + "\"}";
+        }
+
+        private static char MapKeyName(string key)
+        {
+            if (key.Length == 1) return key[0];
+            switch (key.ToLower())
+            {
+                case "enter": case "return": return '\r';
+                case "escape": case "esc": return '\x1b';
+                case "space": return ' ';
+                case "tab": return '\t';
+                case "backspace": return '\b';
+                case "up": return '\x10';
+                case "down": return '\x11';
+                case "left": return '\x12';
+                case "right": return '\x13';
+                default: return '\0';
+            }
         }
 
         private static string PressCommand(string command)
@@ -223,8 +266,7 @@ namespace CoQMcpBridge
                 return "{\"error\":\"invalid direction: " + direction + "\"}";
 
             Keyboard.PushCommand("CmdTravel");
-            Thread_Sleep(50);
-            Keyboard.PushCommand(cmd);
+            EnqueueFollowUp(cmd);
             return "{\"ok\":true,\"action\":\"travel\",\"direction\":\"" + direction + "\"}";
         }
 
@@ -300,11 +342,6 @@ namespace CoQMcpBridge
                 case "right": case "e": case "east": return "CmdMoveE";
                 default: return null;
             }
-        }
-
-        private static void Thread_Sleep(int ms)
-        {
-            System.Threading.Thread.Sleep(ms);
         }
     }
 }
