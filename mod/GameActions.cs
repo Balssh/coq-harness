@@ -408,8 +408,8 @@ namespace CoQMcpBridge
         }
 
         /// <summary>
-        /// Continue the last save from the main menu. Calls MainMenu.ContinueMenu()
-        /// on the main thread, which loads the most recent save.
+        /// Continue the last save from the main menu. Finds the most recent save
+        /// and calls XRLGame.LoadCurrentGame() (static) on the main thread.
         /// </summary>
         private static string ContinueGame()
         {
@@ -419,47 +419,115 @@ namespace CoQMcpBridge
                 try
                 {
                     string view = SafeGetView();
-                    if (view != "MainMenu")
+                    if (view == "Stage")
                     {
-                        result = "{\"error\":\"not at main menu (screen=\"" + Json.Escape(view) + "\")\"}";
+                        result = "{\"error\":\"already in game\"}";
                         return;
                     }
 
-                    // Find MainMenu instance and call ContinueMenu
-                    var menuType = FindType("Qud.UI.MainMenu");
-                    if (menuType == null)
+                    // Find the most recent save directory
+                    string saveId = FindMostRecentSave();
+                    if (string.IsNullOrEmpty(saveId))
                     {
-                        result = "{\"error\":\"MainMenu type not found\"}";
+                        result = "{\"error\":\"no saves found\"}";
                         return;
                     }
 
-                    var menu = UnityEngine.Object.FindObjectOfType(menuType);
-                    if (menu == null)
+                    var gameType = FindType("XRL.XRLGame");
+                    if (gameType == null)
                     {
-                        result = "{\"error\":\"MainMenu instance not found\"}";
+                        result = "{\"error\":\"XRLGame type not found\"}";
                         return;
                     }
 
-                    var continueMethod = menuType.GetMethod("ContinueMenu",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (continueMethod == null)
+                    // LoadCurrentGame(string GameName, bool ShowPopup, GameState) — static
+                    var loadMethod = gameType.GetMethod("LoadCurrentGame",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (loadMethod == null)
                     {
-                        result = "{\"error\":\"ContinueMenu method not found\"}";
+                        result = "{\"error\":\"LoadCurrentGame not found\"}";
                         return;
                     }
 
-                    continueMethod.Invoke(menu, null);
-                    result = "{\"ok\":true,\"action\":\"continue_game\"}";
+                    var ps = loadMethod.GetParameters();
+                    var args = new object[ps.Length];
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        var p = ps[i];
+                        string pname = p.Name.ToLowerInvariant();
+                        if (pname == "gamename" || pname == "name")
+                            args[i] = saveId;
+                        else if (p.ParameterType == typeof(bool))
+                            args[i] = true;
+                        else if (p.HasDefaultValue)
+                            args[i] = p.DefaultValue;
+                        else
+                            args[i] = null;
+                    }
+
+                    loadMethod.Invoke(null, args);
+                    result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\"}";
                 }
                 catch (Exception e)
                 {
-                    result = "{\"error\":\"" + Json.Escape(e.ToString()) + "\"}";
+                    var inner = e.InnerException?.Message ?? e.Message;
+                    result = "{\"error\":\"" + Json.Escape(inner) + "\"}";
                 }
-            }, timeoutMs: 10000);
+            }, timeoutMs: 15000);
 
             if (!completed)
                 return "{\"error\":\"timeout\"}";
             return result ?? "{\"ok\":true,\"action\":\"continue_game\"}";
+        }
+
+        /// <summary>
+        /// Find the most recently modified save directory.
+        /// Returns the save ID (directory name) or null.
+        /// </summary>
+        private static string FindMostRecentSave()
+        {
+            try
+            {
+                var savePaths = new System.Collections.Generic.List<string>();
+                try
+                {
+                    string syncedPath = XRLCore.SyncedPath;
+                    if (!string.IsNullOrEmpty(syncedPath))
+                        savePaths.Add(System.IO.Path.Combine(syncedPath, "Saves"));
+                }
+                catch { }
+                try { savePaths.Add(XRLCore.SavePath); } catch { }
+                savePaths.Add(System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + "Low",
+                    "Freehold Games", "CavesOfQud", "Synced", "Saves"));
+
+                string bestId = null;
+                long bestTime = 0;
+
+                foreach (var path in savePaths)
+                {
+                    if (string.IsNullOrEmpty(path) || !System.IO.Directory.Exists(path))
+                        continue;
+
+                    foreach (var dir in System.IO.Directory.GetDirectories(path))
+                    {
+                        // Check if it has a save file
+                        bool hasSave = System.IO.File.Exists(System.IO.Path.Combine(dir, "Primary.sav.gz"))
+                                    || System.IO.File.Exists(System.IO.Path.Combine(dir, "Checkpoint.sav.gz"));
+                        if (!hasSave) continue;
+
+                        long time = System.IO.Directory.GetLastWriteTimeUtc(dir).Ticks;
+                        if (time > bestTime)
+                        {
+                            bestTime = time;
+                            bestId = System.IO.Path.GetFileName(dir);
+                        }
+                    }
+                }
+
+                return bestId;
+            }
+            catch { return null; }
         }
 
         /// <summary>
