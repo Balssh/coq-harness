@@ -256,6 +256,20 @@ namespace CoQMcpBridge
                 case "f10": return 0x79;
                 case "f11": return 0x7A;
                 case "f12": return 0x7B;
+                // Numpad keys (for chargen "[Num 9] Next" etc.)
+                case "num0": case "numpad0": return 0x60;
+                case "num1": case "numpad1": return 0x61;
+                case "num2": case "numpad2": return 0x62;
+                case "num3": case "numpad3": return 0x63;
+                case "num4": case "numpad4": return 0x64;
+                case "num5": case "numpad5": return 0x65;
+                case "num6": case "numpad6": return 0x66;
+                case "num7": case "numpad7": return 0x67;
+                case "num8": case "numpad8": return 0x68;
+                case "num9": case "numpad9": return 0x69;
+                case "num_0": case "num_1": case "num_2": case "num_3": case "num_4":
+                case "num_5": case "num_6": case "num_7": case "num_8": case "num_9":
+                    return (ushort)(0x60 + (key[key.Length - 1] - '0'));
                 default: return null;
             }
         }

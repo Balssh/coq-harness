@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using XRL;
 using XRL.World;
@@ -13,13 +14,25 @@ namespace CoQMcpBridge
         {
             if (player == null)
             {
-                return "{\"type\":\"state\","
-                    + Json.Str("protocol", Protocol.ProtocolVersion.ToString()) + ","
-                    + Json.Str("version", Protocol.Version) + ","
-                    + Json.Str("screen", SafeGet(() => GameManager.Instance?.CurrentGameView ?? "")) + ","
-                    + Json.Bool("inGame", false) + ","
-                    + Json.Bool("isDead", false)
-                    + "}";
+                var sb0 = new StringBuilder(512);
+                sb0.Append("{\"type\":\"state\",");
+                sb0.Append(Json.Str("protocol", Protocol.ProtocolVersion.ToString()));
+                sb0.Append(",");
+                sb0.Append(Json.Str("version", Protocol.Version));
+                sb0.Append(",");
+                sb0.Append(Json.Str("screen", SafeGet(() => GameManager.Instance?.CurrentGameView ?? "")));
+                sb0.Append(",");
+                sb0.Append(Json.Bool("inGame", false));
+                sb0.Append(",");
+                sb0.Append(Json.Bool("isDead", false));
+                sb0.Append(",");
+                sb0.Append(Json.Bool("inChargen", IsInChargen()));
+                sb0.Append(",");
+                sb0.Append(Json.Bool("inMainMenu", IsInMainMenu()));
+                sb0.Append(",");
+                sb0.Append(Json.Str("viewStack", GetViewStack()));
+                sb0.Append("}");
+                return sb0.ToString();
             }
 
             var sb = new StringBuilder(8192);
@@ -34,6 +47,12 @@ namespace CoQMcpBridge
             sb.Append(Json.Bool("inGame", SafeGet(() => The.Game?.Player?.Body?.CurrentCell != null, false)));
             sb.Append(",");
             sb.Append(Json.Bool("isDead", SafeGet(() => player.hitpoints <= 0, false)));
+            sb.Append(",");
+            sb.Append(Json.Bool("inChargen", IsInChargen()));
+            sb.Append(",");
+            sb.Append(Json.Bool("inMainMenu", IsInMainMenu()));
+            sb.Append(",");
+            sb.Append(Json.Str("viewStack", GetViewStack()));
             sb.Append(",");
 
             AppendPlayer(sb, player);
@@ -461,6 +480,39 @@ namespace CoQMcpBridge
         {
             try { return The.Game?.Player?.Body; }
             catch { return null; }
+        }
+
+        private static bool IsInChargen()
+        {
+            try
+            {
+                string view = GameManager.Instance?.CurrentGameView ?? "";
+                return view == "EmbarkBuilder" || view == "Chargen";
+            }
+            catch { return false; }
+        }
+
+        private static bool IsInMainMenu()
+        {
+            try
+            {
+                string view = GameManager.Instance?.CurrentGameView ?? "";
+                return view == "MainMenu";
+            }
+            catch { return false; }
+        }
+
+        private static string GetViewStack()
+        {
+            try
+            {
+                var gm = GameManager.Instance;
+                if (gm == null) return "";
+                var stack = gm.GetGameViewStackCopy();
+                if (stack == null) return "";
+                return string.Join(">", stack.Select(v => v?.ToString() ?? "?"));
+            }
+            catch { return ""; }
         }
 
         private static bool IsHostileToPlayer(GameObject obj)
