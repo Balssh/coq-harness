@@ -57,6 +57,10 @@ namespace CoQMcpBridge
                         return ContinueGame();
                     case "complete_chargen":
                         return CompleteChargen(cmd.GetStr("code", ""));
+                    case "chargen_auto":
+                        return ChargenAuto();
+                    case "chargen_state":
+                        return ChargenState();
                     case "chargen_advance":
                         return ChargenAdvance(cmd.GetBool("force", true));
                     case "chargen_random":
@@ -69,6 +73,8 @@ namespace CoQMcpBridge
                         return OpenScreen(cmd.GetStr("screen", ""));
                     case "close_menu":
                         return CloseMenu();
+                    case "confirm_popup":
+                        return ConfirmPopup(cmd.GetStr("command", "Yes"));
                     case "choose_option":
                         return ChooseOption(cmd.GetInt("option", 0));
                     case "auto_explore":
@@ -79,6 +85,8 @@ namespace CoQMcpBridge
                         return GoStairs(cmd.GetStr("direction", ""));
                     case "save":
                         return Save();
+                    case "save_game":
+                        return SaveGame();
                     case "load_game":
                         return LoadGame();
                     case "quit":
@@ -408,8 +416,11 @@ namespace CoQMcpBridge
         }
 
         /// <summary>
-        /// Continue the last save from the main menu. Finds the most recent save
-        /// and calls XRLGame.LoadCurrentGame() (static) on the main thread.
+        /// Continue the last save from the main menu. Tries multiple approaches:
+        /// 1. XRLGame.LoadCurrentGame(saveId, true, null) — static, takes save dir name
+        /// 2. XRLGame.LoadGame(fullPath, null, true, null) — static, takes full path
+        /// 3. Find Qud.UI.SaveManagement instance and call ContinueMenu()
+        /// 4. Run LoadCurrentGame on a background thread (it may block)
         /// </summary>
         private static string ContinueGame()
         {
@@ -433,6 +444,10 @@ namespace CoQMcpBridge
                         return;
                     }
 
+                    // Build the full path to the save directory
+                    string savePath = FindSavePath(saveId);
+                    System.Console.WriteLine("[mcp] ContinueGame: saveId=" + saveId + " path=" + savePath);
+
                     var gameType = FindType("XRL.XRLGame");
                     if (gameType == null)
                     {
@@ -440,44 +455,181 @@ namespace CoQMcpBridge
                         return;
                     }
 
-                    // LoadCurrentGame(string GameName, bool ShowPopup, GameState) — static
-                    var loadMethod = gameType.GetMethod("LoadCurrentGame",
+                    // Approach 1: LoadCurrentGame(GameName, ShowPopup, GameState)
+                    var loadCurrent = gameType.GetMethod("LoadCurrentGame",
                         BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadMethod == null)
+                    if (loadCurrent != null)
                     {
-                        result = "{\"error\":\"LoadCurrentGame not found\"}";
-                        return;
+                        var ps = loadCurrent.GetParameters();
+                        
+                        // Read the character name from Primary.json
+                        string charName = saveId; // fallback to UUID
+                        try
+                        {
+                            var jsonPath = System.IO.Path.Combine(savePath ?? "", "Primary.json");
+                            if (System.IO.File.Exists(jsonPath))
+                            {
+                                var json = System.IO.File.ReadAllText(jsonPath);
+                                var match = System.Text.RegularExpressions.Regex.Match(json, "\"Name\"\\s*:\\s*\"([^\"]+)\"");
+                                if (match.Success) charName = match.Groups[1].Value;
+                            }
+                        }
+                        catch { }
+                        System.Console.WriteLine("[mcp] ContinueGame: charName=" + charName + " saveId=" + saveId);
+
+                        // Try both UUID and character name as GameName
+                        foreach (var gameName in new[] { charName, saveId })
+                        {
+                            var args = new object[ps.Length];
+                            for (int i = 0; i < ps.Length; i++)
+                            {
+                                var p = ps[i];
+                                string pname = p.Name.ToLowerInvariant();
+                                if (pname == "gamename" || pname == "name" || pname == "id")
+                                    args[i] = gameName;
+                                else if (p.ParameterType == typeof(bool))
+                                    args[i] = true;
+                                else if (p.ParameterType.IsGenericType && 
+                                         p.ParameterType.GetGenericTypeDefinition() == typeof(System.Collections.Generic.Dictionary<,>))
+                                {
+                                    // Create an empty dictionary of the right type
+                                    args[i] = System.Activator.CreateInstance(p.ParameterType);
+                                }
+                                else if (p.HasDefaultValue)
+                                    args[i] = p.DefaultValue;
+                                else
+                                    args[i] = null;
+                            }
+                            System.Console.WriteLine("[mcp] Trying LoadCurrentGame with GameName=" + gameName + ", GameState=" + (args[ps.Length-1] != null ? "dict" : "null"));
+                            try
+                            {
+                                var t = new System.Threading.Thread(() =>
+                                {
+                                    try { loadCurrent.Invoke(null, args); }
+                                    catch (Exception e)
+                                    {
+                                        System.Console.WriteLine("[mcp] LoadCurrentGame(" + gameName + ") error: " + e.InnerException?.Message);
+                                    }
+                                }) { IsBackground = true, Name = "McpLoadGame" };
+                                t.Start();
+                                result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"gameName\":\"" + Json.Escape(gameName) + "\",\"method\":\"LoadCurrentGame\"}";
+                                return;
+                            }
+                            catch (Exception e)
+                            {
+                                System.Console.WriteLine("[mcp] LoadCurrentGame(" + gameName + ") invoke failed: " + e.Message);
+                            }
+                        }
                     }
 
-                    var ps = loadMethod.GetParameters();
-                    var args = new object[ps.Length];
-                    for (int i = 0; i < ps.Length; i++)
+                    // Approach 2: LoadGame(Path, Session, ShowPopup, GameState)
+                    var loadGame = gameType.GetMethod("LoadGame",
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (loadGame != null && !string.IsNullOrEmpty(savePath))
                     {
-                        var p = ps[i];
-                        string pname = p.Name.ToLowerInvariant();
-                        if (pname == "gamename" || pname == "name")
-                            args[i] = saveId;
-                        else if (p.ParameterType == typeof(bool))
-                            args[i] = true;
-                        else if (p.HasDefaultValue)
-                            args[i] = p.DefaultValue;
-                        else
-                            args[i] = null;
+                        var ps = loadGame.GetParameters();
+                        var args = new object[ps.Length];
+                        for (int i = 0; i < ps.Length; i++)
+                        {
+                            var p = ps[i];
+                            string pname = p.Name.ToLowerInvariant();
+                            if (pname == "path")
+                                args[i] = savePath;
+                            else if (p.ParameterType == typeof(bool))
+                                args[i] = true;
+                            else if (p.HasDefaultValue)
+                                args[i] = p.DefaultValue;
+                            else
+                                args[i] = null;
+                        }
+                        System.Console.WriteLine("[mcp] Trying LoadGame with path=" + savePath);
+                        try
+                        {
+                            var t = new System.Threading.Thread(() =>
+                            {
+                                try { loadGame.Invoke(null, args); }
+                                catch (Exception e)
+                                {
+                                    System.Console.WriteLine("[mcp] LoadGame error: " + e);
+                                }
+                            }) { IsBackground = true, Name = "McpLoadGame2" };
+                            t.Start();
+                            result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"method\":\"LoadGame\"}";
+                            return;
+                        }
+                        catch (Exception e)
+                        {
+                            System.Console.WriteLine("[mcp] LoadGame invoke failed: " + e.Message);
+                        }
                     }
 
-                    loadMethod.Invoke(null, args);
-                    result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\"}";
+                    // Approach 3: Use SaveManagement screen's ContinueMenu()
+                    var smType = FindType("Qud.UI.SaveManagement");
+                    if (smType != null)
+                    {
+                        var smInstance = UnityEngine.Object.FindObjectOfType(smType);
+                        if (smInstance != null)
+                        {
+                            var continueMenu = smType.GetMethod("ContinueMenu",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (continueMenu != null)
+                            {
+                                System.Console.WriteLine("[mcp] Trying SaveManagement.ContinueMenu()");
+                                continueMenu.Invoke(smInstance, null);
+                                result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"method\":\"SaveManagement.ContinueMenu\"}";
+                                return;
+                            }
+                        }
+                    }
+
+                    result = "{\"error\":\"all load approaches failed\",\"saveId\":\"" + Json.Escape(saveId) + "\"}";
                 }
                 catch (Exception e)
                 {
                     var inner = e.InnerException?.Message ?? e.Message;
-                    result = "{\"error\":\"" + Json.Escape(inner) + "\"}";
+                    result = "{\"error\":\"" + Json.Escape(inner) + "\",\"stack\":\"" + Json.Escape(e.StackTrace ?? "") + "\"}";
                 }
             }, timeoutMs: 15000);
 
             if (!completed)
                 return "{\"error\":\"timeout\"}";
             return result ?? "{\"ok\":true,\"action\":\"continue_game\"}";
+        }
+
+        /// <summary>
+        /// Find the full path to a save directory by its ID (directory name).
+        /// </summary>
+        private static string FindSavePath(string saveId)
+        {
+            try
+            {
+                var savePaths = new System.Collections.Generic.List<string>();
+                try
+                {
+                    string syncedPath = XRLCore.SyncedPath;
+                    if (!string.IsNullOrEmpty(syncedPath))
+                        savePaths.Add(System.IO.Path.Combine(syncedPath, "Saves"));
+                }
+                catch { }
+                try { savePaths.Add(XRLCore.SavePath); } catch { }
+                savePaths.Add(System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + "Low",
+                    "Freehold Games", "CavesOfQud", "Synced", "Saves"));
+                savePaths.Add(System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + "Low",
+                    "Freehold Games", "CavesOfQud", "Saves"));
+
+                foreach (var path in savePaths)
+                {
+                    if (string.IsNullOrEmpty(path) || !System.IO.Directory.Exists(path))
+                        continue;
+                    var candidate = System.IO.Path.Combine(path, saveId);
+                    if (System.IO.Directory.Exists(candidate))
+                        return candidate;
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>
@@ -642,6 +794,484 @@ namespace CoQMcpBridge
 
             if (!completed)
                 return "{\"error\":\"timeout waiting for main thread\"}";
+            return result ?? "{\"error\":\"no result\"}";
+        }
+
+        /// <summary>
+        /// Automatically create a character in the EmbarkBuilder.
+        /// Strategy: select game mode "Classic", then char type "Random" (which
+        /// auto-generates a valid character), then call exitWithInfo().
+        /// Modules are enabled/disabled dynamically based on selections, so we
+        /// configure them in dependency order and re-check after each step.
+        /// </summary>
+        private static string ChargenAuto()
+        {
+            string result = null;
+            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            {
+                try
+                {
+                    var builder = UnityEngine.Object.FindObjectOfType<XRL.CharacterBuilds.EmbarkBuilder>();
+                    if (builder == null)
+                    {
+                        result = "{\"error\":\"EmbarkBuilder not found — are you on the chargen screen?\"}";
+                        return;
+                    }
+
+                    var builderType = typeof(XRL.CharacterBuilds.EmbarkBuilder);
+                    var baseModuleType = FindType("XRL.CharacterBuilds.AbstractEmbarkBuilderModule");
+
+                    // Get ALL modules (not just enabled) from the protected 'modules' field
+                    var modulesField = builderType.GetField("modules",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                    var allModules = modulesField?.GetValue(builder) as System.Collections.IEnumerable;
+
+                    // Reflection helpers
+                    var randomNoUI = baseModuleType?.GetMethod("RandomSelectionNoUI",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var isValid = baseModuleType?.GetMethod("IsDataValid",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var initFromSeed = baseModuleType?.GetMethod("InitFromSeed",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var getEnabled = baseModuleType?.GetMethod("get_enabled",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    var steps = new System.Collections.Generic.List<string>();
+
+                    // Helper: find a module by type name
+                    System.Func<string, object> findModule = (string typeName) =>
+                    {
+                        if (allModules == null) return null;
+                        foreach (var m in allModules)
+                        {
+                            if (m == null) continue;
+                            if (m.GetType().Name == typeName) return m;
+                        }
+                        return null;
+                    };
+
+                    // Helper: get enabled modules
+                    System.Func<System.Collections.Generic.List<object>> getEnabledModules = () =>
+                    {
+                        var list = new System.Collections.Generic.List<object>();
+                        if (allModules == null) return list;
+                        foreach (var m in allModules)
+                        {
+                            if (m == null) continue;
+                            try
+                            {
+                                if (getEnabled != null && (bool)getEnabled.Invoke(m, null))
+                                    list.Add(m);
+                            }
+                            catch { }
+                        }
+                        return list;
+                    };
+
+                    // Helper: check all enabled modules valid
+                    System.Func<System.Collections.Generic.List<string>> checkValid = () =>
+                    {
+                        var issues = new System.Collections.Generic.List<string>();
+                        foreach (var m in getEnabledModules())
+                        {
+                            try
+                            {
+                                bool valid = isValid != null && (bool)isValid.Invoke(m, null);
+                                if (!valid)
+                                    issues.Add(m.GetType().Name);
+                            }
+                            catch { issues.Add(m.GetType().Name + " (error)"); }
+                        }
+                        return issues;
+                    };
+
+                    // Helper: random-select all enabled modules
+                    System.Func<int, int> randomSelectAll = (int seed) =>
+                    {
+                        int count = 0;
+                        foreach (var m in getEnabledModules())
+                        {
+                            try
+                            {
+                                if (initFromSeed != null)
+                                {
+                                    var ips = initFromSeed.GetParameters();
+                                    if (ips.Length == 1 && ips[0].ParameterType == typeof(int))
+                                        initFromSeed.Invoke(m, new object[] { seed });
+                                }
+                                if (randomNoUI != null)
+                                {
+                                    randomNoUI.Invoke(m, null);
+                                    count++;
+                                }
+                            }
+                            catch { }
+                        }
+                        return count;
+                    };
+
+                    // Step 1: Select game mode "Classic" on QudGamemodeModule
+                    var gameModeModule = findModule("QudGamemodeModule");
+                    if (gameModeModule != null)
+                    {
+                        var selectMode = gameModeModule.GetType().GetMethod("SelectMode",
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (selectMode != null)
+                        {
+                            System.Console.WriteLine("[mcp] ChargenAuto: selecting game mode 'Classic'");
+                            selectMode.Invoke(gameModeModule, new object[] { "Classic" });
+                            steps.Add("selected_game_mode=Classic");
+                        }
+                        else
+                        {
+                            steps.Add("SelectMode_not_found");
+                        }
+                    }
+                    else
+                    {
+                        steps.Add("QudGamemodeModule_not_found");
+                    }
+
+                    // Step 2: Select char type "Random" on QudChartypeModule
+                    var charTypeModule = findModule("QudChartypeModule");
+                    if (charTypeModule != null)
+                    {
+                        var selectType = charTypeModule.GetType().GetMethod("selectType",
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (selectType == null)
+                            selectType = charTypeModule.GetType().GetMethod("SelectType",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (selectType != null)
+                        {
+                            System.Console.WriteLine("[mcp] ChargenAuto: selecting char type 'Random'");
+                            selectType.Invoke(charTypeModule, new object[] { "Random" });
+                            steps.Add("selected_char_type=Random");
+                        }
+                        else
+                        {
+                            steps.Add("selectType_not_found");
+                        }
+                    }
+                    else
+                    {
+                        steps.Add("QudChartypeModule_not_found");
+                    }
+
+                    // Step 3: Random-select any remaining enabled modules (pass 1)
+                    int seed = new System.Random().Next();
+                    int randomized = randomSelectAll(seed);
+                    steps.Add("randomized_modules=" + randomized);
+                    System.Console.WriteLine("[mcp] ChargenAuto: pass 1 randomized " + randomized + " modules");
+
+                    // Step 3b: Random-select again (pass 2) — dependent modules
+                    // (like subtype) may need a second pass after their
+                    // dependencies (like genotype) have been configured.
+                    int randomized2 = randomSelectAll(seed + 500);
+                    steps.Add("randomized_modules_pass2=" + randomized2);
+                    System.Console.WriteLine("[mcp] ChargenAuto: pass 2 randomized " + randomized2 + " modules");
+
+                    // Step 3c: Third pass with fresh seeds for any remaining invalid
+                    int randomized3 = randomSelectAll(seed + 1000);
+                    steps.Add("randomized_modules_pass3=" + randomized3);
+
+                    // Step 4: For any remaining invalid modules, try selecting
+                    // the first available option via module-specific methods
+                    var invalidModules = checkValid();
+                    foreach (var modName in invalidModules)
+                    {
+                        var mod = findModule(modName);
+                        if (mod == null) continue;
+                        try
+                        {
+                            // Try SelectSubtype on QudSubtypeModule
+                            if (modName == "QudSubtypeModule")
+                            {
+                                var getSubtypes = mod.GetType().GetMethod("get_subtypes",
+                                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                                var getAvail = mod.GetType().GetMethod("getAvailableSelections",
+                                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                                var selectSubtype = mod.GetType().GetMethod("SelectSubtype",
+                                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                                
+                                if (selectSubtype != null)
+                                {
+                                    // Try getAvailableSelections first
+                                    object selections = null;
+                                    if (getAvail != null)
+                                        selections = getAvail.Invoke(mod, null);
+                                    
+                                    if (selections is System.Collections.IEnumerable seqs)
+                                    {
+                                        foreach (var sel in seqs)
+                                        {
+                                            if (sel == null) continue;
+                                            // Try to get an ID or Name from the selection
+                                            var selType = sel.GetType();
+                                            string id = null;
+                                            var idProp = selType.GetProperty("ID") ?? selType.GetProperty("Id") ?? selType.GetProperty("id");
+                                            var nameProp = selType.GetProperty("Name") ?? selType.GetProperty("name");
+                                            var idField = selType.GetField("ID") ?? selType.GetField("Id") ?? selType.GetField("id");
+                                            var nameField = selType.GetField("Name") ?? selType.GetField("name");
+                                            
+                                            if (idProp != null) id = idProp.GetValue(sel, null)?.ToString();
+                                            else if (idField != null) id = idField.GetValue(sel)?.ToString();
+                                            else if (nameProp != null) id = nameProp.GetValue(sel, null)?.ToString();
+                                            else if (nameField != null) id = nameField.GetValue(sel)?.ToString();
+                                            else id = sel.ToString();
+                                            
+                                            if (!string.IsNullOrEmpty(id))
+                                            {
+                                                System.Console.WriteLine("[mcp] ChargenAuto: selecting subtype '" + id + "'");
+                                                selectSubtype.Invoke(mod, new object[] { id });
+                                                steps.Add("selected_subtype=" + id);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Fallback: try get_subtypes
+                                        if (getSubtypes != null)
+                                        {
+                                            var subtypes = getSubtypes.Invoke(mod, null) as System.Collections.IEnumerable;
+                                            if (subtypes != null)
+                                            {
+                                                foreach (var st in subtypes)
+                                                {
+                                                    if (st == null) continue;
+                                                    string id = st.ToString();
+                                                    var stType = st.GetType();
+                                                    var nameProp = stType.GetProperty("Name");
+                                                    var nameField = stType.GetField("Name");
+                                                    if (nameProp != null) id = nameProp.GetValue(st, null)?.ToString() ?? id;
+                                                    else if (nameField != null) id = nameField.GetValue(st)?.ToString() ?? id;
+                                                    
+                                                    if (!string.IsNullOrEmpty(id))
+                                                    {
+                                                        System.Console.WriteLine("[mcp] ChargenAuto: selecting subtype '" + id + "'");
+                                                        selectSubtype.Invoke(mod, new object[] { id });
+                                                        steps.Add("selected_subtype=" + id);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Generic: try RandomSelectionNoUI one more time
+                            if (isValid != null && !(bool)isValid.Invoke(mod, null) && randomNoUI != null)
+                            {
+                                if (initFromSeed != null)
+                                {
+                                    var ips = initFromSeed.GetParameters();
+                                    if (ips.Length == 1 && ips[0].ParameterType == typeof(int))
+                                        initFromSeed.Invoke(mod, new object[] { seed + 2000 });
+                                }
+                                randomNoUI.Invoke(mod, null);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            System.Console.WriteLine("[mcp] ChargenAuto: fix " + modName + " error: " + e.Message);
+                        }
+                    }
+
+                    // Step 5: Check final validity
+                    var remainingInvalid = checkValid();
+                    var enabledModules = getEnabledModules();
+                    int validCount = enabledModules.Count - remainingInvalid.Count;
+
+                    System.Console.WriteLine("[mcp] ChargenAuto: " + validCount + "/" + enabledModules.Count + " valid");
+
+                    // Build module status
+                    var moduleStatuses = new System.Collections.Generic.List<string>();
+                    foreach (var m in enabledModules)
+                    {
+                        try
+                        {
+                            bool valid = isValid != null && (bool)isValid.Invoke(m, null);
+                            moduleStatuses.Add("{\"module\":\"" + Json.Escape(m.GetType().Name) +
+                                "\",\"valid\":" + (valid ? "true" : "false") + "}");
+                        }
+                        catch
+                        {
+                            moduleStatuses.Add("{\"module\":\"" + Json.Escape(m.GetType().Name) + "\",\"valid\":false}");
+                        }
+                    }
+
+                    // Step 6: Try exitWithInfo() — boot modules (SpecificCharacterInit,
+                    // SpecificBootHandlers, GameBoot) have no user-selectable data and
+                    // may always report invalid, but exitWithInfo() should still work
+                    // if all user-facing modules are valid.
+                    {
+                        try
+                        {
+                            var exitMethod = builderType.GetMethod("exitWithInfo",
+                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                            if (exitMethod != null)
+                            {
+                                exitMethod.Invoke(builder, null);
+                                result = "{\"ok\":true,\"action\":\"chargen_auto\",\"steps\":[\"" +
+                                         string.Join("\",\"", steps) + "\"],\"modulesValid\":" + validCount +
+                                         ",\"modulesTotal\":" + enabledModules.Count +
+                                         ",\"modules\":[" + string.Join(",", moduleStatuses) + "]}";
+                                return;
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            result = "{\"error\":\"exitWithInfo failed: " + Json.Escape(e.InnerException?.Message ?? e.Message) +
+                                     "\",\"steps\":[\"" + string.Join("\",\"", steps) + "\"],\"modulesValid\":" + validCount +
+                                     ",\"invalidModules\":[\"" + string.Join("\",\"", remainingInvalid) + "\"]}";
+                            return;
+                        }
+                    }
+
+                    result = "{\"ok\":false,\"action\":\"chargen_auto\",\"steps\":[\"" +
+                             string.Join("\",\"", steps) +
+                             "\"],\"modulesValid\":" + validCount +
+                             ",\"modulesTotal\":" + enabledModules.Count +
+                             ",\"invalidModules\":[\"" + string.Join("\",\"", remainingInvalid) +
+                             "\"],\"modules\":[" + string.Join(",", moduleStatuses) + "]}";
+                }
+                catch (Exception e)
+                {
+                    result = "{\"error\":\"" + Json.Escape(e.ToString()) + "\"}";
+                }
+            }, timeoutMs: 30000);
+
+            if (!completed)
+                return "{\"error\":\"timeout waiting for main thread\"}";
+            return result ?? "{\"error\":\"no result\"}";
+        }
+
+        /// <summary>
+        /// Get the current state of character creation modules.
+        /// Returns a list of enabled modules with their validity status,
+        /// errors, and current data summary.
+        /// </summary>
+        private static string ChargenState()
+        {
+            string result = null;
+            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            {
+                try
+                {
+                    var builder = UnityEngine.Object.FindObjectOfType<XRL.CharacterBuilds.EmbarkBuilder>();
+                    if (builder == null)
+                    {
+                        result = "{\"error\":\"EmbarkBuilder not found\"}";
+                        return;
+                    }
+
+                    var builderType = typeof(XRL.CharacterBuilds.EmbarkBuilder);
+                    var baseModuleType = FindType("XRL.CharacterBuilds.AbstractEmbarkBuilderModule");
+
+                    var getEnabledModules = builderType.GetMethod("get_enabledModules",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var modules = getEnabledModules?.Invoke(builder, null) as System.Collections.IEnumerable;
+
+                    var isValid = baseModuleType?.GetMethod("IsDataValid",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var dataErrorsProp = baseModuleType?.GetProperty("DataErrors",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var dataWarningsProp = baseModuleType?.GetProperty("DataWarnings",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var getData = baseModuleType?.GetMethod("getData",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    var getEnabled = baseModuleType?.GetMethod("get_enabled",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    var moduleList = new System.Collections.Generic.List<string>();
+                    if (modules != null)
+                    {
+                        foreach (var module in modules)
+                        {
+                            if (module == null) continue;
+                            var mt = module.GetType();
+                            string name = mt.Name;
+
+                            bool valid = false;
+                            bool enabled = true;
+                            string errors = "";
+                            string warnings = "";
+                            string dataSummary = "";
+
+                            try { if (isValid != null) valid = (bool)isValid.Invoke(module, null); } catch { }
+                            try { if (getEnabled != null) enabled = (bool)getEnabled.Invoke(module, null); } catch { }
+                            try
+                            {
+                                if (dataErrorsProp != null)
+                                {
+                                    var v = dataErrorsProp.GetValue(module, null);
+                                    if (v != null) errors = v.ToString();
+                                }
+                            } catch { }
+                            try
+                            {
+                                if (dataWarningsProp != null)
+                                {
+                                    var v = dataWarningsProp.GetValue(module, null);
+                                    if (v != null) warnings = v.ToString();
+                                }
+                            } catch { }
+
+                            // Try to get a data summary (e.g. selected genotype name)
+                            try
+                            {
+                                if (getData != null)
+                                {
+                                    var data = getData.Invoke(module, null);
+                                    if (data != null)
+                                    {
+                                        var sb = new System.Text.StringBuilder();
+                                        foreach (var f in data.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+                                        {
+                                            try
+                                            {
+                                                var val = f.GetValue(data);
+                                                if (val != null)
+                                                {
+                                                    string vs = val.ToString();
+                                                    if (vs.Length > 60) vs = vs.Substring(0, 60);
+                                                    if (sb.Length > 0) sb.Append(", ");
+                                                    sb.Append(f.Name).Append("=").Append(vs);
+                                                }
+                                            }
+                                            catch { }
+                                        }
+                                        dataSummary = sb.ToString();
+                                    }
+                                }
+                            }
+                            catch { }
+
+                            moduleList.Add("{\"module\":\"" + Json.Escape(name) +
+                                "\",\"enabled\":" + (enabled ? "true" : "false") +
+                                ",\"valid\":" + (valid ? "true" : "false") +
+                                (errors.Length > 0 ? ",\"errors\":\"" + Json.Escape(errors) + "\"" : "") +
+                                (warnings.Length > 0 ? ",\"warnings\":\"" + Json.Escape(warnings) + "\"" : "") +
+                                (dataSummary.Length > 0 ? ",\"data\":\"" + Json.Escape(dataSummary) + "\"" : "") +
+                                "}");
+                        }
+                    }
+
+                    // Get current view
+                    string view = SafeGetView();
+
+                    result = "{\"ok\":true,\"action\":\"chargen_state\",\"view\":\"" + Json.Escape(view) +
+                             "\",\"modules\":[" + string.Join(",", moduleList) + "]}";
+                }
+                catch (Exception e)
+                {
+                    result = "{\"error\":\"" + Json.Escape(e.ToString()) + "\"}";
+                }
+            }, timeoutMs: 10000);
+
+            if (!completed)
+                return "{\"error\":\"timeout\"}";
             return result ?? "{\"error\":\"no result\"}";
         }
 
@@ -1003,6 +1633,145 @@ namespace CoQMcpBridge
         }
 
         /// <summary>
+        /// Confirm the current popup. For Yes/No popups, this activates the
+        /// "Yes" button. Tries multiple approaches:
+        /// 1. Call commandCallback delegate via DynamicInvoke
+        /// 2. Call OnActivateCommand with a QudMenuItem
+        /// 3. Find and click a button GameObject
+        /// </summary>
+        private static string ConfirmPopup(string command)
+        {
+            string result = null;
+            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            {
+                try
+                {
+                    var popupType = FindType("Qud.UI.PopupMessage");
+                    if (popupType == null)
+                    {
+                        result = "{\"error\":\"PopupMessage type not found\"}";
+                        return;
+                    }
+
+                    var instance = UnityEngine.Object.FindObjectOfType(popupType);
+                    if (instance == null)
+                    {
+                        result = "{\"error\":\"no active popup\"}";
+                        return;
+                    }
+
+                    // Approach 1: Call commandCallback delegate via DynamicInvoke
+                    var callbackField = popupType.GetField("commandCallback",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (callbackField != null)
+                    {
+                        var callback = callbackField.GetValue(instance);
+                        if (callback != null)
+                        {
+                            var cbType = callback.GetType();
+                            var invokeMethod = cbType.GetMethod("Invoke");
+                            if (invokeMethod != null)
+                            {
+                                var cbParams = invokeMethod.GetParameters();
+                                if (cbParams.Length == 1)
+                                {
+                                    // Try to create the right parameter type
+                                    var paramType = cbParams[0].ParameterType;
+                                    object arg = null;
+                                    if (paramType == typeof(string))
+                                        arg = command;
+                                    else if (paramType.Name == "QudMenuItem")
+                                    {
+                                        // Create a QudMenuItem with the command as text/command
+                                        var menuItemType = FindType("Qud.UI.QudMenuItem");
+                                        if (menuItemType != null)
+                                        {
+                                            arg = System.Activator.CreateInstance(menuItemType);
+                                            // Try to set Command or Text property
+                                            var cmdProp = menuItemType.GetProperty("Command") ?? menuItemType.GetProperty("command");
+                                            var textProp = menuItemType.GetProperty("Text") ?? menuItemType.GetProperty("text");
+                                            var cmdField = menuItemType.GetField("Command") ?? menuItemType.GetField("command");
+                                            var textField = menuItemType.GetField("Text") ?? menuItemType.GetField("text");
+                                            if (cmdProp != null) cmdProp.SetValue(arg, command, null);
+                                            else if (cmdField != null) cmdField.SetValue(arg, command);
+                                            if (textProp != null) textProp.SetValue(arg, command, null);
+                                            else if (textField != null) textField.SetValue(arg, command);
+                                        }
+                                    }
+                                    
+                                    if (arg != null)
+                                    {
+                                        try
+                                        {
+                                            callback.GetType().GetMethod("Invoke").Invoke(callback, new[] { arg });
+                                            result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"callback\",\"command\":\"" + Json.Escape(command) + "\"}";
+                                            return;
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            System.Console.WriteLine("[mcp] confirm_popup callback error: " + e.InnerException?.Message);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Approach 2: Try OnActivateCommand with a QudMenuItem
+                    var onActivate = popupType.GetMethod("OnActivateCommand",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (onActivate != null)
+                    {
+                        var menuItemType = FindType("Qud.UI.QudMenuItem");
+                        if (menuItemType != null)
+                        {
+                            var menuItem = System.Activator.CreateInstance(menuItemType);
+                            var cmdProp = menuItemType.GetProperty("Command") ?? menuItemType.GetProperty("command");
+                            var textProp = menuItemType.GetProperty("Text") ?? menuItemType.GetProperty("text");
+                            var cmdField = menuItemType.GetField("Command") ?? menuItemType.GetField("command");
+                            var textField = menuItemType.GetField("Text") ?? menuItemType.GetField("text");
+                            if (cmdProp != null) cmdProp.SetValue(menuItem, command, null);
+                            else if (cmdField != null) cmdField.SetValue(menuItem, command);
+                            if (textProp != null) textProp.SetValue(menuItem, command, null);
+                            else if (textField != null) textField.SetValue(menuItem, command);
+                            
+                            onActivate.Invoke(instance, new[] { menuItem });
+                            result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"OnActivateCommand\",\"command\":\"" + Json.Escape(command) + "\"}";
+                            return;
+                        }
+                    }
+
+                    // Approach 3: Find a button with "Yes" text and click it
+                    var monoBehaviour = instance as UnityEngine.MonoBehaviour;
+                    if (monoBehaviour != null)
+                    {
+                        var buttons = monoBehaviour.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+                        foreach (var btn in buttons)
+                        {
+                            var text = btn.GetComponentInChildren<UnityEngine.UI.Text>();
+                            if (text != null && text.text.ToLower().Contains(command.ToLower()))
+                            {
+                                btn.onClick.Invoke();
+                                result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"button_click\",\"command\":\"" + Json.Escape(command) + "\"}";
+                                return;
+                            }
+                        }
+                    }
+
+                    result = "{\"error\":\"no way to confirm popup\"}";
+                }
+                catch (Exception e)
+                {
+                    result = "{\"error\":\"" + Json.Escape(e.InnerException?.Message ?? e.Message) + "\"}";
+                }
+            }, timeoutMs: 5000);
+
+            if (!completed)
+                return "{\"error\":\"timeout\"}";
+            return result ?? "{\"ok\":true,\"action\":\"confirm_popup\"}";
+        }
+
+        /// <summary>
         /// Find a uGUI screen instance by type name and call a method on it.
         /// </summary>
         private static bool TryCallScreenExit(string typeName, string methodName)
@@ -1083,6 +1852,85 @@ namespace CoQMcpBridge
         {
             PushCommandSafe("CmdSave");
             return "{\"ok\":true,\"action\":\"save\"}";
+        }
+
+        /// <summary>
+        /// Directly save the game by calling XRLGame.SaveGame() or QuickSave()
+        /// on the main thread, bypassing the CmdSave command which may open
+        /// a dialog or require confirmation.
+        /// </summary>
+        private static string SaveGame()
+        {
+            string result = null;
+            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            {
+                try
+                {
+                    var game = XRLCore.Core?.Game;
+                    if (game == null)
+                    {
+                        result = "{\"error\":\"no active game to save\"}";
+                        return;
+                    }
+
+                    // Try QuickSave first (simplest, no params)
+                    var quickSave = game.GetType().GetMethod("QuickSave",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (quickSave != null)
+                    {
+                        System.Console.WriteLine("[mcp] SaveGame: calling QuickSave()");
+                        quickSave.Invoke(game, null);
+                        result = "{\"ok\":true,\"action\":\"save_game\",\"method\":\"QuickSave\"}";
+                        return;
+                    }
+
+                    // Fallback: SaveGame(GameName, Message, CopyCache, CopyPrimary)
+                    var saveGame = game.GetType().GetMethod("SaveGame",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (saveGame != null)
+                    {
+                        var ps = saveGame.GetParameters();
+                        var args = new object[ps.Length];
+                        for (int i = 0; i < ps.Length; i++)
+                        {
+                            var p = ps[i];
+                            if (p.ParameterType == typeof(string))
+                                args[i] = null;
+                            else if (p.ParameterType == typeof(bool))
+                                args[i] = true;
+                            else if (p.HasDefaultValue)
+                                args[i] = p.DefaultValue;
+                            else
+                                args[i] = null;
+                        }
+                        System.Console.WriteLine("[mcp] SaveGame: calling SaveGame() with " + ps.Length + " params");
+                        saveGame.Invoke(game, args);
+                        result = "{\"ok\":true,\"action\":\"save_game\",\"method\":\"SaveGame\"}";
+                        return;
+                    }
+
+                    // Last resort: XRLCore.Core.SaveGame(null)
+                    var coreSave = typeof(XRLCore).GetMethod("SaveGame",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (coreSave != null)
+                    {
+                        System.Console.WriteLine("[mcp] SaveGame: calling XRLCore.SaveGame(null)");
+                        coreSave.Invoke(XRLCore.Core, new object[] { null });
+                        result = "{\"ok\":true,\"action\":\"save_game\",\"method\":\"XRLCore.SaveGame\"}";
+                        return;
+                    }
+
+                    result = "{\"error\":\"no save method found\"}";
+                }
+                catch (Exception e)
+                {
+                    result = "{\"error\":\"" + Json.Escape(e.InnerException?.Message ?? e.Message) + "\"}";
+                }
+            }, timeoutMs: 30000);
+
+            if (!completed)
+                return "{\"error\":\"timeout\"}";
+            return result ?? "{\"error\":\"no result\"}";
         }
 
         /// <summary>
