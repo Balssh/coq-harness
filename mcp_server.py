@@ -343,6 +343,9 @@ def _fmt_compact(state: dict) -> str:
         lines.append(f"Screen: {state.get('screen', '?')}  View stack: {state.get('viewStack', '')}")
         return _clean("\n".join(lines))
     p = state["player"]
+    screen = state.get("screen")
+    if not popup and screen not in (None, "", "Stage"):
+        lines.append(f"SCREEN OPEN: {screen}. Movement and turns are blocked until close_menu closes it.")
     if _bridge is not None and _bridge.warnings:
         lines += [f"WARNING: {w}" for w in _bridge.warnings]
         _bridge.warnings.clear()
@@ -774,14 +777,35 @@ def confirm_popup(button: str = "Yes") -> str:
     return _act("confirm_popup", f"Pressed popup button {button!r}", command=button)
 
 
-@server.tool(description="Open a game screen. Valid screens: inventory, equipment, character, abilities, skills, quests, journal, factions, effects, messages, help, options.")
+@server.tool(description="Open a game screen (close it again with close_menu). Valid screens: inventory, equipment, "
+                         "character, abilities, skills, quests, journal, factions, effects, messages, help.")
 def open_screen(screen: str) -> str:
-    return _act("open_screen", f"Opened screen {screen}", screen=screen)
+    out = _act("open_screen", f"Opened screen {screen}", screen=screen)
+    if out.startswith("Opened") and get_bridge().get_state().get("screen") in (None, "", "Stage"):
+        return f"open_screen {screen}: no screen opened." + out[out.index("\n"):]
+    return out
 
 
 @server.tool(description="Close the open popup (Cancel/Continue) or menu/screen.")
 def close_menu() -> str:
-    return _act("close_menu", "Closed menu")
+    bridge = get_bridge()
+    before = bridge.get_state().get("screen")
+    result = bridge.send_command("close_menu")
+    if "error" in result:
+        return f"FAILED close_menu: {result['error']}\n\n{_fmt_state(bridge.get_state())}"
+    state = bridge.get_state()
+    for _ in range(10):  # screens close on a later frame
+        if state.get("screen") != before or state.get("popup"):
+            break
+        time.sleep(0.2)
+        state = bridge.get_state()
+    after = state.get("screen")
+    if result.get("method") == "none" and before in (None, "", "Stage"):
+        return f"Nothing to close.\n{_fmt_state(state)}"
+    if before not in (None, "", "Stage") and after == before and not state.get("popup"):
+        return (f"close_menu did NOT close the {before} screen (tried: {result.get('method', '?')}). "
+                f"Keys can't close it; report this as a bridge bug.\n{_fmt_state(state)}")
+    return f"Closed {before or 'menu'}.\n{_fmt_state(state)}"
 
 
 @server.tool(description="Enter look mode to examine things.")
@@ -839,7 +863,9 @@ def continue_game(save_id: str = "") -> str:
             break
         time.sleep(3)
     if not res.get("ok"):
-        return "continue_game failed: " + json.dumps(res, default=str)
+        hint = (" continue_game only works from the main menu; to reload, use quit_to_menu first."
+                if "already in game" in str(res.get("error", "")) else "")
+        return "continue_game failed: " + json.dumps(res, default=str) + hint
     deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         time.sleep(0.5)

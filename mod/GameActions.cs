@@ -1465,9 +1465,10 @@ namespace CoQMcpBridge
                     {
                         case "":
                         case "Stage":
-                            // Console modals (look mode, etc.) — push Escape key
-                            Keyboard.PushKey(KeyCode.Escape);
-                            closed = "esc_key";
+                            // Nothing open (look mode is its own "Looker" view).
+                            // Escape here opens the system menu (Control
+                            // Mapping / Options / Save and Quit / Abandon).
+                            closed = "none";
                             break;
 
                         case "PopupMessage":
@@ -1504,8 +1505,7 @@ namespace CoQMcpBridge
                             // Hide() on it. These methods internally schedule the
                             // view pop safely (next frame, from within the screen's
                             // own update loop).
-                            // Some views are registered under a name that isn't their class.
-                            string screenType = "Qud.UI." + (view == "ModernTrade" ? "TradeScreen" : view);
+                            var screenType = ScreenTypeForView(view);
                             if (TryCallScreenExit(screenType, "Exit"))
                             {
                                 closed = "Exit";
@@ -1551,13 +1551,7 @@ namespace CoQMcpBridge
         {
             try
             {
-                // Try Qud.UI.{viewName}
-                var type = FindType("Qud.UI." + viewName);
-                if (type == null)
-                {
-                    // Try XRL.UI.{viewName}
-                    type = FindType("XRL.UI." + viewName);
-                }
+                var type = ScreenTypeForView(viewName);
                 if (type == null) return false;
 
                 var instance = UnityEngine.Object.FindObjectOfType(type);
@@ -1687,11 +1681,51 @@ namespace CoQMcpBridge
         /// <summary>
         /// Find a uGUI screen instance by type name and call a method on it.
         /// </summary>
-        private static bool TryCallScreenExit(string typeName, string methodName)
+        private static System.Collections.Generic.Dictionary<string, Type> _viewTypes;
+
+        /// <summary>
+        /// The screen class behind a view name. The name often differs from the
+        /// class: most views are registered with [XRL.UI.UIView("ID")] on their
+        /// class, and some are pushed by name with no attribute at all
+        /// (XRLManual.ShowHelp pushes "ModernHelp" and drives Qud.UI.HelpScreen).
+        /// Those follow the pattern "Modern{X}" -> "{X}Screen".
+        /// </summary>
+        private static Type ScreenTypeForView(string view)
+        {
+            if (string.IsNullOrEmpty(view)) return null;
+            string bare = view.StartsWith("Modern") ? view.Substring("Modern".Length) : view;
+            foreach (var name in new[] { view, bare + "Screen", view + "Screen" })
+            {
+                var direct = FindType("Qud.UI." + name) ?? FindType("XRL.UI." + name);
+                if (direct != null) return direct;
+            }
+            if (_viewTypes == null)
+            {
+                var map = new System.Collections.Generic.Dictionary<string, Type>();
+                Type[] types;
+                try { types = typeof(XRL.UI.UIView).Assembly.GetTypes(); }
+                catch (ReflectionTypeLoadException e) { types = e.Types; }
+                foreach (var t in types)
+                {
+                    if (t == null) continue;
+                    object[] attrs;
+                    try { attrs = t.GetCustomAttributes(typeof(XRL.UI.UIView), false); }
+                    catch { continue; }
+                    foreach (var a in attrs)
+                    {
+                        var id = a.GetType().GetField("ID")?.GetValue(a) as string;
+                        if (!string.IsNullOrEmpty(id) && !map.ContainsKey(id)) map[id] = t;
+                    }
+                }
+                _viewTypes = map;
+            }
+            return _viewTypes.TryGetValue(view, out var type) ? type : null;
+        }
+
+        private static bool TryCallScreenExit(Type type, string methodName)
         {
             try
             {
-                var type = FindType(typeName);
                 if (type == null) return false;
                 var instance = UnityEngine.Object.FindObjectOfType(type);
                 if (instance == null) return false;
@@ -1701,11 +1735,6 @@ namespace CoQMcpBridge
                 return true;
             }
             catch { return false; }
-        }
-
-        private static bool TryCallScreenHide(string typeName, string methodName)
-        {
-            return TryCallScreenExit(typeName, methodName);
         }
 
         private static Type FindType(string fullName)

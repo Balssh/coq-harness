@@ -188,7 +188,7 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
 | `press_key(key)` | No | Press a single key |
 | `press_command(command)` | Varies | Send raw Qud command (e.g. CmdFire) |
 | `open_screen(screen)` | No | Open inventory/equipment/skills/etc. |
-| `close_menu()` | No | Close menu/dialog (Escape) |
+| `close_menu()` | No | Close the open popup or screen through its own Exit/Cancel (does nothing on the plain map; Escape there would open the system menu) |
 | `choose_option(option)` | No | Select numbered dialogue option (1-9) |
 | `auto_explore()` | Yes | Trigger auto-explore |
 | `travel(direction)` | Yes | Travel to zone edge (cardinal only) |

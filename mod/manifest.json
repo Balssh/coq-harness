@@ -3,7 +3,7 @@
   "LoadOrder": 0,
   "Title": "CoQ MCP Bridge",
   "Description": "MCP server for external AI agents. Exposes game state and accepts commands over TCP on 127.0.0.1:47321.",
-  "Version": "0.13.9",
+  "Version": "0.13.10",
   "Author": "Balssh",
   "Tags": "Tool,AI,MCP"
 }
