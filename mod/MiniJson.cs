@@ -23,8 +23,18 @@ namespace CoQMcpBridge
 
             public int GetInt(string key, int fallback = 0)
             {
-                if (Fields.TryGetValue(key, out var n) && n is Num num) return (int)num.Value;
+                if (Fields.TryGetValue(key, out var n))
+                {
+                    if (n is Num num) return (int)num.Value;
+                    // Tolerate numbers sent as strings ("2") by loosely-typed clients.
+                    if (n is Str s && int.TryParse(s.Value.Trim(), out int parsed)) return parsed;
+                }
                 return fallback;
+            }
+
+            public bool Has(string key)
+            {
+                return Fields.TryGetValue(key, out var n) && !(n is Null);
             }
 
             public double GetNum(string key, double fallback = 0)

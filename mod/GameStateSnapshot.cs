@@ -31,6 +31,8 @@ namespace CoQMcpBridge
                 sb0.Append(Json.Bool("inMainMenu", IsInMainMenu()));
                 sb0.Append(",");
                 sb0.Append(Json.Str("viewStack", GetViewStack()));
+                sb0.Append(",");
+                AppendPopup(sb0);
                 sb0.Append("}");
                 return sb0.ToString();
             }
@@ -54,6 +56,8 @@ namespace CoQMcpBridge
             sb.Append(",");
             sb.Append(Json.Str("viewStack", GetViewStack()));
             sb.Append(",");
+            AppendPopup(sb);
+            sb.Append(",");
 
             AppendPlayer(sb, player);
             sb.Append(",");
@@ -75,6 +79,14 @@ namespace CoQMcpBridge
             return sb.ToString();
         }
 
+        // Open modern-UI popup (dialog, prompt, conversation) or null. Snapshot
+        // is produced on the main thread by PopupBridge; safe to read here.
+        private static void AppendPopup(StringBuilder sb)
+        {
+            sb.Append("\"popup\":");
+            sb.Append(PopupBridge.SnapshotJson ?? "null");
+        }
+
         private static void AppendPlayer(StringBuilder sb, GameObject player)
         {
             sb.Append("\"player\":{");
@@ -89,7 +101,7 @@ namespace CoQMcpBridge
             sb.Append(",");
             sb.Append(Json.Num("xp", SafeGet(() => player.GetStatValue("XP"), 0)));
             sb.Append(",");
-            sb.Append(Json.Num("xpNext", SafeGet(() => player.GetStatValue("XPForNextLevel"), 0)));
+            sb.Append(Json.Num("xpNext", SafeGet(() => XRL.World.Parts.Leveler.GetXPForLevel(player.GetStatValue("Level") + 1), 0)));
             sb.Append(",");
             sb.Append(Json.Num("qn", SafeGet(() => player.GetStatValue("Quickness"), 0)));
             sb.Append(",");
@@ -385,10 +397,6 @@ namespace CoQMcpBridge
                 sb.Append(Json.Num("segmentsPerDay", Calendar.TurnsPerDay));
                 sb.Append(",");
                 sb.Append(Json.Bool("isDay", Calendar.IsDay()));
-                sb.Append(",");
-                sb.Append(Json.Num("day", Calendar.GetDayOfYear(Calendar.TotalTimeTicks)));
-                sb.Append(",");
-                sb.Append(Json.Num("hour", Calendar.CurrentDaySegment / Calendar.TurnsPerHour));
             }
             catch { }
             sb.Append("}");

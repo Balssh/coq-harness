@@ -41,13 +41,27 @@ namespace CoQMcpBridge
             return done.Wait(timeoutMs);
         }
 
+        void Awake()
+        {
+            Application.runInBackground = true;
+        }
+
         void Update()
         {
+            // Without this Unity stops calling Update() when the window loses
+            // focus, which stalls every queued action and the popup snapshot.
+            // Qud's options reset it (it follows the "music in background"
+            // setting), so re-assert it every frame.
+            if (!Application.runInBackground)
+                Application.runInBackground = true;
+
             while (_queue.TryDequeue(out Action action))
             {
                 try { action(); }
                 catch (Exception e) { Console.WriteLine("[mcp] MainThread error: " + e); }
             }
+
+            PopupBridge.Tick();
         }
     }
 }

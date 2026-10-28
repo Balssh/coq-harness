@@ -33,8 +33,18 @@ namespace CoQMcpBridge
 
                 string action = cmd.GetStr("action", "");
 
+                // A modal popup blocks the game thread; queued commands would
+                // fire later in surprising ways. Make the caller answer it first.
+                if (PopupBridge.IsOpen && BlockedByPopup(action))
+                    return "{\"error\":\"a popup is open — answer it with respond_popup (option/button) or close_menu first\",\"popup\":" +
+                           (PopupBridge.SnapshotJson ?? "null") + "}";
+
                 switch (action)
                 {
+                    case "respond_popup":
+                        return RespondPopup(cmd.GetInt("option", 0), cmd.GetStr("button", ""),
+                                            cmd.GetBool("dismiss", false),
+                                            cmd.Has("text") ? cmd.GetStr("text", "") : null);
                     case "move":
                         return Move(cmd.GetStr("direction", ""));
                     case "wait":
@@ -54,7 +64,7 @@ namespace CoQMcpBridge
                     case "start_new_game":
                         return StartNewGame();
                     case "continue_game":
-                        return ContinueGame();
+                        return ContinueGame(cmd.GetStr("save_id", ""));
                     case "complete_chargen":
                         return CompleteChargen(cmd.GetStr("code", ""));
                     case "chargen_auto":
@@ -165,7 +175,7 @@ namespace CoQMcpBridge
                 case "drink":   command = "Drink"; break;
                 case "equip":
                 case "wear":
-                case "wield":
+                case "wield":   command = "Equip"; break;
                 case "apply":   command = "Apply"; break;
                 case "unequip": command = "Unequip"; break;
                 case "drop":    command = "Drop"; break;
@@ -189,7 +199,10 @@ namespace CoQMcpBridge
             {
                 try
                 {
-                    FireInventoryAction(capturedPlayer, capturedItem, capturedCommand);
+                    if (capturedCommand == "Equip")
+                        capturedPlayer.FireEvent(XRL.World.Event.New("CommandEquipObject", "Object", capturedItem));
+                    else
+                        FireInventoryAction(capturedPlayer, capturedItem, capturedCommand);
                 }
                 catch (Exception e)
                 {
@@ -278,7 +291,7 @@ namespace CoQMcpBridge
                 foreach (var part in body.GetParts())
                 {
                     var equipped = part.Equipped;
-                    if (equipped != null && equipped.DisplayNameOnly.ToLowerInvariant().Contains(lower))
+                    if (equipped != null && ColorUtility.StripFormatting(equipped.DisplayNameOnly).ToLowerInvariant().Contains(lower))
                         return equipped;
                 }
             }
@@ -289,7 +302,7 @@ namespace CoQMcpBridge
             {
                 foreach (var obj in inventory.Objects)
                 {
-                    if (obj != null && obj.DisplayNameOnly.ToLowerInvariant().Contains(lower))
+                    if (obj != null && ColorUtility.StripFormatting(obj.DisplayNameOnly).ToLowerInvariant().Contains(lower))
                         return obj;
                 }
             }
@@ -416,184 +429,89 @@ namespace CoQMcpBridge
         }
 
         /// <summary>
-        /// Continue the last save from the main menu. Tries multiple approaches:
-        /// 1. XRLGame.LoadCurrentGame(saveId, true, null) — static, takes save dir name
-        /// 2. XRLGame.LoadGame(fullPath, null, true, null) — static, takes full path
-        /// 3. Find Qud.UI.SaveManagement instance and call ContinueMenu()
-        /// 4. Run LoadCurrentGame on a background thread (it may block)
+        /// Continue a save the same way the main menu's Continue button does:
+        /// push "Pick:Continue" so the game thread (XRLCore._Start) opens the
+        /// save list and blocks in SaveManagement.ContinueMenu, which awaits
+        /// completionSource; then resolve completionSource with the chosen
+        /// SaveGameInfo. Defaults to the most recently written save.
         /// </summary>
-        private static string ContinueGame()
+        private static string ContinueGame(string saveId)
         {
-            string result = null;
-            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            if (SafeGetView() == "Stage")
+                return "{\"error\":\"already in game\"}";
+            if (string.IsNullOrEmpty(saveId))
+                saveId = FindMostRecentSave();
+            if (string.IsNullOrEmpty(saveId))
+                return "{\"error\":\"no saves found\"}";
+
+            var smType = FindType("Qud.UI.SaveManagement");
+            if (smType == null)
+                return "{\"error\":\"Qud.UI.SaveManagement not found\"}";
+
+            if (SafeGetView() != "ModernSaveManagement")
             {
-                try
+                string err = null;
+                BridgeMainThread.EnqueueAndWait(() =>
                 {
-                    string view = SafeGetView();
-                    if (view == "Stage")
+                    try
                     {
-                        result = "{\"error\":\"already in game\"}";
-                        return;
+                        var push = typeof(Keyboard).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                            .FirstOrDefault(m => m.Name == "PushMouseEvent" && m.GetParameters().Length == 2);
+                        if (push == null) { err = "Keyboard.PushMouseEvent not found"; return; }
+                        push.Invoke(null, new object[] { "Pick:Continue", null });
                     }
+                    catch (Exception e) { err = e.InnerException?.Message ?? e.Message; }
+                });
+                if (err != null)
+                    return "{\"error\":\"" + Json.Escape(err) + "\"}";
+            }
 
-                    // Find the most recent save directory
-                    string saveId = FindMostRecentSave();
-                    if (string.IsNullOrEmpty(saveId))
+            const BindingFlags Inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            string result = null;
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (result == null && DateTime.UtcNow < deadline)
+            {
+                System.Threading.Thread.Sleep(150);
+                BridgeMainThread.EnqueueAndWait(() =>
+                {
+                    try
                     {
-                        result = "{\"error\":\"no saves found\"}";
-                        return;
-                    }
+                        var inst = UnityEngine.Object.FindObjectOfType(smType) as UnityEngine.Component;
+                        if (inst == null || !inst.gameObject.activeInHierarchy) return;
+                        var tcs = smType.GetField("completionSource", Inst)?.GetValue(inst);
+                        var task = tcs?.GetType().GetProperty("Task")?.GetValue(tcs) as System.Threading.Tasks.Task;
+                        if (task == null || task.IsCompleted) return;
+                        var saves = smType.GetField("saves", Inst)?.GetValue(inst) as System.Collections.IEnumerable;
+                        if (saves == null) return;
 
-                    // Build the full path to the save directory
-                    string savePath = FindSavePath(saveId);
-                    System.Console.WriteLine("[mcp] ContinueGame: saveId=" + saveId + " path=" + savePath);
-
-                    var gameType = FindType("XRL.XRLGame");
-                    if (gameType == null)
-                    {
-                        result = "{\"error\":\"XRLGame type not found\"}";
-                        return;
-                    }
-
-                    // Approach 1: LoadCurrentGame(GameName, ShowPopup, GameState)
-                    var loadCurrent = gameType.GetMethod("LoadCurrentGame",
-                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadCurrent != null)
-                    {
-                        var ps = loadCurrent.GetParameters();
-                        
-                        // Read the character name from Primary.json
-                        string charName = saveId; // fallback to UUID
-                        try
+                        object chosen = null;
+                        var ids = new System.Collections.Generic.List<string>();
+                        foreach (var item in saves)
                         {
-                            var jsonPath = System.IO.Path.Combine(savePath ?? "", "Primary.json");
-                            if (System.IO.File.Exists(jsonPath))
-                            {
-                                var json = System.IO.File.ReadAllText(jsonPath);
-                                var match = System.Text.RegularExpressions.Regex.Match(json, "\"Name\"\\s*:\\s*\"([^\"]+)\"");
-                                if (match.Success) charName = match.Groups[1].Value;
-                            }
+                            if (item == null) continue;
+                            var info = item.GetType().GetField("SaveGame", Inst)?.GetValue(item) ?? item;
+                            var id = info.GetType().GetField("ID", Inst)?.GetValue(info) as string;
+                            ids.Add(id ?? "?");
+                            if (chosen == null && id == saveId) chosen = info;
                         }
-                        catch { }
-                        System.Console.WriteLine("[mcp] ContinueGame: charName=" + charName + " saveId=" + saveId);
-
-                        // Try both UUID and character name as GameName
-                        foreach (var gameName in new[] { charName, saveId })
+                        if (chosen == null)
                         {
-                            var args = new object[ps.Length];
-                            for (int i = 0; i < ps.Length; i++)
-                            {
-                                var p = ps[i];
-                                string pname = p.Name.ToLowerInvariant();
-                                if (pname == "gamename" || pname == "name" || pname == "id")
-                                    args[i] = gameName;
-                                else if (p.ParameterType == typeof(bool))
-                                    args[i] = true;
-                                else if (p.ParameterType.IsGenericType && 
-                                         p.ParameterType.GetGenericTypeDefinition() == typeof(System.Collections.Generic.Dictionary<,>))
-                                {
-                                    // Create an empty dictionary of the right type
-                                    args[i] = System.Activator.CreateInstance(p.ParameterType);
-                                }
-                                else if (p.HasDefaultValue)
-                                    args[i] = p.DefaultValue;
-                                else
-                                    args[i] = null;
-                            }
-                            System.Console.WriteLine("[mcp] Trying LoadCurrentGame with GameName=" + gameName + ", GameState=" + (args[ps.Length-1] != null ? "dict" : "null"));
-                            try
-                            {
-                                var t = new System.Threading.Thread(() =>
-                                {
-                                    try { loadCurrent.Invoke(null, args); }
-                                    catch (Exception e)
-                                    {
-                                        System.Console.WriteLine("[mcp] LoadCurrentGame(" + gameName + ") error: " + e.InnerException?.Message);
-                                    }
-                                }) { IsBackground = true, Name = "McpLoadGame" };
-                                t.Start();
-                                result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"gameName\":\"" + Json.Escape(gameName) + "\",\"method\":\"LoadCurrentGame\"}";
-                                return;
-                            }
-                            catch (Exception e)
-                            {
-                                System.Console.WriteLine("[mcp] LoadCurrentGame(" + gameName + ") invoke failed: " + e.Message);
-                            }
-                        }
-                    }
-
-                    // Approach 2: LoadGame(Path, Session, ShowPopup, GameState)
-                    var loadGame = gameType.GetMethod("LoadGame",
-                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (loadGame != null && !string.IsNullOrEmpty(savePath))
-                    {
-                        var ps = loadGame.GetParameters();
-                        var args = new object[ps.Length];
-                        for (int i = 0; i < ps.Length; i++)
-                        {
-                            var p = ps[i];
-                            string pname = p.Name.ToLowerInvariant();
-                            if (pname == "path")
-                                args[i] = savePath;
-                            else if (p.ParameterType == typeof(bool))
-                                args[i] = true;
-                            else if (p.HasDefaultValue)
-                                args[i] = p.DefaultValue;
-                            else
-                                args[i] = null;
-                        }
-                        System.Console.WriteLine("[mcp] Trying LoadGame with path=" + savePath);
-                        try
-                        {
-                            var t = new System.Threading.Thread(() =>
-                            {
-                                try { loadGame.Invoke(null, args); }
-                                catch (Exception e)
-                                {
-                                    System.Console.WriteLine("[mcp] LoadGame error: " + e);
-                                }
-                            }) { IsBackground = true, Name = "McpLoadGame2" };
-                            t.Start();
-                            result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"method\":\"LoadGame\"}";
+                            // Back out to the main menu rather than leave the list open.
+                            smType.GetMethod("Exit", Inst, null, Type.EmptyTypes, null)?.Invoke(inst, null);
+                            result = "{\"error\":\"save not found in save list\",\"saveId\":\"" + Json.Escape(saveId) +
+                                     "\",\"available\":[" + string.Join(",", ids.Select(i => "\"" + Json.Escape(i) + "\"")) + "]}";
                             return;
                         }
-                        catch (Exception e)
-                        {
-                            System.Console.WriteLine("[mcp] LoadGame invoke failed: " + e.Message);
-                        }
+                        tcs.GetType().GetMethod("TrySetResult").Invoke(tcs, new[] { chosen });
+                        result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"loading\":true}";
                     }
-
-                    // Approach 3: Use SaveManagement screen's ContinueMenu()
-                    var smType = FindType("Qud.UI.SaveManagement");
-                    if (smType != null)
+                    catch (Exception e)
                     {
-                        var smInstance = UnityEngine.Object.FindObjectOfType(smType);
-                        if (smInstance != null)
-                        {
-                            var continueMenu = smType.GetMethod("ContinueMenu",
-                                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                            if (continueMenu != null)
-                            {
-                                System.Console.WriteLine("[mcp] Trying SaveManagement.ContinueMenu()");
-                                continueMenu.Invoke(smInstance, null);
-                                result = "{\"ok\":true,\"action\":\"continue_game\",\"saveId\":\"" + Json.Escape(saveId) + "\",\"method\":\"SaveManagement.ContinueMenu\"}";
-                                return;
-                            }
-                        }
+                        result = "{\"error\":\"" + Json.Escape(e.InnerException?.Message ?? e.Message) + "\"}";
                     }
-
-                    result = "{\"error\":\"all load approaches failed\",\"saveId\":\"" + Json.Escape(saveId) + "\"}";
-                }
-                catch (Exception e)
-                {
-                    var inner = e.InnerException?.Message ?? e.Message;
-                    result = "{\"error\":\"" + Json.Escape(inner) + "\",\"stack\":\"" + Json.Escape(e.StackTrace ?? "") + "\"}";
-                }
-            }, timeoutMs: 15000);
-
-            if (!completed)
-                return "{\"error\":\"timeout\"}";
-            return result ?? "{\"ok\":true,\"action\":\"continue_game\"}";
+                });
+            }
+            return result ?? "{\"error\":\"save list did not open (view=" + Json.Escape(SafeGetView()) + ")\"}";
         }
 
         /// <summary>
@@ -1445,6 +1363,16 @@ namespace CoQMcpBridge
                     string view = SafeGetView();
                     string closed = "none";
 
+                    // Modern-UI popups (incl. conversations) sit on top of any
+                    // view: dismiss through the popup's own Cancel/Continue
+                    // button so the blocked game thread resumes cleanly.
+                    PopupBridge.Refresh();
+                    if (PopupBridge.IsOpen)
+                    {
+                        result = PopupBridge.Respond(0, null, true, null);
+                        return;
+                    }
+
                     switch (view)
                     {
                         case "":
@@ -1456,11 +1384,10 @@ namespace CoQMcpBridge
 
                         case "PopupMessage":
                         case "DynamicPopupMessage":
-                            // uGUI popup — find PopupMessage instance and call Hide().
-                            // DO NOT push escape or PopGameView — that exits the
-                            // underlying screen (e.g. EmbarkBuilder) too.
-                            TryHideAnyPopup();
-                            closed = "Popup.Hide";
+                            // View says popup but none is answerable (already
+                            // closing). Do nothing: Hide() or Escape here would
+                            // cancel the game's wait or exit the screen below.
+                            closed = "none";
                             break;
 
                         case "Looker":
@@ -1577,55 +1504,6 @@ namespace CoQMcpBridge
             return false;
         }
 
-        /// <summary>
-        /// Find any active PopupMessage (or WindowBase) instance and call Hide() on it.
-        /// </summary>
-        private static bool TryHideAnyPopup()
-        {
-            try
-            {
-                // Try PopupMessage first
-                var popupType = FindType("Qud.UI.PopupMessage");
-                if (popupType != null)
-                {
-                    var instance = UnityEngine.Object.FindObjectOfType(popupType);
-                    if (instance != null)
-                    {
-                        var hideMethod = popupType.GetMethod("Hide",
-                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                        if (hideMethod != null)
-                        {
-                            hideMethod.Invoke(instance, null);
-                            return true;
-                        }
-                    }
-                }
-
-                // Try WindowBase (base class of PopupMessage)
-                var windowType = FindType("Qud.UI.WindowBase");
-                if (windowType != null)
-                {
-                    var instances = UnityEngine.Object.FindObjectsOfType(windowType);
-                    foreach (var inst in instances)
-                    {
-                        if (inst == null) continue;
-                        // Only hide if it's not the Stage or MainMenu
-                        var name = inst.GetType().Name;
-                        if (name == "Stage" || name == "MainMenu" || name == "EmbarkBuilder") continue;
-                        var hideMethod = inst.GetType().GetMethod("Hide",
-                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                        if (hideMethod != null)
-                        {
-                            hideMethod.Invoke(inst, null);
-                            return true;
-                        }
-                    }
-                }
-            }
-            catch { }
-            return false;
-        }
-
         private static string SafeGetView()
         {
             try { return GameManager.Instance?.CurrentGameView ?? ""; }
@@ -1633,142 +1511,82 @@ namespace CoQMcpBridge
         }
 
         /// <summary>
-        /// Confirm the current popup. For Yes/No popups, this activates the
-        /// "Yes" button. Tries multiple approaches:
-        /// 1. Call commandCallback delegate via DynamicInvoke
-        /// 2. Call OnActivateCommand with a QudMenuItem
-        /// 3. Find and click a button GameObject
+        /// Press a popup button by command/label (default "Yes"). Falls back to
+        /// the console key for classic-UI popups (Options.ModernUI off).
         /// </summary>
         private static string ConfirmPopup(string command)
+        {
+            if (string.IsNullOrEmpty(command)) command = "Yes";
+            string captured = command;
+            return OnPopupOrClassic(
+                () => PopupBridge.Respond(0, captured, false, null),
+                () => Keyboard.PushKey(captured.ToLowerInvariant() == "no" ? KeyCode.N : KeyCode.Y),
+                "confirm_popup");
+        }
+
+        private static string RespondPopup(int option, string button, bool dismiss, string text)
         {
             string result = null;
             bool completed = BridgeMainThread.EnqueueAndWait(() =>
             {
-                try
-                {
-                    var popupType = FindType("Qud.UI.PopupMessage");
-                    if (popupType == null)
-                    {
-                        result = "{\"error\":\"PopupMessage type not found\"}";
-                        return;
-                    }
-
-                    var instance = UnityEngine.Object.FindObjectOfType(popupType);
-                    if (instance == null)
-                    {
-                        result = "{\"error\":\"no active popup\"}";
-                        return;
-                    }
-
-                    // Approach 1: Call commandCallback delegate via DynamicInvoke
-                    var callbackField = popupType.GetField("commandCallback",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (callbackField != null)
-                    {
-                        var callback = callbackField.GetValue(instance);
-                        if (callback != null)
-                        {
-                            var cbType = callback.GetType();
-                            var invokeMethod = cbType.GetMethod("Invoke");
-                            if (invokeMethod != null)
-                            {
-                                var cbParams = invokeMethod.GetParameters();
-                                if (cbParams.Length == 1)
-                                {
-                                    // Try to create the right parameter type
-                                    var paramType = cbParams[0].ParameterType;
-                                    object arg = null;
-                                    if (paramType == typeof(string))
-                                        arg = command;
-                                    else if (paramType.Name == "QudMenuItem")
-                                    {
-                                        // Create a QudMenuItem with the command as text/command
-                                        var menuItemType = FindType("Qud.UI.QudMenuItem");
-                                        if (menuItemType != null)
-                                        {
-                                            arg = System.Activator.CreateInstance(menuItemType);
-                                            // Try to set Command or Text property
-                                            var cmdProp = menuItemType.GetProperty("Command") ?? menuItemType.GetProperty("command");
-                                            var textProp = menuItemType.GetProperty("Text") ?? menuItemType.GetProperty("text");
-                                            var cmdField = menuItemType.GetField("Command") ?? menuItemType.GetField("command");
-                                            var textField = menuItemType.GetField("Text") ?? menuItemType.GetField("text");
-                                            if (cmdProp != null) cmdProp.SetValue(arg, command, null);
-                                            else if (cmdField != null) cmdField.SetValue(arg, command);
-                                            if (textProp != null) textProp.SetValue(arg, command, null);
-                                            else if (textField != null) textField.SetValue(arg, command);
-                                        }
-                                    }
-                                    
-                                    if (arg != null)
-                                    {
-                                        try
-                                        {
-                                            callback.GetType().GetMethod("Invoke").Invoke(callback, new[] { arg });
-                                            result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"callback\",\"command\":\"" + Json.Escape(command) + "\"}";
-                                            return;
-                                        }
-                                        catch (Exception e)
-                                        {
-                                            System.Console.WriteLine("[mcp] confirm_popup callback error: " + e.InnerException?.Message);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Approach 2: Try OnActivateCommand with a QudMenuItem
-                    var onActivate = popupType.GetMethod("OnActivateCommand",
-                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (onActivate != null)
-                    {
-                        var menuItemType = FindType("Qud.UI.QudMenuItem");
-                        if (menuItemType != null)
-                        {
-                            var menuItem = System.Activator.CreateInstance(menuItemType);
-                            var cmdProp = menuItemType.GetProperty("Command") ?? menuItemType.GetProperty("command");
-                            var textProp = menuItemType.GetProperty("Text") ?? menuItemType.GetProperty("text");
-                            var cmdField = menuItemType.GetField("Command") ?? menuItemType.GetField("command");
-                            var textField = menuItemType.GetField("Text") ?? menuItemType.GetField("text");
-                            if (cmdProp != null) cmdProp.SetValue(menuItem, command, null);
-                            else if (cmdField != null) cmdField.SetValue(menuItem, command);
-                            if (textProp != null) textProp.SetValue(menuItem, command, null);
-                            else if (textField != null) textField.SetValue(menuItem, command);
-                            
-                            onActivate.Invoke(instance, new[] { menuItem });
-                            result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"OnActivateCommand\",\"command\":\"" + Json.Escape(command) + "\"}";
-                            return;
-                        }
-                    }
-
-                    // Approach 3: Find a button with "Yes" text and click it
-                    var monoBehaviour = instance as UnityEngine.MonoBehaviour;
-                    if (monoBehaviour != null)
-                    {
-                        var buttons = monoBehaviour.GetComponentsInChildren<UnityEngine.UI.Button>(true);
-                        foreach (var btn in buttons)
-                        {
-                            var text = btn.GetComponentInChildren<UnityEngine.UI.Text>();
-                            if (text != null && text.text.ToLower().Contains(command.ToLower()))
-                            {
-                                btn.onClick.Invoke();
-                                result = "{\"ok\":true,\"action\":\"confirm_popup\",\"method\":\"button_click\",\"command\":\"" + Json.Escape(command) + "\"}";
-                                return;
-                            }
-                        }
-                    }
-
-                    result = "{\"error\":\"no way to confirm popup\"}";
-                }
-                catch (Exception e)
-                {
-                    result = "{\"error\":\"" + Json.Escape(e.InnerException?.Message ?? e.Message) + "\"}";
-                }
+                PopupBridge.Refresh();
+                result = PopupBridge.Respond(option, button, dismiss, text);
             }, timeoutMs: 5000);
-
             if (!completed)
-                return "{\"error\":\"timeout\"}";
-            return result ?? "{\"ok\":true,\"action\":\"confirm_popup\"}";
+                return "{\"error\":\"timeout waiting for main thread\"}";
+            return result ?? "{\"error\":\"no result\"}";
+        }
+
+        /// <summary>
+        /// Run popupAction on the main thread if a modern popup is open;
+        /// otherwise, if a classic console popup is showing, run classicAction
+        /// (which pushes console keys).
+        /// </summary>
+        private static string OnPopupOrClassic(Func<string> popupAction, Action classicAction, string actionName)
+        {
+            string result = null;
+            bool completed = BridgeMainThread.EnqueueAndWait(() =>
+            {
+                PopupBridge.Refresh();
+                if (PopupBridge.IsOpen)
+                {
+                    result = popupAction();
+                    return;
+                }
+                string view = SafeGetView();
+                if (view.StartsWith("Popup:"))
+                {
+                    classicAction();
+                    result = "{\"ok\":true,\"action\":\"" + actionName + "\",\"via\":\"console_key\",\"view\":\"" + Json.Escape(view) + "\"}";
+                    return;
+                }
+                result = "{\"error\":\"no popup is open\",\"view\":\"" + Json.Escape(view) + "\"}";
+            }, timeoutMs: 5000);
+            if (!completed)
+                return "{\"error\":\"timeout waiting for main thread\"}";
+            return result ?? "{\"error\":\"no result\"}";
+        }
+
+        /// <summary>Actions that make no sense while a modal popup is up.</summary>
+        private static bool BlockedByPopup(string action)
+        {
+            switch (action)
+            {
+                case "move":
+                case "wait":
+                case "interact":
+                case "get":
+                case "use_item":
+                case "auto_explore":
+                case "travel":
+                case "go_stairs":
+                case "open_screen":
+                case "look":
+                case "press_command":
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -1808,12 +1626,17 @@ namespace CoQMcpBridge
 
         private static string ChooseOption(int option)
         {
-            if (option < 1 || option > 9)
-                return "{\"error\":\"option must be 1-9\"}";
+            if (option < 1)
+                return "{\"error\":\"option must be >= 1\"}";
 
             int captured = option;
-            BridgeMainThread.Enqueue(() => Keyboard.PushKey((KeyCode)('0' + captured)));
-            return "{\"ok\":true,\"action\":\"choose_option\",\"option\":" + option + "}";
+            return OnPopupOrClassic(
+                () => PopupBridge.Respond(captured, null, false, null),
+                () =>
+                {
+                    if (captured <= 9) Keyboard.PushKey((KeyCode)('0' + captured));
+                },
+                "choose_option");
         }
 
         private static string AutoExplore()
