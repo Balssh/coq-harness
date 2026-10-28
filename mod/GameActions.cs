@@ -111,6 +111,20 @@ namespace CoQMcpBridge
                         return ShowLabels();
                     case "list_saves":
                         return ListSaves();
+                    case "fire_at":
+                        return FireAt(player, cmd.GetInt("x", -1), cmd.GetInt("y", -1));
+                    case "list_skills":
+                        return SkillActions.List(player, cmd.GetBool("all", false));
+                    case "learn_skill":
+                        return SkillActions.Learn(player, cmd.GetStr("name", ""));
+                    case "raise_attribute":
+                        return SkillActions.RaiseAttribute(player, cmd.GetStr("attribute", ""));
+                    case "trade_list":
+                        return TradeBridge.List();
+                    case "trade_select":
+                        return TradeBridge.Select(cmd.GetInt("side", 0), cmd.GetInt("index", -1), cmd.GetInt("count", 1));
+                    case "trade_offer":
+                        return TradeBridge.Offer();
                     default:
                         return "{\"error\":\"unknown action: " + Json.Escape(action) + "\"}";
                 }
@@ -192,10 +206,13 @@ namespace CoQMcpBridge
             GameObject capturedItem = item;
             string capturedCommand = command;
 
-            // Fire the InventoryActionEvent on the main thread.
-            // This is non-blocking from the pump thread's perspective — the
-            // action runs during the next frame's Update().
-            BridgeMainThread.Enqueue(() =>
+            // Fire the InventoryActionEvent on the game thread (where the
+            // inventory UI runs it; on the Unity thread it NREs). Wait briefly
+            // so errors reach the caller; if the action opens a modal dialog
+            // the game thread is busy with it, so a timeout means "in progress".
+            string error = null;
+            var done = new System.Threading.ManualResetEventSlim(false);
+            GameManager.Instance.gameQueue.queueTask(() =>
             {
                 try
                 {
@@ -206,9 +223,15 @@ namespace CoQMcpBridge
                 }
                 catch (Exception e)
                 {
+                    var inner = (e as TargetInvocationException)?.InnerException ?? e;
+                    error = inner.GetType().Name + ": " + inner.Message;
                     System.Console.WriteLine("[mcp] UseItem error: " + e);
                 }
+                finally { done.Set(); }
             });
+            bool finished = done.Wait(1500);
+            if (finished && error != null)
+                return "{\"error\":\"" + Json.Escape(capturedCommand + " " + item.DisplayNameOnly + " failed: " + error) + "\"}";
 
             return "{\"ok\":true,\"action\":\"use_item\",\"item\":\"" + Json.Escape(itemName) +
                    "\",\"itemAction\":\"" + Json.Escape(action) + "\"}";
@@ -218,15 +241,74 @@ namespace CoQMcpBridge
         /// Fire an InventoryActionEvent using reflection to call the static
         /// Check method. The exact overload is resolved at runtime.
         /// </summary>
+        /// <summary>
+        /// Fire equipped missile weapons at cell (x, y) of the current zone —
+        /// Combat.FireMissileWeapon, what the targeting UI ends in, without the
+        /// UI. Runs on the game thread; the game reports problems (no weapon,
+        /// needs reloading) through the message log / a popup.
+        /// </summary>
+        private static string FireAt(GameObject player, int x, int y)
+        {
+            if (player == null) return "{\"error\":\"not in game\"}";
+            var zone = player.CurrentZone;
+            var cell = zone?.GetCell(x, y);
+            if (cell == null) return "{\"error\":\"no cell at (" + x + "," + y + ") in this zone\"}";
+            var method = typeof(Combat).GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(m => m.Name == "FireMissileWeapon");
+            if (method == null) return "{\"error\":\"Combat.FireMissileWeapon not found\"}";
+            GameObject target = cell.GetCombatTarget(player);
+
+            string error = null;
+            bool fired = false;
+            var done = new System.Threading.ManualResetEventSlim(false);
+            GameManager.Instance.gameQueue.queueTask(() =>
+            {
+                try
+                {
+                    var ps = method.GetParameters();
+                    var args = new object[ps.Length];
+                    for (int i = 0; i < ps.Length; i++)
+                    {
+                        switch (ps[i].Name)
+                        {
+                            case "Attacker": args[i] = player; break;
+                            case "AimedAt": args[i] = target; break;
+                            case "TargetCell": args[i] = cell; break;
+                            default:
+                                args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue
+                                    : (ps[i].ParameterType.IsValueType ? Activator.CreateInstance(ps[i].ParameterType) : null);
+                                break;
+                        }
+                    }
+                    fired = method.Invoke(null, args) is bool b && b;
+                }
+                catch (Exception e)
+                {
+                    var inner = (e as TargetInvocationException)?.InnerException ?? e;
+                    error = inner.GetType().Name + ": " + inner.Message;
+                    Console.WriteLine("[mcp] FireAt error: " + e);
+                }
+                finally { done.Set(); }
+            });
+            if (!done.Wait(3000))
+                return "{\"ok\":true,\"action\":\"fire_at\",\"pending\":true}";
+            if (error != null) return "{\"error\":\"" + Json.Escape(error) + "\"}";
+            return "{\"ok\":true,\"action\":\"fire_at\"," + Json.Bool("fired", fired) + "," +
+                   Json.Str("target", target?.DisplayNameOnly ?? "") + "}";
+        }
+
         private static void FireInventoryAction(GameObject actor, GameObject item, string command)
         {
             var evtType = typeof(InventoryActionEvent);
 
             // Find the Check method — prefer the one with the most parameters
             // (the full overload that takes Object, Actor, Item, Command, etc.)
+            // Check(Object, Actor, Item, Command, ...): the overload that starts
+            // with Object. Object is the item the action runs on (its parts
+            // handle the event); InventoryTarget is a container, not the item.
             var checkMethods = evtType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.Name == "Check")
-                .OrderByDescending(m => m.GetParameters().Length)
+                .Where(m => m.Name == "Check" && m.GetParameters().Length > 0
+                            && m.GetParameters()[0].Name == "Object")
                 .ToList();
 
             if (checkMethods.Count == 0)
@@ -254,9 +336,9 @@ namespace CoQMcpBridge
                 var p = ps[i];
                 string pname = p.Name.ToLowerInvariant();
 
-                if (pname == "object" || pname == "actor")
+                if (pname == "actor")
                     args[i] = actor;
-                else if (pname == "item" || pname == "inventorytarget")
+                else if (pname == "object" || pname == "item")
                     args[i] = item;
                 else if (pname == "command")
                     args[i] = command;
@@ -277,6 +359,12 @@ namespace CoQMcpBridge
         /// Find an item in the player's inventory by fuzzy name match.
         /// Matches against DisplayNameOnly (case-insensitive substring).
         /// </summary>
+        // Short name ("boar-skin gloves") or the inventory label with stats
+        // ("boar-skin gloves AV1 DV0").
+        private static bool NameMatches(GameObject obj, string lower) =>
+            ColorUtility.StripFormatting(obj.DisplayNameOnly).ToLowerInvariant().Contains(lower)
+            || PopupBridge.Clean(obj.DisplayName).ToLowerInvariant().Contains(lower);
+
         private static GameObject FindItemInInventory(GameObject player, string itemName)
         {
             if (string.IsNullOrEmpty(itemName))
@@ -291,7 +379,7 @@ namespace CoQMcpBridge
                 foreach (var part in body.GetParts())
                 {
                     var equipped = part.Equipped;
-                    if (equipped != null && ColorUtility.StripFormatting(equipped.DisplayNameOnly).ToLowerInvariant().Contains(lower))
+                    if (equipped != null && NameMatches(equipped, lower))
                         return equipped;
                 }
             }
@@ -302,7 +390,7 @@ namespace CoQMcpBridge
             {
                 foreach (var obj in inventory.Objects)
                 {
-                    if (obj != null && ColorUtility.StripFormatting(obj.DisplayNameOnly).ToLowerInvariant().Contains(lower))
+                    if (obj != null && NameMatches(obj, lower))
                         return obj;
                 }
             }
@@ -1416,11 +1504,13 @@ namespace CoQMcpBridge
                             // Hide() on it. These methods internally schedule the
                             // view pop safely (next frame, from within the screen's
                             // own update loop).
-                            if (TryCallScreenExit("Qud.UI." + view, "Exit"))
+                            // Some views are registered under a name that isn't their class.
+                            string screenType = "Qud.UI." + (view == "ModernTrade" ? "TradeScreen" : view);
+                            if (TryCallScreenExit(screenType, "Exit"))
                             {
                                 closed = "Exit";
                             }
-                            else if (TryCallScreenExit("Qud.UI." + view, "Cancel"))
+                            else if (TryCallScreenExit(screenType, "Cancel"))
                             {
                                 closed = "Cancel";
                             }
@@ -1583,6 +1673,11 @@ namespace CoQMcpBridge
                 case "open_screen":
                 case "look":
                 case "press_command":
+                case "learn_skill":
+                case "raise_attribute":
+                case "fire_at":
+                case "trade_select":
+                case "trade_offer":
                     return true;
                 default:
                     return false;

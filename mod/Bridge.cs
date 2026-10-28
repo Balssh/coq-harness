@@ -95,6 +95,7 @@ namespace CoQMcpBridge
 
             // When called from the pump thread, player is null — look up the
             // real player so get_state returns full data even during modal states.
+            bool onPump = player == null;
             if (player == null)
                 player = GameStateSnapshot.Player();
 
@@ -116,7 +117,9 @@ namespace CoQMcpBridge
                     }
                     else if (type == "get_state")
                     {
-                        string state = GameStateSnapshot.BuildFullState(player);
+                        string state = onPump && player != null
+                            ? BuildStateOnGameThread(player)
+                            : GameStateSnapshot.BuildFullState(player);
                         PublishToClients(state);
                     }
                 }
@@ -125,6 +128,31 @@ namespace CoQMcpBridge
                     PublishToClients("{\"type\":\"error\",\"message\":\"" + Json.Escape(e.Message) + "\"}");
                 }
             }
+        }
+
+        // Display names are built with a pooled event that isn't thread-safe:
+        // snapshotting from the pump while the game thread names things garbles
+        // them ("torch x10 torch x10"). Build on the game thread when it's free;
+        // while it's blocked (popup, menu) nothing else is naming objects.
+        private static int _snapshotPending;
+
+        private static string BuildStateOnGameThread(GameObject player)
+        {
+            var queue = GameManager.Instance?.gameQueue;
+            if (queue == null || PopupBridge.SnapshotJson != null
+                || Interlocked.CompareExchange(ref _snapshotPending, 1, 0) != 0)
+                return GameStateSnapshot.BuildFullState(player);
+
+            string state = null;
+            var done = new ManualResetEventSlim(false);
+            queue.queueTask(() =>
+            {
+                try { state = GameStateSnapshot.BuildFullState(GameStateSnapshot.Player()); }
+                catch (Exception e) { Console.WriteLine("[mcp] snapshot error: " + e); }
+                finally { Interlocked.Exchange(ref _snapshotPending, 0); done.Set(); }
+            });
+            if (done.Wait(300) && state != null) return state;
+            return GameStateSnapshot.BuildFullState(player);
         }
 
         private static string InjectCmdId(string resultJson, string cmdId)

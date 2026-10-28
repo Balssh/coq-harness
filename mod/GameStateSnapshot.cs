@@ -91,7 +91,8 @@ namespace CoQMcpBridge
         {
             sb.Append("\"player\":{");
 
-            sb.Append(Json.Str("name", SafeGet(() => player.DisplayNameOnly)));
+            // Base name: DisplayNameOnly adds states like "bloody".
+            sb.Append(Json.Str("name", SafeGet(() => PopupBridge.Clean(player.BaseDisplayName))));
             sb.Append(",");
             sb.Append(Json.Num("hp", SafeGet(() => player.hitpoints, -1)));
             sb.Append(",");
@@ -107,11 +108,11 @@ namespace CoQMcpBridge
             sb.Append(",");
             sb.Append(Json.Num("ms", SafeGet(() => player.GetStatValue("MoveSpeed"), 0)));
             sb.Append(",");
-            sb.Append(Json.Num("av", SafeGet(() => player.GetStatValue("AV"), 0)));
+            sb.Append(Json.Num("av", SafeGet(() => XRL.Rules.Stats.GetCombatAV(player), 0)));
             sb.Append(",");
-            sb.Append(Json.Num("dv", SafeGet(() => player.GetStatValue("DV"), 0)));
+            sb.Append(Json.Num("dv", SafeGet(() => XRL.Rules.Stats.GetCombatDV(player), 0)));
             sb.Append(",");
-            sb.Append(Json.Num("ma", SafeGet(() => player.GetStatValue("MA"), 0)));
+            sb.Append(Json.Num("ma", SafeGet(() => XRL.Rules.Stats.GetCombatMA(player), 0)));
             sb.Append(",");
             sb.Append(Json.Num("strength", SafeGet(() => player.GetStatValue("Strength"), 0)));
             sb.Append(",");
@@ -177,6 +178,16 @@ namespace CoQMcpBridge
                 sb.Append(Json.Str("name", SafeGet(() => zone.DisplayName)));
                 sb.Append(",");
                 sb.Append(Json.Bool("isWorldMap", zone.Z < 0));
+                sb.Append(",\"explored\":[");
+                for (int y = 0; y < zone.Height; y++)
+                {
+                    var row = new StringBuilder(zone.Width);
+                    for (int x = 0; x < zone.Width; x++)
+                        row.Append(SafeGet(() => zone.GetCell(x, y)?.IsExplored() ?? false, true) ? '1' : '0');
+                    if (y > 0) sb.Append(",");
+                    sb.Append("\"").Append(row).Append("\"");
+                }
+                sb.Append("]");
             }
             else
             {
@@ -194,6 +205,7 @@ namespace CoQMcpBridge
             bool first = true;
             int px = player.CurrentCell.X;
             int py = player.CurrentCell.Y;
+            bool worldMap = SafeGet(() => zone.IsWorldMap(), false);
 
             for (int y = 0; y < zone.Height; y++)
             {
@@ -206,6 +218,9 @@ namespace CoQMcpBridge
                     {
                         if (obj == null) continue;
                         if (obj == player) continue;
+                        // Only what the player knows: creatures in sight, and
+                        // terrain/items in explored cells.
+                        if (!worldMap && !SafeGet(() => obj.IsCreature ? CanSee(player, obj, cell) : cell.IsExplored(), true)) continue;
 
                         if (!first) sb.Append(",");
                         first = false;
@@ -215,7 +230,7 @@ namespace CoQMcpBridge
                         sb.Append(",");
                         sb.Append(Json.Num("y", y));
                         sb.Append(",");
-                        sb.Append(Json.Str("name", SafeGet(() => obj.DisplayNameOnly)));
+                        sb.Append(Json.Str("name", SafeGet(() => PopupBridge.Clean(obj.DisplayNameOnly))));
                         sb.Append(",");
                         sb.Append(Json.Str("blueprint", SafeGet(() => obj.Blueprint)));
                         sb.Append(",");
@@ -256,6 +271,12 @@ namespace CoQMcpBridge
             sb.Append("]");
         }
 
+        // The zone's visibility map is filled by the renderer and isn't current
+        // when the snapshot runs; line of sight to a lit cell is what the
+        // player sees (torches light the cells around them underground).
+        private static bool CanSee(GameObject player, GameObject obj, Cell cell) =>
+            obj.IsVisible() || cell.IsVisible() || (cell.IsLit() && player.HasLOSTo(obj));
+
         private static void AppendMessages(StringBuilder sb)
         {
             var msgs = new List<string>();
@@ -267,7 +288,7 @@ namespace CoQMcpBridge
                     foreach (var msg in messages.Messages)
                     {
                         if (string.IsNullOrEmpty(msg)) continue;
-                        msgs.Add(StripMarkup(msg));
+                        msgs.Add(PopupBridge.Clean(msg));
                     }
                 }
             }
@@ -327,7 +348,7 @@ namespace CoQMcpBridge
                             if (!first) sb.Append(",");
                             first = false;
                             sb.Append("{");
-                            sb.Append(Json.Str("name", SafeGet(() => item.DisplayNameOnly)));
+                            sb.Append(Json.Str("name", SafeGet(() => PopupBridge.Clean(item.DisplayName))));
                             sb.Append(",");
                             sb.Append(Json.Str("slot", SafeGet(() => part.Type ?? "unknown")));
                             sb.Append(",");
@@ -346,7 +367,7 @@ namespace CoQMcpBridge
                         if (!first) sb.Append(",");
                         first = false;
                         sb.Append("{");
-                        sb.Append(Json.Str("name", SafeGet(() => item.DisplayNameOnly)));
+                        sb.Append(Json.Str("name", SafeGet(() => PopupBridge.Clean(item.DisplayName))));
                         sb.Append(",");
                         sb.Append(Json.Str("blueprint", SafeGet(() => item.Blueprint)));
                         sb.Append(",");
@@ -400,20 +421,6 @@ namespace CoQMcpBridge
             }
             catch { }
             sb.Append("}");
-        }
-
-        private static string StripMarkup(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return text;
-            var sb = new StringBuilder(text.Length);
-            bool inTag = false;
-            foreach (char c in text)
-            {
-                if (c == '{') { inTag = true; continue; }
-                if (c == '}') { inTag = false; continue; }
-                if (!inTag) sb.Append(c);
-            }
-            return sb.ToString();
         }
 
         private static string GetHungerString(GameObject player)

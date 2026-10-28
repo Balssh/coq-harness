@@ -47,7 +47,9 @@ namespace CoQMcpBridge
             try
             {
                 var popup = FindOpen();
-                _snapshotJson = popup == null ? null : Describe(popup);
+                if (popup != null) { _snapshotJson = Describe(popup); return; }
+                var picker = PickerBridge.FindOpen();
+                _snapshotJson = picker == null ? null : PickerBridge.Describe(picker);
             }
             catch (Exception e)
             {
@@ -86,10 +88,27 @@ namespace CoQMcpBridge
         private static bool HasInput(PopupMessage p) =>
             p.inputBox != null && p.inputBox.gameObject.activeSelf;
 
-        private static string Clean(string s)
+        // Strips color markup and spells out the CP437 stat glyphs Qud puts in
+        // item names (armor "♦1 ○0", weapons "→4 ♥1d4"), which are control
+        // characters that vanish as plain text.
+        internal static string Clean(string s)
         {
             if (string.IsNullOrEmpty(s)) return "";
-            return ColorUtility.StripFormatting(s).Trim();
+            s = ColorUtility.StripFormatting(s);
+            var sb = new StringBuilder(s.Length + 8);
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                char next = i + 1 < s.Length ? s[i + 1] : ' ';
+                bool statFollows = char.IsDigit(next) || next == '-' || next == '+';
+                if (c == '\u0004') sb.Append("AV");
+                else if (c == '\t' && statFollows) sb.Append("DV");
+                else if (c == '\u001a') sb.Append("PV");
+                else if (c == '\u0003') sb.Append("dmg ");
+                else if (c >= ' ' || c == '\n') sb.Append(c);
+                else sb.Append(' ');
+            }
+            return sb.ToString().Trim();
         }
 
         private static string Describe(PopupMessage p)
@@ -144,12 +163,7 @@ namespace CoQMcpBridge
         private static string ButtonLabel(QudMenuItem item)
         {
             string t = Clean(item.text);
-            if (t.StartsWith("["))
-            {
-                int close = t.IndexOf(']');
-                if (close >= 0) t = t.Substring(close + 1).Trim();
-            }
-            return t;
+            return System.Text.RegularExpressions.Regex.Replace(t, @"^\[?[^\]\s]{1,12}\]\s*", "");
         }
 
         /// <summary>
@@ -161,7 +175,16 @@ namespace CoQMcpBridge
         {
             var p = FindOpen();
             if (p == null)
+            {
+                var picker = PickerBridge.FindOpen();
+                if (picker != null)
+                {
+                    string r = PickerBridge.Respond(picker, option, button, dismiss);
+                    _snapshotJson = null;
+                    return r;
+                }
                 return "{\"error\":\"no popup is open\"}";
+            }
 
             string before = Describe(p);
             var options = Options(p);
@@ -229,7 +252,7 @@ namespace CoQMcpBridge
                    Json.Str("chose", item.command ?? "") + ",\"popup\":" + before + "}";
         }
 
-        private static string Error(string message, string popupJson) =>
+        internal static string Error(string message, string popupJson) =>
             "{\"error\":\"" + Json.Escape(message) + "\",\"popup\":" + popupJson + "}";
 
         private static bool Activate(PopupMessage p, QudMenuItem item)
@@ -287,5 +310,138 @@ namespace CoQMcpBridge
             }
             return FindButton(buttons, "accept");
         }
+    }
+
+    /// <summary>
+    /// The modern item picker (Qud.UI.PickGameObjectScreen) — opened by
+    /// containers, autoexplore and "get" on a pile. Like popups it blocks the
+    /// game thread on a TaskCompletionSource, so it is answered through its own
+    /// handlers: HandleSelectItem(line) takes/selects an item, HandleMenuOption
+    /// (TAKE_ALL) takes everything, Cancel() closes it. Fields are private, so
+    /// everything goes through reflection. Main thread only.
+    /// </summary>
+    public static class PickerBridge
+    {
+        private const System.Reflection.BindingFlags All =
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic |
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static;
+
+        internal static object Get(object o, string name)
+        {
+            if (o == null) return null;
+            var t = o.GetType();
+            var f = t.GetField(name, All);
+            if (f != null) return f.GetValue(o);
+            var p = t.GetProperty(name, All);
+            return p?.GetValue(o, null);
+        }
+
+        internal static object Call(object o, string name, params object[] args)
+        {
+            var m = o.GetType().GetMethod(name, All);
+            return m?.Invoke(o, args);
+        }
+
+        public static PickGameObjectScreen FindOpen()
+        {
+            foreach (var s in UnityEngine.Object.FindObjectsOfType<PickGameObjectScreen>())
+            {
+                if (s == null || !s.gameObject.activeInHierarchy) continue;
+                var tcs = Get(s, "menucomplete");
+                var task = Get(tcs, "Task") as System.Threading.Tasks.Task;
+                if (task == null || task.IsCompleted) continue;
+                return s;
+            }
+            return null;
+        }
+
+        /// <summary>Item lines (categories skipped), in display order.</summary>
+        private static List<object> Items(PickGameObjectScreen s)
+        {
+            var result = new List<object>();
+            if (Get(s, "listItems") is System.Collections.IEnumerable lines)
+            {
+                foreach (var line in lines)
+                {
+                    if (line is PickGameObjectLineData d && d.type == PickGameObjectLineDataType.Item && d.go != null)
+                        result.Add(line);
+                }
+            }
+            return result;
+        }
+
+        private static string Title(PickGameObjectScreen s)
+        {
+            var title = Get(s, "titleText");
+            var text = Get(title, "text") as string;
+            return PopupBridge.Clean(text ?? "Pick an item");
+        }
+
+        public static string Describe(PickGameObjectScreen s)
+        {
+            var sb = new StringBuilder(1024);
+            sb.Append("{");
+            sb.Append(Json.Str("title", Title(s)));
+            sb.Append(",");
+            sb.Append(Json.Str("message", "Item list: option=N takes/selects that item."));
+            sb.Append(",");
+            sb.Append(Json.Str("id", "PickGameObject"));
+            sb.Append(",\"options\":[");
+            var items = Items(s);
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var go = ((PickGameObjectLineData)items[i]).go;
+                sb.Append("{");
+                sb.Append(Json.Num("n", i + 1));
+                sb.Append(",");
+                sb.Append(Json.Str("text", PopupBridge.Clean(go.DisplayName)));
+                sb.Append("}");
+            }
+            sb.Append("],\"buttons\":[");
+            if (Get(s, "TAKE_ALL") != null)
+                sb.Append("{\"command\":\"take_all\",\"text\":\"Take all\"},");
+            sb.Append("{\"command\":\"Cancel\",\"text\":\"Cancel\"}]");
+            sb.Append(",\"hasInput\":false}");
+            return sb.ToString();
+        }
+
+        public static string Respond(PickGameObjectScreen s, int option, string button, bool dismiss)
+        {
+            string before = Describe(s);
+            string b = (button ?? "").Trim().ToLowerInvariant();
+            try
+            {
+                if (option > 0)
+                {
+                    var items = Items(s);
+                    if (option > items.Count)
+                        return PopupBridge.Error("option " + option + " out of range (" + items.Count + " items)", before);
+                    Call(s, "HandleSelectItem", items[option - 1]);
+                    return Ok("option", before);
+                }
+                if (b == "take_all" || b == "take all" || b == "takeall" || b == "take")
+                {
+                    var takeAll = Get(s, "TAKE_ALL");
+                    if (takeAll == null) return PopupBridge.Error("this list has no Take all", before);
+                    Call(s, "HandleMenuOption", takeAll);
+                    return Ok("take_all", before);
+                }
+                if (dismiss || b == "cancel" || b == "close")
+                {
+                    Call(s, "Cancel");
+                    return Ok("cancel", before);
+                }
+            }
+            catch (Exception e)
+            {
+                var inner = e.InnerException ?? e;
+                return PopupBridge.Error("picker action failed: " + inner.Message, before);
+            }
+            return PopupBridge.Error("specify option=N, button='Take all' or dismiss", before);
+        }
+
+        private static string Ok(string how, string before) =>
+            "{\"ok\":true,\"action\":\"popup\",\"via\":\"" + how + "\",\"popup\":" + before + "}";
     }
 }

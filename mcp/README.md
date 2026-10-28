@@ -199,6 +199,30 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
 | `look()` | No | Enter look mode |
 | `show_labels()` | No | Show item/entity labels |
 
+Tools added to `mcp_server.py` on top of the raw protocol actions:
+
+| Tool | Advances Turn | Description |
+|------|---------------|-------------|
+| `respond_popup(option/button/dismiss/text)` | No | Answer any popup, conversation, or item picker (containers: `button="take_all"`) |
+| `go_to(x, y)` | Yes | Walk a shortest path; stops next to an occupied target, on damage, popups, new hostiles |
+| `get_map()` | No | ASCII map of the zone with x/y rulers |
+| `attack(direction)` | Yes | Force-attack (needed for walk-over creatures such as dreadroots) |
+| `fire(x?, y?)` | Yes | Shoot the missile weapon at a cell or the nearest hostile; reloads automatically |
+| `rest()` | Yes | Wait until healed (stops if something happens) |
+| `use_ability(name)` | Yes | Activated abilities (Sprint, Flurry, ...) |
+| `list_skills(all?)` / `learn_skill(name)` | No | Spend skill points |
+| `raise_attribute(attribute)` | No | Spend attribute points |
+| `trade_list()` / `trade_select(side, index, count)` / `trade_offer()` | No | Buy and sell on the open trade screen (side 0 = trader, 1 = you) |
+
+Action results return a compact status (HP, hostiles, new messages); `get_state` returns everything.
+The state only contains what the player knows: creatures in line of sight and objects in explored
+cells (`zone.explored` holds one `0`/`1` row string per y). Item names spell out the stat glyphs
+(`boar-skin gloves AV1 DV0`, `short bow PV4`, `slender pestle PV3/5 dmg 1d2-1`).
+The "Your health has dropped below N%!" popup is dismissed automatically while waiting for a turn and
+reported as a `WARNING:` line in the result.
+Trading: talk to a merchant and pick "Let's trade", then `trade_list`, `trade_select`, `trade_offer`
+(the game asks to confirm the dram difference in a popup), and `close_menu` to leave.
+
 ## Project Structure
 
 ```
