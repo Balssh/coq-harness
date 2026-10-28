@@ -344,7 +344,9 @@ def _fmt_compact(state: dict) -> str:
         return _clean("\n".join(lines))
     p = state["player"]
     screen = state.get("screen")
-    if not popup and screen not in (None, "", "Stage"):
+    if not popup and screen == "WorldCreationProgress":
+        lines.append("LOADING: the world is still being generated. Use wait until the map appears; don't close it.")
+    elif not popup and screen not in (None, "", "Stage"):
         lines.append(f"SCREEN OPEN: {screen}. Movement and turns are blocked until close_menu closes it.")
     if _bridge is not None and _bridge.warnings:
         lines += [f"WARNING: {w}" for w in _bridge.warnings]
@@ -520,11 +522,11 @@ def get_state_raw() -> str:
     return json.dumps(get_bridge().get_state(), default=str)
 
 
-@server.tool(description=f"Move the player one tile. Valid directions: {_DIRECTIONS}. Moving into a creature attacks it.")
 def _on_world_map(state: dict) -> bool:
     return str((state.get("zone") or {}).get("id", "")).endswith("World")
 
 
+@server.tool(description=f"Move the player one tile. Valid directions: {_DIRECTIONS}. Moving into a creature attacks it.")
 def move(direction: str) -> str:
     # A world-map step passes hours of game time, several seconds in real time.
     world = _on_world_map(get_bridge().get_state())
@@ -786,10 +788,21 @@ def open_screen(screen: str) -> str:
     return out
 
 
+_NOT_CLOSABLE = {
+    "WorldCreationProgress": "The world is still being generated; use wait until the map appears.",
+    "MainMenu": "This is the main menu (not in a game).",
+    "EmbarkBuilder": "This is character creation.",
+    "Chargen": "This is character creation.",
+}
+
+
 @server.tool(description="Close the open popup (Cancel/Continue) or menu/screen.")
 def close_menu() -> str:
     bridge = get_bridge()
     before = bridge.get_state().get("screen")
+    if before in _NOT_CLOSABLE:
+        # Exit() on these aborts world creation / character creation back to the main menu.
+        return f"Nothing to close: {before} is not a menu you can close. {_NOT_CLOSABLE[before]}"
     result = bridge.send_command("close_menu")
     if "error" in result:
         return f"FAILED close_menu: {result['error']}\n\n{_fmt_state(bridge.get_state())}"
@@ -828,8 +841,16 @@ def auto_explore() -> str:
     return f"Auto-explored.\n{_fmt_state(state)}"
 
 
-@server.tool(description="Travel far in a cardinal direction (north/south/east/west) until something interesting happens.")
+@server.tool(description="Travel far in a cardinal direction (north/south/east/west) until something interesting happens. At the zone edge it steps into the next zone.")
 def travel(direction: str) -> str:
+    # Running stops at the zone's edge; from there the next zone is one plain step away.
+    state = get_bridge().get_state()
+    p, zone = state.get("player") or {}, state.get("zone") or {}
+    d = direction.strip().lower()[:1]
+    at_edge = {"n": p.get("y") == 0, "s": p.get("y") == zone.get("height", 25) - 1,
+               "w": p.get("x") == 0, "e": p.get("x") == zone.get("width", 80) - 1}.get(d, False)
+    if at_edge and not _on_world_map(state):
+        return move(direction)
     return _act("travel", f"Travel {direction}", takes_turn=True, quiet=4, direction=direction)
 
 
@@ -844,9 +865,45 @@ def save_game() -> str:
     return json.dumps(get_bridge().send_command("save_game"), default=str)
 
 
-@server.tool(description="Quit to the main menu. Usually opens a confirmation popup — answer it with respond_popup.")
+@server.tool(description="Save the game and quit to the main menu (through the system menu's Save and Quit).")
 def quit_to_menu() -> str:
-    return _act("quit_to_menu", "Quit requested")
+    # Saves first, then leaves through the system menu's "Save and Quit". The game's own
+    # quit command (CmdQuit) asks "Do you want to save first?" but ignores the answer
+    # when it's given through the bridge and goes on to the type-ABANDON prompt.
+    bridge = get_bridge()
+    state = bridge.get_state()
+    if not state.get("inGame"):
+        return "Not in a game."
+    if state.get("popup"):
+        return "Answer the open popup first.\n" + _fmt_state(state)
+    saved = bridge.send_command("save_game")
+    if "error" in saved:
+        return f"FAILED quit_to_menu: could not save first: {saved['error']}"
+    bridge.send_command("press_key", key="escape")  # opens the system menu on the map
+    option = 0
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and not option:
+        time.sleep(0.2)
+        popup = bridge.get_state().get("popup") or {}
+        option = next((o.get("n", 0) for o in popup.get("options") or []
+                       if "save and quit" in _clean(o.get("text", "")).lower()), 0)
+    if not option:
+        return "FAILED quit_to_menu: the system menu did not open.\n" + _fmt_state(bridge.get_state())
+    res = bridge.send_command("respond_popup", option=option, button="", dismiss=False)
+    if "error" in res:
+        return f"FAILED quit_to_menu: {res['error']}"
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        try:
+            state = bridge.get_state()
+        except Exception:
+            continue
+        if state.get("inMainMenu") or state.get("screen") == "MainMenu":
+            return "Saved and quit to the main menu."
+        if "saved" in _clean((state.get("popup") or {}).get("message", "")).lower():
+            bridge.send_command("respond_popup", option=0, button="", dismiss=True)  # "Game saved!"
+    return "Save and Quit chosen, but the main menu did not appear within 60s.\n" + _fmt_state(bridge.get_state())
 
 
 @server.tool(description="Start a new game from the main menu.")
@@ -969,20 +1026,57 @@ def attack(direction: str) -> str:
     return _act("press_command", f"Attacked {direction}", takes_turn=True, quiet=2, command=f"CmdAttack{d}")
 
 
-@server.tool(description="Use an activated ability by name (the Abilities line of get_state), e.g. Sprint "
-                         "(run, also to flee), Flurry (attack every adjacent enemy). Abilities that need a "
-                         "target or direction may open a prompt.")
-def use_ability(name: str) -> str:
+@server.tool(description="Use an activated ability or mutation by name (e.g. Sprint, Freezing Ray, Force Bubble). "
+                         "Abilities that need a target are aimed at cell (x, y), or at the nearest visible hostile "
+                         "when x/y are omitted.")
+def use_ability(name: str, x: int = -1, y: int = -1) -> str:
     bridge = get_bridge()
-    abilities = bridge.get_state().get("abilities") or []
+    state = bridge.get_state()
+    abilities = state.get("abilities") or []
     wanted = name.strip().lower()
     match = (next((a for a in abilities if a.get("name", "").lower() == wanted), None)
              or next((a for a in abilities if wanted in a.get("name", "").lower()), None))
     if match is None:
         return (f"FAILED use_ability: no ability named {name!r}. You have: "
                 + ", ".join(a.get("name", "?") for a in abilities))
-    return _act("press_command", f"Used {match['name']}", takes_turn=True, quiet=2,
-                command=match["command"])
+    res = bridge.send_command("press_command", command=match["command"])
+    if "error" in res:
+        return f"FAILED use_ability: {res['error']}\n\n{_fmt_state(bridge.get_state())}"
+    # Targeted abilities open the targeting screen; answer it with the target cell.
+    deadline = time.monotonic() + 1.5
+    targeting = False
+    while time.monotonic() < deadline:
+        time.sleep(0.15)
+        cur = bridge.get_state()
+        if cur.get("screen") == "PickTarget":
+            targeting = True
+            break
+        if cur.get("popup") or _progress(cur) != _progress(state):
+            break
+    if not targeting:
+        state_after, changed = bridge.wait_for_turn(state, timeout=TURN_TIMEOUT, quiet=2)
+        note = "" if changed else " (no turn change detected)"
+        return f"Used {match['name']}{note}.\n{_fmt_state(state_after)}"
+    if x < 0 or y < 0:
+        p = state.get("player") or {}
+        hostiles = [c for c in state.get("cells") or [] if c.get("isHostile") and c.get("isCreature")]
+        if not hostiles:
+            bridge.send_command("close_menu")
+            return (f"{match['name']} needs a target and no hostile is in sight; cancelled. "
+                    "Pass x and y to aim it at a cell.\n" + _fmt_state(bridge.get_state()))
+        near = min(hostiles, key=lambda c: max(abs(c["x"] - p.get("x", 0)), abs(c["y"] - p.get("y", 0))))
+        x, y = near["x"], near["y"]
+    res = bridge.send_command("pick_target", x=x, y=y)
+    if "error" in res:
+        bridge.send_command("close_menu")
+        return f"FAILED use_ability: could not aim {match['name']}: {res['error']}\n\n{_fmt_state(bridge.get_state())}"
+    state_after, changed = bridge.wait_for_turn(state, timeout=TURN_TIMEOUT, quiet=2)
+    if state_after.get("screen") == "PickTarget":
+        bridge.send_command("close_menu")
+        return (f"{match['name']} could not target ({x},{y}) (out of range or not visible?); cancelled.\n"
+                + _fmt_state(bridge.get_state()))
+    note = "" if changed else " (no turn change detected)"
+    return f"Used {match['name']} at ({x},{y}){note}.\n{_fmt_state(state_after)}"
 
 
 @server.tool(description="Fire your missile weapon (bow, gun) at cell (x, y) — default: the nearest "

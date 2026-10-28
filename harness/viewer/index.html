@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qud Run Replay</title>
+<style>
+:root {
+  --bg: #0f1418; --panel: #172026; --panel2: #1d2830; --line: #2b3a44; --text: #d7e2e8; --muted: #8aa0ad;
+  --accent: #4fc3a1; --hp: #3fbf5f; --hpbg: #3a1f22; --warn: #e0a040; --bad: #e05a5a; --info: #5aa8e0;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef2f4; --panel: #ffffff; --panel2: #f4f7f9; --line: #d3dde3; --text: #1b2a33; --muted: #5d7280;
+    --accent: #1f8f72; --hpbg: #f3d9db;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+a { color: var(--accent); }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 16px; margin: 0; }
+header button, header select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
+.chip b { color: var(--text); font-weight: 600; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.controls button, .controls select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
+.controls input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+#pos { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 220px; }
+main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+#shot { width: 100%; display: block; border-radius: 4px; background: #000; }
+#noshot { color: var(--muted); font-size: 13px; padding: 8px 0; }
+#mapwrap { position: relative; }
+#map { width: 100%; display: block; border-radius: 4px; background: #0b1013; }
+#tip { position: absolute; pointer-events: none; background: var(--panel2); border: 1px solid var(--line);
+  padding: 3px 6px; border-radius: 4px; font-size: 12px; display: none; white-space: nowrap; z-index: 2; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.stats span b { font-weight: 600; }
+.hpbar { height: 8px; background: var(--hpbg); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.hpbar div { height: 100%; background: var(--hp); }
+pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.msgs div { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.msgs div.new { color: var(--text); }
+.thought { white-space: pre-wrap; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+details .reasoning { white-space: pre-wrap; font-size: 13px; color: var(--muted); max-height: 260px; overflow: auto;
+  border-left: 2px solid var(--line); padding-left: 8px; margin-top: 4px; }
+.call { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-top: 8px; background: var(--panel2); }
+.call.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.call .name { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.call .args { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.call.err .name { color: var(--bad); }
+.call pre { margin-top: 4px; max-height: 220px; overflow: auto; }
+.ev { font-size: 13px; padding: 4px 8px; border-radius: 4px; margin-top: 6px; }
+.ev.nudge { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.ev.summary { background: color-mix(in srgb, var(--info) 15%, transparent); }
+.ev.error { background: color-mix(in srgb, var(--bad) 18%, transparent); }
+.notes { margin: 4px 0 0; padding-left: 20px; }
+.muted { color: var(--muted); }
+#timeline { padding: 0 16px 16px; }
+#tl { width: 100%; height: 70px; display: block; cursor: pointer; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+tr.run { cursor: pointer; } tr.run:hover { background: var(--panel2); }
+#list { padding: 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Qud run replay</h1>
+  <span id="meta"></span>
+  <span id="exportbox" style="margin-left:auto;font-size:13px" hidden>
+    <select id="spf" title="Seconds per frame in the video">
+      <option value="0.5">0.5 s/frame</option><option value="1" selected>1 s/frame</option><option value="2">2 s/frame</option>
+    </select>
+    <button id="export">Export MP4</button>
+    <span id="exportstatus" class="muted"></span>
+  </span>
+  <a href="?" style="font-size:13px">All runs</a>
+</header>
+<div id="list" hidden></div>
+<div id="viewer" hidden>
+  <div class="controls">
+    <button id="first" title="First (Home)">|◀</button>
+    <button id="prev" title="Previous (←)">▕◀</button>
+    <button id="play" title="Play/pause (Space)">▶</button>
+    <button id="next" title="Next (→)">▶▏</button>
+    <button id="last" title="Last (End)">▶▶|</button>
+    <select id="speed" title="Playback speed">
+      <option value="2000">0.5×</option><option value="1000" selected>1×</option>
+      <option value="500">2×</option><option value="250">4×</option><option value="100">10×</option>
+    </select>
+    <input id="slider" type="range" min="0" max="0" value="0">
+    <span id="pos"></span>
+    <label class="muted" style="font-size:13px"><input type="checkbox" id="follow"> follow live</label>
+  </div>
+  <main>
+    <section>
+      <div class="card">
+        <h2>Game</h2>
+        <img id="shot" alt="Game window at this point">
+        <div id="noshot" hidden>No screenshot for this frame.</div>
+      </div>
+      <div class="card">
+        <h2>Map (from the recorded state)</h2>
+        <div id="mapwrap"><canvas id="map"></canvas><div id="tip"></div></div>
+        <div class="muted" style="font-size:12px;margin-top:4px">@ you · letters = creatures (<span style="color:#ff5f56">hostile</span>, <span style="color:#5fd36a">friendly</span>, <span style="color:#e8c35a">neutral</span>) · # impassable · * item · = container · + door · &lt; &gt; stairs · black = unexplored · hover for names</div>
+        <div class="hpbar"><div id="hpfill"></div></div>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div class="card"><h2>Messages</h2><div class="msgs" id="msgs"></div></div>
+    </section>
+    <section>
+      <div class="card" id="stepcard"></div>
+      <div class="card" id="memcard"></div>
+    </section>
+  </main>
+  <div id="timeline"><svg id="tl" preserveAspectRatio="none"></svg></div>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const strip = (s) => String(s ?? "").replace(/\{\{[^|}]*\|([^}]*)\}\}/g, "$1").replace(/&[a-zA-Z]/g, "");
+const params = new URLSearchParams(location.search);
+const runId = params.get("run");
+
+let meta = {}, events = [], frames = [], cur = 0, timer = null;
+const stateCache = new Map();
+
+function fmtTime(s) { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+
+async function showList() {
+  $("list").hidden = false;
+  const runs = await (await fetch("api/runs")).json();
+  if (!runs.length) { $("list").innerHTML = "<p class='muted'>No runs yet. Start one with <code>python -m harness play</code>.</p>"; return; }
+  $("list").innerHTML = `<table><tr><th>Started</th><th>Model</th><th>Label</th><th>Outcome</th><th>Steps</th><th>Level</th><th>Duration</th></tr>` +
+    runs.map((r) => `<tr class="run" data-id="${esc(r.id)}"><td>${esc(r.started)}</td><td>${esc(r.model)}</td><td>${esc(r.label)}</td>` +
+      `<td>${esc(r.outcome || (r.ended ? "" : "running…"))}</td><td>${r.steps ?? ""}</td><td>${r.final?.level ?? ""}</td>` +
+      `<td>${r.duration_s ? fmtTime(r.duration_s) : ""}</td></tr>`).join("") + `</table>`;
+  document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => location.search = "?run=" + encodeURIComponent(tr.dataset.id));
+}
+
+async function loadRun() {
+  const data = await (await fetch("api/run?id=" + encodeURIComponent(runId))).json();
+  meta = data.meta; events = data.events;
+  frames = events.filter((e) => e.type === "snapshot");
+  const t = meta.tokens ? `${Math.round((meta.tokens.prompt || 0) / 1000)}k in / ${Math.round((meta.tokens.completion || 0) / 1000)}k out` : "";
+  $("meta").innerHTML = [["model", meta.model], ["outcome", meta.outcome || "running…"], ["steps", meta.steps],
+    ["duration", meta.duration_s ? fmtTime(meta.duration_s) : ""], ["tokens", t], ["label", meta.label]]
+    .filter(([, v]) => v).map(([k, v]) => `<span class="chip">${k} <b>${esc(v)}</b></span>`).join(" ");
+  $("slider").max = Math.max(0, frames.length - 1);
+  drawTimeline();
+}
+
+async function getState(f) {
+  const ev = frames[f];
+  if (!ev) return null;
+  if (!stateCache.has(ev.index)) {
+    const name = String(ev.index).padStart(5, "0");
+    stateCache.set(ev.index, fetch(`files/${encodeURIComponent(runId)}/states/${name}.json`).then((r) => r.ok ? r.json() : null).catch(() => null));
+  }
+  return stateCache.get(ev.index);
+}
+
+// ── map ──
+const COLORS = { hostile: "#ff5f56", friendly: "#5fd36a", neutral: "#e8c35a", creature: "#c9b8ff", wall: "#6b7a84",
+  item: "#5ad1e8", door: "#c98a4b", container: "#d0a060", stairs: "#ffe066", player: "#ffffff", feature: "#3d4b54" };
+function cellGlyph(cs) {
+  const cr = cs.find((c) => c.isCreature);
+  if (cr) {
+    const ch = (strip(cr.name).replace(/^(a|an|the)\s+/i, "")[0] || "c");
+    return [ch, cr.isHostile ? COLORS.hostile : cr.isFriendly ? COLORS.friendly : cr.isNeutral ? COLORS.neutral : COLORS.creature];
+  }
+  const st = cs.find((c) => /stair/i.test(c.name || "") || /stair/i.test(c.blueprint || ""));
+  if (st) return [/up/i.test(st.name || "") ? "<" : ">", COLORS.stairs];
+  if (cs.some((c) => c.isDoor)) return ["+", COLORS.door];
+  if (cs.some((c) => c.isContainer)) return ["=", COLORS.container];
+  if (cs.some((c) => c.isItem)) return ["*", COLORS.item];
+  if (cs.some((c) => c.blocksMovement)) return ["#", COLORS.wall];
+  return ["·", COLORS.feature];
+}
+let mapGrid = null, mapCell = 10;
+function drawMap(state) {
+  const cv = $("map"), ctx = cv.getContext("2d");
+  const z = state?.zone || {}, W = z.width || 80, H = z.height || 25;
+  const cssW = cv.parentElement.clientWidth || 800;
+  mapCell = cssW / W;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(mapCell * H * 1.6 * dpr);
+  cv.style.height = (mapCell * H * 1.6) + "px";
+  ctx.scale(dpr, dpr);
+  const ch = mapCell * 1.6;
+  const css = getComputedStyle(document.documentElement);
+  ctx.fillStyle = "#132026"; ctx.fillRect(0, 0, cssW, ch * H);  // explored ground; the game is dark in any theme
+  if (!state?.player) { ctx.fillStyle = "#888"; ctx.fillText("not in game", 10, 20); mapGrid = null; return; }
+  const explored = z.explored || [];
+  mapGrid = new Map();
+  for (const c of state.cells || []) { const k = c.x + "," + c.y; if (!mapGrid.has(k)) mapGrid.set(k, []); mapGrid.get(k).push(c); }
+  ctx.font = `${Math.floor(Math.min(ch, mapCell * 1.7))}px ${css.getPropertyValue("--mono")}`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const known = explored.length ? explored[y]?.[x] === "1" : true;
+    if (!known) { ctx.fillStyle = "#070a0c"; ctx.fillRect(x * mapCell, y * ch, mapCell, ch); continue; }
+    const cs = mapGrid.get(x + "," + y);
+    if (!cs) continue;
+    const [g, col] = cellGlyph(cs);
+    ctx.fillStyle = col; ctx.fillText(g, x * mapCell + mapCell / 2, y * ch + ch / 2);
+  }
+  const p = state.player;
+  ctx.fillStyle = "rgba(79,195,161,.35)"; ctx.fillRect(p.x * mapCell, p.y * ch, mapCell, ch);
+  ctx.fillStyle = COLORS.player; ctx.font = `bold ${Math.floor(Math.min(ch, mapCell * 1.7))}px ${css.getPropertyValue("--mono")}`;
+  ctx.fillText("@", p.x * mapCell + mapCell / 2, p.y * ch + ch / 2);
+}
+$("map").addEventListener("mousemove", (e) => {
+  const tip = $("tip");
+  if (!mapGrid) { tip.style.display = "none"; return; }
+  const r = e.target.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / mapCell), y = Math.floor((e.clientY - r.top) / (mapCell * 1.6));
+  const cs = mapGrid.get(x + "," + y);
+  if (!cs) { tip.style.display = "none"; return; }
+  tip.innerHTML = `(${x},${y}) ` + cs.map((c) => esc(strip(c.name)) + (c.isHostile ? " <b style='color:#ff5f56'>hostile</b>" : "")).join(", ");
+  tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX - r.left + 12, r.width - 200) + "px"; tip.style.top = (e.clientY - r.top + 12) + "px";
+});
+$("map").addEventListener("mouseleave", () => $("tip").style.display = "none");
+
+// ── panels ──
+function stepEvents(step) { return events.filter((e) => e.step === step); }
+function memoryAt(f) {
+  const ev = frames[f]; let m = null;
+  for (const e of events) { if (e.type === "memory") m = e; if (e === ev) break; }
+  return m;
+}
+function renderStep(f) {
+  const snap = frames[f];
+  const evs = stepEvents(snap.step);
+  const llm = evs.find((e) => e.type === "llm");
+  const tools = evs.filter((e) => e.type === "tool");
+  let html = `<h2>Step ${snap.step}${snap.step === 0 ? " (start)" : ""}</h2>`;
+  if (snap.step === 0) html += `<div class="muted">Start of the run: the game state the model was first shown. Play with ▶ or the arrow keys.</div>`;
+  if (llm) {
+    if (llm.reasoning) html += `<details ${llm.text ? "" : "open"}><summary>Thinking (${llm.reasoning.length} chars, ${llm.latency}s)</summary><div class="reasoning">${esc(llm.reasoning)}</div></details>`;
+    if (llm.text) html += `<div class="thought">${esc(llm.text)}</div>`;
+  }
+  for (const t of tools) {
+    const isCur = t.snapshot === snap.index;
+    html += `<div class="call ${isCur ? "current" : ""} ${t.is_error ? "err" : ""}"><span class="name">${esc(t.name)}</span> ` +
+      `<span class="args">${esc(JSON.stringify(t.args))}</span><pre>${esc(t.result)}</pre></div>`;
+  }
+  for (const e of evs) {
+    if (e.type === "nudge") html += `<div class="ev nudge"><b>Harness (${esc(e.kind)}):</b> ${esc(e.text)}</div>`;
+    if (e.type === "summary") html += `<div class="ev summary"><b>Context summarized</b> (${e.dropped_steps} old steps dropped)</div>`;
+    if (e.type === "error") html += `<div class="ev error"><b>Error (${esc(e.where)}):</b> ${esc(e.message)}</div>`;
+    if (e.type === "setup") html += `<div class="ev summary"><b>Setup: ${esc(e.action)}</b></div>`;
+    if (e.type === "lessons") html += `<div class="ev summary"><b>Lessons written:</b><pre>${esc(e.text)}</pre></div>`;
+    if (e.type === "run_end") html += `<div class="ev ${e.outcome === "died" ? "error" : "summary"}"><b>Run ended:</b> ${esc(e.outcome)}</div>`;
+  }
+  $("stepcard").innerHTML = html;
+  const m = memoryAt(f);
+  $("memcard").innerHTML = `<h2>Memory at this point</h2>` + (m ?
+    `<div><b>Goal:</b> ${esc(m.goal || "—")}</div>` +
+    (m.notes?.length ? `<ol class="notes">${m.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>` : `<div class="muted">No notes.</div>`) +
+    (m.summary ? `<details><summary>The story so far</summary><div class="reasoning">${esc(m.summary)}</div></details>` : "")
+    : `<div class="muted">Empty.</div>`);
+}
+function renderStats(state, snap) {
+  const p = state?.player || {};
+  const hp = p.hp ?? snap.hp, max = p.hpMax ?? snap.hpMax;
+  $("hpfill").style.width = max ? Math.max(0, Math.min(100, 100 * hp / max)) + "%" : "0";
+  const items = [["HP", `${hp ?? "?"}/${max ?? "?"}`], ["Lvl", p.level], ["XP", p.xpNext ? `${p.xp}/${p.xpNext}` : p.xp],
+    ["AV", p.av], ["DV", p.dv], ["Pos", p.x != null ? `${p.x},${p.y}` : ""], ["Zone", strip(state?.zone?.name || snap.zone)],
+    ["Food", strip(p.hunger)], ["Water", strip(p.thirst)], ["Screen", state?.screen], ["Popup", strip(snap.popup)]];
+  $("stats").innerHTML = items.filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `<span><span class="muted">${k}</span> <b>${esc(v)}</b></span>`).join("");
+}
+let prevMsgs = [];
+function renderMsgs(state, prevState) {
+  const msgs = (state?.messages || []).map(strip);
+  const before = new Set((prevState?.messages || []).map(strip));
+  $("msgs").innerHTML = msgs.slice(-14).map((m) => `<div class="${before.has(m) ? "" : "new"}">${esc(m)}</div>`).join("") || "<span class='muted'>None.</span>";
+}
+
+async function show(f) {
+  if (!frames.length) return;
+  cur = Math.max(0, Math.min(frames.length - 1, f));
+  $("slider").value = cur;
+  const snap = frames[cur];
+  $("pos").textContent = `frame ${cur + 1}/${frames.length} · step ${snap.step} · ${fmtTime(snap.t)}`;
+  if (snap.frame) { $("shot").hidden = false; $("noshot").hidden = true; $("shot").src = `files/${encodeURIComponent(runId)}/${snap.frame}`; }
+  else { $("shot").hidden = true; $("noshot").hidden = false; }
+  renderStep(cur);
+  const [state, prev] = await Promise.all([getState(cur), cur > 0 ? getState(cur - 1) : null]);
+  if (cur !== Number($("slider").value)) return;  // user moved on while loading
+  drawMap(state); renderStats(state, snap); renderMsgs(state, prev);
+  for (let i = 1; i <= 3; i++) getState(cur + i);
+  markTimeline();
+}
+
+// ── timeline ──
+function drawTimeline() {
+  const svg = $("tl"), W = 1000, H = 70, n = Math.max(1, frames.length - 1);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const css = getComputedStyle(document.documentElement);
+  let pts = frames.map((s, i) => `${(i / n) * W},${H - 8 - (s.hpMax ? (s.hp / s.hpMax) : 0) * (H - 16)}`).join(" ");
+  let marks = "";
+  const stepFrame = (step) => { const i = frames.findIndex((s) => s.step >= step); return i < 0 ? frames.length - 1 : i; };
+  for (const e of events) {
+    const color = e.type === "nudge" ? css.getPropertyValue("--warn") : e.type === "summary" ? css.getPropertyValue("--info") :
+      e.type === "error" || (e.type === "run_end" && e.outcome === "died") ? css.getPropertyValue("--bad") : null;
+    if (!color) continue;
+    const x = (stepFrame(e.step) / n) * W;
+    marks += `<line x1="${x}" x2="${x}" y1="0" y2="10" stroke="${color}" stroke-width="3"><title>${esc(e.type)}: ${esc(e.kind || e.where || e.outcome || "")}</title></line>`;
+  }
+  frames.forEach((s, i) => { if (i && s.level !== frames[i - 1].level && s.level != null) {
+    const x = (i / n) * W; marks += `<line x1="${x}" x2="${x}" y1="0" y2="${H}" stroke="${css.getPropertyValue("--accent")}" stroke-dasharray="3 3"><title>level ${s.level}</title></line>`; } });
+  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="${css.getPropertyValue("--hp")}" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
+    marks + `<line id="cursor" x1="0" x2="0" y1="0" y2="${H}" stroke="${css.getPropertyValue("--text")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+}
+function markTimeline() {
+  const c = document.getElementById("cursor"); if (!c) return;
+  const x = (cur / Math.max(1, frames.length - 1)) * 1000; c.setAttribute("x1", x); c.setAttribute("x2", x);
+}
+$("tl").addEventListener("click", (e) => { const r = e.currentTarget.getBoundingClientRect(); show(Math.round(((e.clientX - r.left) / r.width) * (frames.length - 1))); });
+
+// ── controls ──
+function stop() { clearInterval(timer); timer = null; $("play").textContent = "▶"; }
+function play() {
+  if (timer) return stop();
+  $("play").textContent = "⏸";
+  timer = setInterval(() => { if (cur >= frames.length - 1) { if (!$("follow").checked) stop(); return; } show(cur + 1); }, Number($("speed").value));
+}
+$("play").onclick = play;
+$("speed").onchange = () => { if (timer) { stop(); play(); } };
+$("first").onclick = () => show(0); $("last").onclick = () => show(frames.length - 1);
+$("prev").onclick = () => show(cur - 1); $("next").onclick = () => show(cur + 1);
+$("slider").oninput = (e) => show(Number(e.target.value));
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.key === " ") { e.preventDefault(); play(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); show(cur + 1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); show(cur - 1); }
+  else if (e.key === "Home") show(0); else if (e.key === "End") show(frames.length - 1);
+});
+window.addEventListener("resize", () => show(cur));
+
+async function poll() {
+  if (meta.ended) return;
+  const atEnd = cur >= frames.length - 1;
+  await loadRun();
+  if ($("follow").checked && atEnd) show(frames.length - 1); else markTimeline();
+  setTimeout(poll, 3000);
+}
+
+// ── MP4 export ──
+async function exportStatus(start) {
+  const q = "id=" + encodeURIComponent(runId) + (start ? "&spf=" + $("spf").value : "");
+  const job = await (await fetch((start ? "api/export?" : "api/export_status?") + q)).json();
+  const st = $("exportstatus");
+  if (job.state === "running") {
+    $("export").disabled = true;
+    st.textContent = job.total ? `rendering ${job.done}/${job.total}…` : "starting…";
+    setTimeout(() => exportStatus(false), 1000);
+  } else {
+    $("export").disabled = false;
+    $("export").textContent = job.file ? "Re-export MP4" : "Export MP4";
+    st.innerHTML = job.state === "error" ? `<span style="color:var(--bad)">${esc(job.error)}</span>`
+      : job.file ? `<a href="${job.file}" download>download replay.mp4</a>` : "";
+  }
+}
+$("export").onclick = () => exportStatus(true);
+
+(async () => {
+  if (!runId) return showList();
+  $("exportbox").hidden = false;
+  exportStatus(false);
+  $("viewer").hidden = false;
+  await loadRun();
+  if (!meta.ended) { $("follow").checked = true; await show(frames.length - 1); setTimeout(poll, 3000); }
+  else await show(Number(params.get("frame") || 1) - 1);
+})();
+</script>
+</body>
+</html>

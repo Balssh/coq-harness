@@ -23,6 +23,28 @@ namespace CoQMcpBridge
             BridgeMainThread.Enqueue(() => Keyboard.PushCommand(cmd));
         }
 
+        /// <summary>
+        /// Answer the targeting screen (XRL.UI.PickTarget, opened by targeted abilities such
+        /// as Freezing Ray) with cell (x, y): it reads mouse events, so "PointerOver" moves its
+        /// cursor there and "LeftClick" selects it, as a click on the map would.
+        /// </summary>
+        private static string PickTargetAt(int x, int y)
+        {
+            if (x < 0 || y < 0) return "{\"error\":\"pick_target needs x and y\"}";
+            string view = SafeGetView();
+            if (view != "PickTarget")
+                return "{\"error\":\"no targeting screen is open (view: " + Json.Escape(view) + ")\"}";
+            // The first PointerOver only switches the picker from keyboard to mouse mode (it
+            // starts locked on its default cell); the second moves the cursor.
+            BridgeMainThread.Enqueue(() =>
+            {
+                Keyboard.PushMouseEvent("PointerOver", x, y, null);
+                Keyboard.PushMouseEvent("PointerOver", x, y, null);
+                Keyboard.PushMouseEvent("LeftClick", x, y, null);
+            });
+            return "{\"ok\":true,\"action\":\"pick_target\"," + Json.Num("x", x) + "," + Json.Num("y", y) + "}";
+        }
+
         public static string ExecuteCommand(GameObject player, string commandJson)
         {
             try
@@ -79,6 +101,8 @@ namespace CoQMcpBridge
                         return ChargenUIEvent(cmd.GetStr("event", ""), cmd.GetStr("element", ""));
                     case "press_command":
                         return PressCommand(cmd.GetStr("command", ""));
+                    case "pick_target":
+                        return PickTargetAt(cmd.GetInt("x", -1), cmd.GetInt("y", -1));
                     case "open_screen":
                         return OpenScreen(cmd.GetStr("screen", ""));
                     case "close_menu":
@@ -1688,13 +1712,14 @@ namespace CoQMcpBridge
         /// class: most views are registered with [XRL.UI.UIView("ID")] on their
         /// class, and some are pushed by name with no attribute at all
         /// (XRLManual.ShowHelp pushes "ModernHelp" and drives Qud.UI.HelpScreen).
-        /// Those follow the pattern "Modern{X}" -> "{X}Screen".
+        /// Those follow the pattern "Modern{X}" -> "{X}Screen" or "{X}" ("ModernSaveManagement" is
+        /// Qud.UI.SaveManagement).
         /// </summary>
         private static Type ScreenTypeForView(string view)
         {
             if (string.IsNullOrEmpty(view)) return null;
             string bare = view.StartsWith("Modern") ? view.Substring("Modern".Length) : view;
-            foreach (var name in new[] { view, bare + "Screen", view + "Screen" })
+            foreach (var name in new[] { view, bare + "Screen", bare, view + "Screen" })
             {
                 var direct = FindType("Qud.UI." + name) ?? FindType("XRL.UI." + name);
                 if (direct != null) return direct;

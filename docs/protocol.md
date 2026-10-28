@@ -1,20 +1,19 @@
-# CoQ MCP Harness
+# In-game bridge: setup and protocol
 
-Full MCP-style architecture for letting Mistral Large 4 play Caves of Qud.
-Inspired by [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp).
+The C# mod (`mod/`) runs a TCP server inside Caves of Qud. `mcp_server.py` turns it into MCP tools,
+and the harness (`harness/`) plays through those tools. Inspired by
+[heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp).
 
 ## Architecture
 
 ```
-┌─────────────────┐    TCP 47321      ┌─────────────────────────────┐
-│  Python Agent   │◄─────────────────►│  Caves of Qud (C# mod)      │
-│  (mcp/)         │  JSON state +     │  ├─ McpServer.cs (TCP)      │
-│  ├─ client.py   │  commands         │  ├─ Bridge.cs (per-turn)    │
-│  ├─ tools.py    │                   │  ├─ BridgePart.cs (hooks)   │
-│  ├─ decide.py   │                   │  ├─ GameStateSnapshot.cs    │
-│  ├─ loop.py     │                   │  ├─ GameActions.cs          │
-│  └─ run.py      │                   │  └─ Protocol.cs / MiniJson  │
-└─────────────────┘                   └─────────────────────────────┘
+harness/ (python -m harness play)      any MCP client (Vibe, Claude Code, ...)
+        └──────────── stdio MCP ──────────────┘
+                          │
+                   mcp_server.py   tools, compact results, turn waiting, pathing
+                          │  TCP 47321: [4-byte big-endian length][JSON]
+             Caves of Qud + mod/   McpServer, Bridge, GameStateSnapshot, GameActions,
+                                   PopupBridge, SkillActions, TradeBridge
 ```
 
 ### Key Differences from Screenshot-Based Harness
@@ -34,7 +33,7 @@ Inspired by [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp).
 ### 1. Deploy the Mod
 
 ```bash
-python -m mcp.deploy
+.venv/bin/python -m harness.deploy
 ```
 
 This copies the C# mod files to Qud's mods folder:
@@ -49,30 +48,13 @@ This copies the C# mod files to Qud's mods folder:
 3. Enable **"Allow scripting mods"** (you'll be prompted)
 4. Go to **Mod Configuration** (bottom-right of title screen)
 5. Enable **"CoQ MCP Bridge"**
-6. Restart Qud (mods compile at startup)
-7. Start or load a game
-8. Take one step in-game (activates the mod, opens TCP server on port 47321)
+6. Restart Qud (mods compile at startup). `Player.log` shows `[mcp] MCP server listening` once the
+   TCP server on port 47321 is up; it starts at the main menu.
 
-### 3. Set Up Python Environment
+### 3. Play
 
-```bash
-# Install dependencies
-pip install mistralai pydantic
-
-# Set your API key
-export MISTRAL_API_KEY="your-key-here"
-```
-
-### 4. Run the Agent
-
-```bash
-python -m mcp.run
-```
-
-Or with options:
-```bash
-python -m mcp.run --host 127.0.0.1 --port 47321 --episode 1
-```
+Point an MCP client at `mcp_server.py`, or run the harness (`python -m harness play`, see the root
+README).
 
 ## MCP Protocol
 
@@ -209,7 +191,7 @@ Tools added to `mcp_server.py` on top of the raw protocol actions:
 | `attack(direction)` | Yes | Force-attack (needed for walk-over creatures such as dreadroots) |
 | `fire(x?, y?)` | Yes | Shoot the missile weapon at a cell or the nearest hostile; reloads automatically |
 | `rest()` | Yes | Wait until healed (stops if something happens) |
-| `use_ability(name)` | Yes | Activated abilities (Sprint, Flurry, ...) |
+| `use_ability(name, x?, y?)` | Yes | Activated abilities (Sprint, Freezing Ray, ...); targeted ones are aimed at (x, y) or the nearest visible hostile (mod action `pick_target`) |
 | `list_skills(all?)` / `learn_skill(name)` | No | Spend skill points |
 | `raise_attribute(attribute)` | No | Spend attribute points |
 | `trade_list()` / `trade_select(side, index, count)` / `trade_offer()` | No | Buy and sell on the open trade screen (side 0 = trader, 1 = you) |
@@ -225,47 +207,20 @@ Trading: talk to a merchant and pick "Let's trade", then `trade_list`, `trade_se
 
 ## Project Structure
 
-```
-coq-harness/
-├── mod/                    # C# mod for Caves of Qud
-│   ├── manifest.json       # Mod metadata
-│   ├── McpServer.cs        # TCP server
-│   ├── Bridge.cs           # Per-turn hooks, state broadcast
-│   ├── BridgePart.cs       # Player part (event hooks)
-│   ├── GameStateSnapshot.cs # Serialize game state to JSON
-│   ├── GameActions.cs      # Execute commands
-│   ├── Protocol.cs         # Wire protocol
-│   └── MiniJson.cs         # Minimal JSON parser
-│
-├── mcp/                    # Python MCP client + agent
-│   ├── client.py           # TCP client, state management
-│   ├── tools.py            # MCP-style tools
-│   ├── schemas.py          # Decision schema (pydantic)
-│   ├── llm.py              # Mistral API (text-only)
-│   ├── decide.py           # Decision flow
-│   ├── loop.py             # Turn loop
-│   ├── run.py              # Episode manager
-│   ├── deploy.py           # Mod deployment
-│   └── prompts/            # System prompts
-│       ├── system_base.md
-│       ├── system_play.md
-│       └── fewshot.md
-│
-└── ... (legacy screenshot-based harness)
-```
+See the [root README](../README.md#repository-layout).
 
 ## Troubleshooting
 
-### "Connection refused" when running the agent
+### "Connection refused" from mcp_server.py or the harness
 
 The mod isn't running. Make sure:
 1. Qud is running with the mod enabled
-2. You've taken at least one step in-game (the mod activates on first turn)
+2. Qud was restarted after deploying (the server starts at the main menu)
 3. Check Qud's log for `[mcp]` messages: `%USERPROFILE%\AppData\LocalLow\Freehold Games\CavesOfQud\Player.log`
 
 ### Mod doesn't appear in Mod Configuration
 
-1. Check the mods folder path is correct: `python -m mcp.deploy --check`
+1. Check the mods folder path is correct: `python -m harness.deploy --check`
 2. Make sure `manifest.json` is valid JSON
 3. Restart Qud after deploying
 

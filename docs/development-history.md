@@ -187,6 +187,45 @@ Its root-cause guess was that "PostMessage key injection doesn't reach uGUI scre
 **Not reproduced:** ML4's "MCP transport error" from `continue_game`. In-game it now returns a clear
 error.
 
+### Follow-up: the `harness/` package
+
+This replaces ML4's MCP agent loop: `mcp/run.py`, `loop.py`, `decide.py`, `tools.py`, `llm.py`,
+`schemas.py`, `client.py`, `prompts/` and `main_mcp.py` are removed. The deploy script moved to
+`harness/deploy.py` and the protocol doc to `docs/protocol.md`. With no local `mcp/` package left,
+the MCP SDK is no longer shadowed.
+
+**Why replace the loop:**
+- It talked to the mod over TCP with its own copy of the tools, which had drifted from
+  `mcp_server.py`. It had no popups, trading, skills or `go_to`.
+- It parsed JSON decisions out of free text instead of using native tool calls.
+- It read a journal file that nothing ever wrote.
+- It recorded only a thin log, with no viewer.
+
+**What the harness does:**
+- runs `mcp_server.py` as a real MCP client;
+- uses an OpenAI-compatible LLM client, with Mistral as the default;
+- sends system prompts built from the guide notes;
+- keeps memory: model-written goal and notes, context summaries, and a lessons journal across runs;
+- has a watchdog for stuck loops and repeated calls;
+- records each step's reasoning, calls, results, full state and a background screenshot;
+- has a browser replay viewer.
+
+**Bug found while building it:** `move` was missing from the MCP tool list. In `525cbd8` the
+`@server.tool` decorator ended up on the helper `_on_world_map` above it, so every MCP client had a
+broken `_on_world_map` tool and no single-step move. That explains why ML4's Vibe sessions leaned on
+`go_to`.
+
+**Testing:**
+- **Scripted model, fake game:** a full run that covered notes, goals, nudges, the watchdog,
+  summaries, autosave, the call limit and death. The order of the messages sent to the model was
+  checked on every step.
+- **ML4, same fake game:** real tool calls, a summary and lessons. This found two problems, both now
+  fixed:
+  - ML4 could spend the whole token budget on reasoning and return an empty summary;
+  - actions queued after an `open_screen` couldn't work.
+- **Viewer:** rendered in headless Chromium.
+- **Not yet done:** the first run against the live game.
+
 ### Approach
 
 These are the working rules Claude used. They are the main difference from the ML4 sessions.
@@ -227,7 +266,7 @@ The numbers match the caveats in the assessment below.
 | 6 | Hidden information | Creatures only if lit and in line of sight; objects only in explored cells; the map draws `?` for unexplored; pathing penalises unexplored cells | `IsVisible()` depends on a map the renderer fills, so it is always false off the render thread. Lit plus line of sight follows the game's own rule |
 | 7 | Missing play features | Containers and pickers, trading, skills and attribute points, `fire`, `attack`, `rest`, `use_ability`, `go_to` | Added when the play session needed them: a chest froze auto-explore, a level-5 character had unspent points, loot couldn't be sold |
 | 8 | Hard for an LLM to use | Compact action results (HP, hostiles, new messages); MCP keepalive; errors surfaced; the low-HP popup auto-dismissed (max 3 times per action) with a `WARNING:` line instead | The full state was ~3k tokens per step. The low-HP popup reappears every turn below the threshold (`XRLCore.PlayerTurn`), so dismissing it each time stalls an agent. The limit avoids an infinite loop if dismissing ever fails |
-| 9 | Drift between entry points | README names `mcp_server.py` as the maintained entry point and marks the screenshot harness and `mcp/run.py` as not updated | Documentation only. The old paths weren't deleted or fixed |
+| 9 | Drift between entry points | README names `mcp_server.py` as the maintained entry point; the follow-up harness replaced `mcp/run.py` and plays through `mcp_server.py` itself | The screenshot harness is still in the repo, marked as superseded |
 
 ## Assessment of ML4
 
@@ -312,6 +351,6 @@ scripted loop instead, and the second request turned into setting up the Vibe MC
   conversation logs. How they were steered is unknown.
 - **Claude's own gaps:**
   - The low-HP auto-dismiss was only tested against a fake connection.
-  - `mcp/run.py`, ML4's own agent loop, was not updated or re-tested.
+  - `mcp/run.py`, ML4's own agent loop, was not updated or re-tested (it was later replaced by `harness/`).
   - Claude also needed several fix-and-redeploy loops for bugs it introduced itself, such as a
     visibility check that hid every creature on the first try.

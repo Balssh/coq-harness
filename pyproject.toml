@@ -1,13 +1,14 @@
 [project]
 name = "coq-harness"
 version = "0.2.0"
-description = "Harness that lets Mistral Large 4 play Caves of Qud — screenshot-based and MCP modes"
+description = "Harness that lets an LLM (Mistral Large 4 by default) play Caves of Qud through an in-game MCP bridge"
 requires-python = ">=3.10"
 dependencies = [
     "pillow>=10.0",
     "pydantic>=2.0",
     "mistralai>=1.0",
     "jsonschema>=4.0",
+    "mcp>=2.3",
 ]
 
 [project.optional-dependencies]
@@ -17,14 +18,14 @@ dev = [
 
 [project.scripts]
 coq-harness = "main:main"
-coq-mcp = "main_mcp:main"
+coq-play = "harness.__main__:main"
 coq-replay = "recording.replay:main"
 
 [tool.uv]
 package = true
 
 [tool.setuptools]
-py-modules = ["main", "main_mcp"]
+py-modules = ["main"]
 packages = [
     "client",
     "game",
@@ -35,5 +36,8 @@ packages = [
     "loop",
     "run",
     "recording",
-    "mcp",
+    "harness",
 ]
+
+[tool.setuptools.package-data]
+harness = ["prompts/*.md", "viewer/*.html"]

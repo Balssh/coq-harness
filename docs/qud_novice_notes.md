@@ -75,6 +75,8 @@ for any LLM driving the MCP tools.
 - After every fight: `rest()`. After a level-up: `list_skills` + `learn_skill`,
   and `raise_attribute` when you have attribute points. Unspent points = weak
   character.
+- Targeted abilities and mutations (Freezing Ray, Proselytize, Mark Target...): `use_ability(name)`
+  aims at the nearest visible hostile; pass `x, y` for another target. Mind their range.
 - Ranged first: `fire()` shoots the nearest hostile (auto-reload). Shooting a
   hulking baboon while it walks up killed it before it reached melee. Ammo is
   consumed — keep track of arrows.

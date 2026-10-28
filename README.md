@@ -2,14 +2,15 @@
 
 A harness that lets an LLM play [Caves of Qud](https://www.cavesofqud.com/). It started as a test of
 whether Mistral Large 4 (ML4) can play the game. The MCP server works with any MCP client and has been
-played with Mistral Vibe and Claude Code.
+played with Mistral Vibe and Claude Code. The harness in `harness/` drives a model through the same
+MCP tools on its own, with system prompts, memory, and a recorder plus replay viewer for each run.
 
 Qud runs on Windows; the agent side runs in WSL (or on the same machine).
 
 ## How it works
 
 ```
-LLM client (Vibe, Claude Code, ...)
+harness/ (python -m harness play)  or  any MCP client (Vibe, Claude Code, ...)
    │  stdio MCP
 mcp_server.py ── semantic tools, compact state text, turn waiting, pathing
    │  TCP :47321, [4-byte big-endian length][JSON]
@@ -25,20 +26,21 @@ mod/ (C# mod compiled by Qud at startup)
 The mod reads state and drives the game from inside Qud, so nothing depends on screenshots, key
 injection or window focus. The window still must not be minimized.
 
-## Quick start (MCP)
+## Quick start
 
-1. **Deploy the mod**: `.venv/bin/python -m mcp.deploy` copies `mod/` to Qud's `Mods/CoQMcpBridge`.
+1. **Deploy the mod**: `uv run python -m harness.deploy` copies `mod/` to Qud's `Mods/CoQMcpBridge`.
 2. **Enable it in Qud**: Options → Modding → allow scripting mods, enable "CoQ MCP Bridge" in Mod
    Configuration, and restart Qud. `Player.log` shows `[mcp] MCP server listening` once the mod has
    compiled. The server starts at the main menu, so character creation and loading work too.
-3. **Register the MCP server** with your client:
+3. **Either run the harness** (see [below](#the-harness)): `uv run python -m harness play`
+4. **Or register the MCP server** with your client:
    - **Claude Code:**
      `claude mcp add -s local qud -- /path/to/coq-harness/.venv/bin/python /path/to/coq-harness/mcp_server.py`
    - **Mistral Vibe:**
      `vibe mcp add caves-of-qud --transport stdio --command /path/to/uv --arg=run --arg=--project --arg=/path/to/coq-harness --arg=python --arg=/path/to/coq-harness/mcp_server.py`
 
    The server finds the game through `COQ_HOST`, then localhost, then the WSL gateway.
-4. **Play**: `continue_game` (or `start_new_game` + `chargen_auto`), then `get_state`.
+   Then play: `continue_game` (or `start_new_game` + `chargen_auto`), then `get_state`.
 
 ## Tools
 
@@ -46,7 +48,7 @@ injection or window focus. The window still must not be minimized.
 |---|---|
 | State | `get_state` (full), `get_state_raw` (JSON), `get_map` (ASCII map with x/y rulers) |
 | Movement | `move`, `go_to(x, y)`, `travel`, `go_stairs`, `auto_explore`, `wait`, `rest` |
-| Combat | `move` into a hostile, `attack(direction)`, `fire(x?, y?)`, `use_ability(name)` |
+| Combat | `move` into a hostile, `attack(direction)`, `fire(x?, y?)`, `use_ability(name, x?, y?)` (targeted abilities aim at the cell or the nearest hostile) |
 | Items | `get`, `use_item(item, item_action)` (eat, drink, apply, equip, unequip, drop) |
 | Popups | `respond_popup(option / button / dismiss / text)`, which covers conversations, Yes/No prompts and container pickers |
 | Character | `list_skills`, `learn_skill`, `raise_attribute` |
@@ -56,9 +58,54 @@ injection or window focus. The window still must not be minimized.
 - **Compact results:** each action returns a short status with HP, visible hostiles and new messages.
 - **No hidden information:** the state only contains what the character could know, meaning creatures
   in line of sight and objects in explored cells.
-- **Further reading:** [`mcp/README.md`](mcp/README.md) has the wire protocol, and
+- **Further reading:** [`docs/protocol.md`](docs/protocol.md) has the wire protocol, and
   [`docs/qud_novice_notes.md`](docs/qud_novice_notes.md) has early-game strategy and tool tips to use as
   prompt material.
+
+## The harness
+
+```
+uv run python -m harness play                       # ML4 plays the loaded game (or continues the last save)
+uv run python -m harness play --new-game --max-steps 500 --label first-try
+uv run python -m harness replay                     # pick a run in the browser
+uv run python -m harness export <run>               # render a run to MP4 (also a button in the viewer)
+```
+
+`uv run coq-play ...` works too. [`docs/harness.md`](docs/harness.md) documents the implementation.
+
+- **Model:** Mistral (`mistral-large-4`) by default, with `reasoning_effort: high` (`--reasoning` to change). The key comes from `MISTRAL_API_KEY`, the repo's
+  `.env`, or `~/.vibe/.env`. Any OpenAI-compatible API works too: `--provider openai --model ...`,
+  `--provider openrouter --model ...`, or `--base-url http://localhost:8000/v1 --model ...` for a
+  local server. `--extra-body` passes provider options such as reasoning settings.
+- **Tools:** the harness starts `mcp_server.py` as an MCP client, so the model plays with exactly the
+  tools other clients get. Saving, loading and character creation are handled by the harness and
+  hidden from the model. Once a popup or screen opens, other queued actions in that response are
+  skipped.
+- **Prompts** (`harness/prompts/`): turn priorities (popups, screens, danger, healing, level-ups,
+  exploring with `auto_explore` then NPCs then the next zone), plus the guide notes in
+  `docs/qud_novice_notes.md` and the lessons from previous runs.
+- **Memory:**
+  - The model keeps a goal and numbered notes (`set_goal`, `note`, `forget_note`), shown every turn.
+  - When the context grows past `--keep-steps` steps (default 30), the oldest are summarised into
+    "the story so far" and dropped. Older tool results are shortened.
+  - At the end of a run the model writes lessons into `runs/journal.md`, which the next runs read.
+- **Watchdog:** if nothing changes for 8 turns, or the same call repeats 5 times, the harness tells the
+  model to try something else. It also points out zone changes.
+- **Stops** at death, `--max-steps` (default 300), `--max-minutes`, or Ctrl-C. It saves every 50
+  steps and at the end unless the character died.
+- **Recording** (`runs/harness/<run>/`):
+  - every model response, with its reasoning, text, tool calls and token usage;
+  - every tool result;
+  - the full game state after each action;
+  - a screenshot of the Qud window (taken in the background with PrintWindow; the window must not be
+    minimized; `--no-screenshots` to skip);
+  - memory changes, summaries and nudges.
+- **Replay viewer:**
+  - shows the screenshot next to a map drawn from the recorded state;
+  - shows the model's thinking, calls and results for each step, and its memory at that point;
+  - an HP timeline marks level-ups, nudges and errors;
+  - runs in progress can be followed live;
+  - `?run=<id>&frame=N` links to a moment.
 
 ## Repository layout
 
@@ -66,7 +113,8 @@ injection or window focus. The window still must not be minimized.
 |---|---|
 | `mod/` | C# Qud mod (the bridge inside the game) |
 | `mcp_server.py` | stdio MCP server, the maintained entry point |
-| `mcp/` | Mod deploy script, protocol README, and ML4's own agent loop (`python -m mcp.run`). The agent loop was not updated or tested alongside the recent mod changes. |
+| `harness/` | The LLM harness: play loop, LLM client, memory, recorder, replay viewer, prompts, and the mod deploy script |
+| `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs |
 | `bridge/`, `client/`, `game/`, `tools/`, `perception/`, `memory/`, `agent/`, `loop/`, `run/`, `recording/`, `main.py` | The original screenshot-based harness: Windows capture and input bridge plus an ML4 agent loop. It is superseded by the mod, and `AGENTS.md` and `docs/specs/` describe it. |
 | `docs/` | Design specs, research brief, findings from screenshot runs, guide notes, [development history](docs/development-history.md) |
 

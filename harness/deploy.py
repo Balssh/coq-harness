@@ -4,9 +4,9 @@ This copies the C# mod files from the mod/ directory to Qud's mods folder.
 The mod compiles at Qud startup — no build step needed.
 
 Usage:
-    python -m mcp.deploy              # deploy the mod
-    python -m mcp.deploy --check      # check if mod is deployed
-    python -m mcp.deploy --force      # force redeploy
+    python -m harness.deploy              # deploy the mod
+    python -m harness.deploy --check      # check if mod is deployed
+    python -m harness.deploy --force      # force redeploy
 """
 
 import argparse
@@ -112,9 +112,8 @@ def deploy(force: bool = False) -> Path:
     print(f"[deploy]   1. Launch Caves of Qud")
     print(f"[deploy]   2. Go to Options → Modding → enable 'Allow scripting mods'")
     print(f"[deploy]   3. Enable the 'CoQ MCP Bridge' mod in Mod Configuration")
-    print(f"[deploy]   4. Start or load a game")
-    print(f"[deploy]   5. Take one step in-game to activate the mod")
-    print(f"[deploy]   6. Run: python -m mcp.run")
+    print(f"[deploy]   4. Restart Qud; Player.log shows '[mcp] MCP server listening' once it compiled")
+    print(f"[deploy]   5. Run: python -m harness play")
 
     return mods_dir
 
@@ -128,12 +127,12 @@ def check() -> None:
         for f in sorted(mods_dir.iterdir()):
             print(f"[check]   {f.name} ({f.stat().st_size} bytes)")
     else:
-        print(f"[check] Directory does NOT exist. Run: python -m mcp.deploy")
+        print(f"[check] Directory does NOT exist. Run: python -m harness.deploy")
 
     if is_deployed():
         print(f"[check] Mod is deployed and up to date.")
     else:
-        print(f"[check] Mod is NOT deployed or out of date. Run: python -m mcp.deploy")
+        print(f"[check] Mod is NOT deployed or out of date. Run: python -m harness.deploy")
 
 
 def main() -> None:
