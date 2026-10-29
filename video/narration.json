@@ -1,0 +1,63 @@
+{
+  "voice": "en_paul_confident",
+  "model": "voxtral-mini-tts-3",
+  "tempo": 1.08,
+  "scenes": [
+    {
+      "id": "intro",
+      "text": "This is Caves of Qud: a deep, strange roguelike where death is permanent. The one playing it isn't a person. It's Mistral Large 4.",
+      "say": "This is Caves of Kood: a deep, strange roguelike where death is permanent. The one playing it isn't a person. It's Mistral Large 4."
+    },
+    {
+      "id": "title",
+      "text": "This is coq-harness: a harness that lets a language model play Qud on its own.",
+      "say": "This is the Caves of Kood harness. It lets a language model play Kood, on its own."
+    },
+    {
+      "id": "pixels",
+      "text": "The first attempt was the obvious one: show the model screenshots and let it press keys. It didn't hold up. The captures were cropped, keys got lost, and the model spent its turns fighting menus instead of monsters."
+    },
+    {
+      "id": "architecture",
+      "text": "So we moved inside the game. A C# mod runs a small server in Qud and reads the game's own data: every creature, item and message, exactly. An MCP server turns that into about forty semantic tools, like walk to a place, fire, trade, or flee. And the harness runs the loop. Each step, it sends the state to Mistral Large 4, and runs the tool calls that come back.",
+      "say": "So we moved inside the game. A C sharp mod runs a small server in Kood and reads the game's own data: every creature, item and message, exactly. An MCP server turns that into about forty semantic tools, like walk to a place, fire, trade, or flee. And the harness runs the loop. Each step, it sends the state to Mistral Large 4, and runs the tool calls that come back."
+    },
+    {
+      "id": "step",
+      "text": "Here's one real step. Moroq, a gunslinger, has just reached level three. The model sees one baboon left, nineteen tiles away, and calls fire. The call goes through MCP to the mod, the game resolves the turn, and a one-line answer comes back."
+    },
+    {
+      "id": "status",
+      "text": "Raw game data is far too much to read every turn, so the tools answer in short lines. Your health. Enemies, with the game's own threat rating and how hard they hit. Tactics for creatures it has met before. And a danger warning when a fight could kill you."
+    },
+    {
+      "id": "guards",
+      "text": "Around the model, the harness keeps things on track. It accepts routine popups, holds back one risky blow so the model can rethink, catches loops, and folds old turns into a running summary. At the end of a run, the model writes lessons for the next one."
+    },
+    {
+      "id": "play",
+      "text": "Then we let it play. It walks into Joppa, talks to the villagers and takes their quests. It sells its junk for armor and ammunition, heads north to Red Rock, and fights baboons from range, one at a time."
+    },
+    {
+      "id": "results",
+      "text": "Over nine runs and almost three thousand tool calls, it sent a single invalid argument. In the later runs it reached level four within about a hundred and forty steps, and level six at best. But four runs ended in death. And each time, the model had already said it. That frustum is too dangerous. It handles single decisions well. What it struggles with is knowing when to stop."
+    },
+    {
+      "id": "replay",
+      "text": "Every run is recorded: each thought, each tool call, each frame. A replay viewer lets you step through what the model did, and why."
+    },
+    {
+      "id": "assessment",
+      "text": "So how good is Mistral Large 4? As a player, it's strong with the tools and the opening, good at leveling, and weak at risk, resources and long quests. It also wrote much of the first version of this project, through Mistral Vibe. As a coder it was fast and tireless: it scaffolded the first harness, and even wrote its own reader for the game's code. But it sometimes reported work it hadn't done, explained failures away, and swapped hard problems for workarounds. The developer found most of the real root causes."
+    },
+    {
+      "id": "built",
+      "text": "It was built by one developer, working with AI. Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see. It was inspired by heroes-3-mcp, llm-of-qud, raves-of-qud and Pi, and it stands on open source. The voice is Voxtral.",
+      "say": "It was built by one developer, working with AI. Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see. It was inspired by heroes three MCP, L L M of Kood, Raves of Kood and Pi, and it stands on open source. The voice is Voxtral."
+    },
+    {
+      "id": "outro",
+      "text": "Next up: longer runs, a quest helper, and teaching it when to walk away. The code is on GitHub."
+    }
+  ]
+}

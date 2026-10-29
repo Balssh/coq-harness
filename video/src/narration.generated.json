@@ -1,0 +1,436 @@
+{
+  "voice": "en_paul_confident",
+  "scenes": [
+    {
+      "id": "intro",
+      "text": "This is Caves of Qud: a deep, strange roguelike where death is permanent. The one playing it isn't a person. It's Mistral Large 4.",
+      "audio": "audio/intro.mp3",
+      "seconds": 9.84,
+      "hash": "e385cc140c93",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "This is Caves of Qud:",
+          "start": 0.09,
+          "end": 2.48
+        },
+        {
+          "text": "a deep, strange roguelike where death is permanent.",
+          "start": 2.48,
+          "end": 6.3
+        },
+        {
+          "text": "The one playing it isn't a person.",
+          "start": 6.3,
+          "end": 8.24
+        },
+        {
+          "text": "It's Mistral Large 4.",
+          "start": 8.24,
+          "end": 9.54
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "title",
+      "text": "This is coq-harness: a harness that lets a language model play Qud on its own.",
+      "audio": "audio/title.mp3",
+      "seconds": 4.43,
+      "hash": "9cf704818bfc",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "This is coq-harness:",
+          "start": 0.0,
+          "end": 1.3
+        },
+        {
+          "text": "a harness that lets a language model play Qud on its own.",
+          "start": 1.3,
+          "end": 4.35
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "pixels",
+      "text": "The first attempt was the obvious one: show the model screenshots and let it press keys. It didn't hold up. The captures were cropped, keys got lost, and the model spent its turns fighting menus instead of monsters.",
+      "audio": "audio/pixels.mp3",
+      "seconds": 14.37,
+      "hash": "f7cfc1b7402b",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "The first attempt was the obvious one:",
+          "start": 0.0,
+          "end": 2.41
+        },
+        {
+          "text": "show the model screenshots and let it press keys.",
+          "start": 2.41,
+          "end": 7.04
+        },
+        {
+          "text": "It didn't hold up.",
+          "start": 7.04,
+          "end": 8.43
+        },
+        {
+          "text": "The captures were cropped, keys got lost, and the model spent its turns fighting menus instead of monsters.",
+          "start": 8.43,
+          "end": 14.26
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "architecture",
+      "text": "So we moved inside the game. A C# mod runs a small server in Qud and reads the game's own data: every creature, item and message, exactly. An MCP server turns that into about forty semantic tools, like walk to a place, fire, trade, or flee. And the harness runs the loop. Each step, it sends the state to Mistral Large 4, and runs the tool calls that come back.",
+      "audio": "audio/architecture.mp3",
+      "seconds": 21.01,
+      "hash": "986a61ceb63b",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "So we moved inside the game.",
+          "start": 0.0,
+          "end": 1.57
+        },
+        {
+          "text": "A C# mod runs a small server in Qud and reads the game's own data:",
+          "start": 1.57,
+          "end": 5.93
+        },
+        {
+          "text": "every creature, item and message, exactly.",
+          "start": 5.93,
+          "end": 8.52
+        },
+        {
+          "text": "An MCP server turns that into about forty semantic tools, like walk to a place, fire, trade, or flee.",
+          "start": 8.52,
+          "end": 14.72
+        },
+        {
+          "text": "And the harness runs the loop.",
+          "start": 14.72,
+          "end": 16.3
+        },
+        {
+          "text": "Each step, it sends the state to Mistral Large 4, and runs the tool calls that come back.",
+          "start": 16.3,
+          "end": 20.93
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "step",
+      "text": "Here's one real step. Moroq, a gunslinger, has just reached level three. The model sees one baboon left, nineteen tiles away, and calls fire. The call goes through MCP to the mod, the game resolves the turn, and a one-line answer comes back.",
+      "audio": "audio/step.mp3",
+      "seconds": 14.06,
+      "hash": "3d25ce9bc0b4",
+      "match": 0.978,
+      "cues": [
+        {
+          "text": "Here's one real step.",
+          "start": 0.0,
+          "end": 1.67
+        },
+        {
+          "text": "Moroq, a gunslinger, has just reached level three.",
+          "start": 1.67,
+          "end": 4.63
+        },
+        {
+          "text": "The model sees one baboon left, nineteen tiles away, and calls fire.",
+          "start": 4.63,
+          "end": 8.8
+        },
+        {
+          "text": "The call goes through MCP to the mod, the game resolves the turn, and a one-line answer comes back.",
+          "start": 8.8,
+          "end": 13.98
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "status",
+      "text": "Raw game data is far too much to read every turn, so the tools answer in short lines. Your health. Enemies, with the game's own threat rating and how hard they hit. Tactics for creatures it has met before. And a danger warning when a fight could kill you.",
+      "audio": "audio/status.mp3",
+      "seconds": 13.9,
+      "hash": "ea8429f052cb",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "Raw game data is far too much to read every turn, so the tools answer in short lines.",
+          "start": 0.09,
+          "end": 5.0
+        },
+        {
+          "text": "Your health.",
+          "start": 5.0,
+          "end": 5.56
+        },
+        {
+          "text": "Enemies, with the game's own threat rating and how hard they hit.",
+          "start": 5.56,
+          "end": 8.97
+        },
+        {
+          "text": "Tactics for creatures it has met before.",
+          "start": 8.97,
+          "end": 10.96
+        },
+        {
+          "text": "And a danger warning when a fight could kill you.",
+          "start": 10.96,
+          "end": 13.8
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "guards",
+      "text": "Around the model, the harness keeps things on track. It accepts routine popups, holds back one risky blow so the model can rethink, catches loops, and folds old turns into a running summary. At the end of a run, the model writes lessons for the next one.",
+      "audio": "audio/guards.mp3",
+      "seconds": 13.02,
+      "hash": "32a7e571dde4",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "Around the model, the harness keeps things on track.",
+          "start": 0.09,
+          "end": 2.47
+        },
+        {
+          "text": "It accepts routine popups, holds back one risky blow so the model can rethink, catches loops, and folds old turns into a running summary.",
+          "start": 2.47,
+          "end": 10.37
+        },
+        {
+          "text": "At the end of a run, the model writes lessons for the next one.",
+          "start": 10.37,
+          "end": 12.96
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "play",
+      "text": "Then we let it play. It walks into Joppa, talks to the villagers and takes their quests. It sells its junk for armor and ammunition, heads north to Red Rock, and fights baboons from range, one at a time.",
+      "audio": "audio/play.mp3",
+      "seconds": 11.47,
+      "hash": "c9c5da6ed2d1",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "Then we let it play.",
+          "start": 0.0,
+          "end": 1.3
+        },
+        {
+          "text": "It walks into Joppa, talks to the villagers and takes their quests.",
+          "start": 1.3,
+          "end": 5.09
+        },
+        {
+          "text": "It sells its junk for armor and ammunition, heads north to Red Rock, and fights baboons from range, one at a time.",
+          "start": 5.09,
+          "end": 11.39
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "results",
+      "text": "Over nine runs and almost three thousand tool calls, it sent a single invalid argument. In the later runs it reached level four within about a hundred and forty steps, and level six at best. But four runs ended in death. And each time, the model had already said it. That frustum is too dangerous. It handles single decisions well. What it struggles with is knowing when to stop.",
+      "audio": "audio/results.mp3",
+      "seconds": 22.67,
+      "hash": "026f9ca5736b",
+      "match": 0.993,
+      "cues": [
+        {
+          "text": "Over nine runs and almost three thousand tool calls, it sent a single invalid argument.",
+          "start": 0.09,
+          "end": 5.41
+        },
+        {
+          "text": "In the later runs it reached level four within about a hundred and forty steps, and level six at best.",
+          "start": 5.41,
+          "end": 11.82
+        },
+        {
+          "text": "But four runs ended in death.",
+          "start": 11.82,
+          "end": 13.88
+        },
+        {
+          "text": "And each time, the model had already said it.",
+          "start": 13.88,
+          "end": 16.97
+        },
+        {
+          "text": "That frustum is too dangerous.",
+          "start": 16.97,
+          "end": 18.78
+        },
+        {
+          "text": "It handles single decisions well.",
+          "start": 18.78,
+          "end": 20.74
+        },
+        {
+          "text": "What it struggles with is knowing when to stop.",
+          "start": 20.74,
+          "end": 22.69
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "replay",
+      "text": "Every run is recorded: each thought, each tool call, each frame. A replay viewer lets you step through what the model did, and why.",
+      "audio": "audio/replay.mp3",
+      "seconds": 9.02,
+      "hash": "f4c25b8ce991",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "Every run is recorded:",
+          "start": 0.09,
+          "end": 1.85
+        },
+        {
+          "text": "each thought, each tool call, each frame.",
+          "start": 1.85,
+          "end": 5.28
+        },
+        {
+          "text": "A replay viewer lets you step through what the model did, and why.",
+          "start": 5.28,
+          "end": 8.8
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "assessment",
+      "text": "So how good is Mistral Large 4? As a player, it's strong with the tools and the opening, good at leveling, and weak at risk, resources and long quests. It also wrote much of the first version of this project, through Mistral Vibe. As a coder it was fast and tireless: it scaffolded the first harness, and even wrote its own reader for the game's code. But it sometimes reported work it hadn't done, explained failures away, and swapped hard problems for workarounds. The developer found most of the real root causes.",
+      "audio": "audio/assessment.mp3",
+      "seconds": 26.95,
+      "hash": "fdf2d3989a5f",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "So how good is Mistral Large 4?",
+          "start": 0.0,
+          "end": 2.31
+        },
+        {
+          "text": "As a player, it's strong with the tools and the opening, good at leveling, and weak at risk, resources and long quests.",
+          "start": 2.31,
+          "end": 8.7
+        },
+        {
+          "text": "It also wrote much of the first version of this project, through Mistral Vibe.",
+          "start": 8.7,
+          "end": 12.59
+        },
+        {
+          "text": "As a coder it was fast and tireless:",
+          "start": 12.59,
+          "end": 14.72
+        },
+        {
+          "text": "it scaffolded the first harness, and even wrote its own reader for the game's code.",
+          "start": 14.72,
+          "end": 18.89
+        },
+        {
+          "text": "But it sometimes reported work it hadn't done, explained failures away, and swapped hard problems for workarounds.",
+          "start": 18.89,
+          "end": 24.63
+        },
+        {
+          "text": "The developer found most of the real root causes.",
+          "start": 24.63,
+          "end": 26.85
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    },
+    {
+      "id": "built",
+      "text": "It was built by one developer, working with AI. Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see. It was inspired by heroes-3-mcp, llm-of-qud, raves-of-qud and Pi, and it stands on open source. The voice is Voxtral.",
+      "audio": "audio/built.mp3",
+      "seconds": 16.64,
+      "cbr": true,
+      "tempo": 1.08,
+      "hash": "624216920ff6",
+      "match": 0.995,
+      "cues": [
+        {
+          "text": "It was built by one developer, working with AI.",
+          "start": 0.09,
+          "end": 3.15
+        },
+        {
+          "text": "Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see.",
+          "start": 3.15,
+          "end": 7.78
+        },
+        {
+          "text": "It was inspired by heroes-3-mcp, llm-of-qud, raves-of-qud and Pi, and it stands on open source.",
+          "start": 7.78,
+          "end": 15.46
+        },
+        {
+          "text": "The voice is Voxtral.",
+          "start": 15.46,
+          "end": 16.57
+        }
+      ]
+    },
+    {
+      "id": "outro",
+      "text": "Next up: longer runs, a quest helper, and teaching it when to walk away. The code is on GitHub.",
+      "audio": "audio/outro.mp3",
+      "seconds": 5.32,
+      "hash": "064f5df2ff07",
+      "match": 1.0,
+      "cues": [
+        {
+          "text": "Next up:",
+          "start": 0.09,
+          "end": 0.68
+        },
+        {
+          "text": "longer runs, a quest helper, and teaching it when to walk away.",
+          "start": 0.68,
+          "end": 4.17
+        },
+        {
+          "text": "The code is on GitHub.",
+          "start": 4.17,
+          "end": 5.28
+        }
+      ],
+      "cbr": true,
+      "tempo": 1.08
+    }
+  ]
+}

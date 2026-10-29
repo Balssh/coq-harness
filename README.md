@@ -1,11 +1,24 @@
 # coq-harness
 
-A harness that lets an LLM play [Caves of Qud](https://www.cavesofqud.com/). It started as a test of
-whether Mistral Large 4 (ML4) can play the game. The MCP server works with any MCP client and has been
-played with Mistral Vibe and Claude Code. The harness in `harness/` drives a model through the same
-MCP tools on its own, with system prompts, memory, and a recorder plus replay viewer for each run.
+A harness that lets an LLM play [Caves of Qud](https://www.cavesofqud.com/) on its own. It was built
+to answer one question: can Mistral Large 4 (ML4) play the game? A C# mod inside Qud exposes the
+game as semantic MCP tools, and an agent loop drives the model through them, recording every step
+for replay. The MCP server also works with any MCP client, such as Mistral Vibe or Claude Code.
 
 Qud runs on Windows; the agent side runs in WSL (or on the same machine).
+
+**Video:** a 3:15 presentation with real footage of ML4's runs: VIDEO_LINK. It's rendered from
+[`video/`](video/README.md) with Remotion and narrated by Mistral's Voxtral.
+
+## Results
+
+Nine supervised new-game runs of 118–300 steps (details in [`docs/ml4-assessment.md`](docs/ml4-assessment.md)):
+
+- **The opening goes well.** ML4 explores Joppa, talks to the villagers and takes both quests, then
+  trades for armor and a weapon. In the later runs (7–9) it reached level 5–6 within 250 steps.
+- **Tool use is reliable.** It sent one invalid argument in about 2,900 calls.
+- **Judgment over time is the weak spot.** Four runs died, each in a fight the model had itself
+  called too dangerous. It spends resources badly, and no run finished the first main quest.
 
 ## How it works
 
@@ -29,6 +42,16 @@ injection or window focus. The window still must not be minimized.
 The original screenshot-based harness (window capture, key injection, an ML4 loop that read the
 screen) is retired to the [`legacy/screenshot-harness`](../../tree/legacy/screenshot-harness)
 branch. [`docs/how-it-works.md`](docs/how-it-works.md) walks through the current design.
+
+## Requirements
+
+- **Caves of Qud** on Windows, with scripting mods allowed. The mod is compiled by the
+  game at startup, so no .NET SDK is needed.
+- **WSL2** (or Python on the same Windows machine) with [uv](https://docs.astral.sh/uv/) and
+  Python 3.10+. `uv sync` installs the dependencies (the MCP SDK and Pillow).
+- **A Mistral API key** for the harness (`MISTRAL_API_KEY`, or a `.env` file), or a key for any
+  OpenAI-compatible provider.
+- **Optional:** `ffmpeg` for MP4 export of runs; Node.js 20+ to render the presentation video.
 
 ## Quick start
 
@@ -74,44 +97,31 @@ uv run python -m harness play                       # ML4 plays the loaded game 
 uv run python -m harness play --new-game --max-steps 500 --label first-try   # the model picks a preset character
 uv run python -m harness play --new-game --character "Marsh Taur"             # or name one, or --character random
 uv run python -m harness replay                     # pick a run in the browser
-uv run python -m harness export <run> --speed 2     # render a run to MP4 (--smart pacing, --annotations; also in the viewer)
+uv run python -m harness export <run> --speed 2     # render a run to MP4
 ```
 
-`uv run coq-play ...` works too. [`docs/harness.md`](docs/harness.md) documents the implementation.
+- **Model:** `mistral-large-4` with `reasoning_effort: high` by default. The key comes from
+  `MISTRAL_API_KEY`, the repo's `.env`, or `~/.vibe/.env`. Any OpenAI-compatible API works too:
+  `--provider openai|openrouter --model ...`, or `--base-url` for a local server.
+- **Tools:** the harness is an MCP client of `mcp_server.py`, so the model plays with exactly the
+  tools other clients get. Saving, loading and character creation are handled by the harness.
+- **Context:** each step has three parts:
+  - the system prompt: turn priorities (`harness/prompts/`), the guide notes and lessons from
+    earlier runs;
+  - the goal and notes the model keeps for itself;
+  - the recent steps. Older steps are folded into a running summary.
+- **Guards:**
+  - routine popups are accepted for the model;
+  - one risky melee blow is held back when a fight could kill;
+  - watchdogs catch loops and getting stuck.
+- **Recording and replay:**
+  - every run writes `runs/harness/<run>/`: each model response, tool result, game state, and a
+    screenshot of the Qud window;
+  - the replay viewer shows these side by side with a map and an HP timeline, live or afterwards,
+    and exports MP4.
+- **Stops** at death, `--max-steps` (default 300), `--max-minutes` or Ctrl-C, and saves every 50 steps.
 
-- **Model:** Mistral (`mistral-large-4`) by default, with `reasoning_effort: high` (`--reasoning` to change). The key comes from `MISTRAL_API_KEY`, the repo's
-  `.env`, or `~/.vibe/.env`. Any OpenAI-compatible API works too: `--provider openai --model ...`,
-  `--provider openrouter --model ...`, or `--base-url http://localhost:8000/v1 --model ...` for a
-  local server. `--extra-body` passes provider options such as reasoning settings.
-- **Tools:** the harness starts `mcp_server.py` as an MCP client, so the model plays with exactly the
-  tools other clients get. Saving, loading and character creation are handled by the harness and
-  hidden from the model. Once a popup or screen opens, other queued actions in that response are
-  skipped.
-- **Prompts** (`harness/prompts/`): turn priorities (popups, screens, danger, healing, level-ups,
-  exploring with `auto_explore` then NPCs then the next zone), plus the guide notes in
-  `docs/qud_novice_notes.md` and the lessons from previous runs.
-- **Memory:**
-  - The model keeps a goal and numbered notes (`set_goal`, `note`, `forget_note`), shown every turn.
-  - When the context grows past `--keep-steps` steps (default 30), the oldest are summarised into
-    "the story so far" and dropped. Older tool results are shortened.
-  - At the end of a run the model writes lessons into `runs/journal.md`; the next runs read its hand-kept sections and the latest 3 runs' lessons.
-- **Watchdog:** if nothing changes for 8 turns, or the same call repeats 5 times, the harness tells the
-  model to try something else. It also points out zone changes.
-- **Stops** at death, `--max-steps` (default 300), `--max-minutes`, or Ctrl-C. It saves every 50
-  steps and at the end unless the character died.
-- **Recording** (`runs/harness/<run>/`):
-  - every model response, with its reasoning, text, tool calls and token usage;
-  - every tool result;
-  - the full game state after each action;
-  - a screenshot of the Qud window (taken in the background with PrintWindow; the window must not be
-    minimized; `--no-screenshots` to skip);
-  - memory changes, summaries and nudges.
-- **Replay viewer:**
-  - shows the screenshot next to a map drawn from the recorded state;
-  - shows the model's thinking, calls and results for each step, and its memory at that point;
-  - an HP timeline marks level-ups, nudges and errors;
-  - runs in progress can be followed live;
-  - `?run=<id>&frame=N` links to a moment.
+[`docs/harness.md`](docs/harness.md) documents all of it.
 
 ## Repository layout
 
@@ -120,9 +130,50 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4 (--sma
 | `mod/` | C# Qud mod (the bridge inside the game) |
 | `mcp_server.py` | stdio MCP server, the maintained entry point |
 | `harness/` | The LLM harness: play loop, LLM client, memory, recorder, replay viewer, prompts, and the mod deploy script |
+| `video/` | The presentation video: Remotion scenes, narration script, Voxtral voicing and clip extraction |
 | `data/creatures.json` | Hand-written tactics for common early creatures, shown in `KNOW` lines |
 | `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs (hand-kept sections plus the latest 3 runs are read), `runs/bestiary.json` what each kind of creature has done to the player |
 | `docs/` | [How it works](docs/how-it-works.md), [harness](docs/harness.md), [protocol](docs/protocol.md), research brief, guide notes, [development history](docs/development-history.md), [ML4 assessment](docs/ml4-assessment.md), [possible improvements](docs/future-improvements.md) |
+
+## How it was developed
+
+- **People:** one developer, working with AI coding agents from 2026-10-18 to 2026-10-29. They set
+  the direction, found the hard root causes, and supervised every run.
+- **Mistral Large 4 in [Mistral Vibe](https://mistral.ai/products/vibe)** (local sessions and Vibe's
+  cloud agent) wrote the first version:
+  - the screenshot harness;
+  - the in-game mod;
+  - the first MCP server.
+- **Claude Code** (Claude Opus) then:
+  - rebuilt the bridge's popup, conversation, trade and skill handling;
+  - wrote most of the current tools, the agent loop and the replay viewer;
+  - ran and analysed the nine runs;
+  - made the video.
+- **Mistral models used:**
+  - `mistral-large-4` is the player.
+  - The video is narrated by Voxtral TTS (`voxtral-mini-tts-3`).
+  - Each take is checked with `voxtral-small-transcribe-3`, which also times the subtitles.
+- **Inspired by:**
+  - [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp): a Mistral model plays Heroes of Might
+    and Magic III through an MCP server built into the game engine. coq-harness follows the same
+    idea: a server inside the game, exposed as MCP tools.
+  - [llm-of-qud](https://github.com/ToaruPen/llm-of-qud): another LLM player for Qud, with an in-game
+    mod and a Python harness that serves MCP.
+  - [raves-of-qud](https://github.com/TheMutantFactory/raves-of-qud) (Raves of Mud): an in-game mod
+    streams what the player sees over a local socket to a Godot client that renders Qud in 2.5D.
+  - [Pi](https://github.com/badlogic/pi-mono): a minimal coding agent. Its thin tools shaped the
+    retired screenshot harness.
+- **Open source it builds on:**
+  - the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk);
+  - [Pillow](https://python-pillow.org/);
+  - [FFmpeg](https://ffmpeg.org/);
+  - [uv](https://github.com/astral-sh/uv);
+  - [Remotion](https://www.remotion.dev/) and React for the video.
+- **The game:** the mod uses Caves of Qud's own C# scripting API. Caves of Qud is by Freehold Games
+  and isn't open source.
+
+[`docs/development-history.md`](docs/development-history.md) tells the story commit by commit,
+including what each agent got right and wrong.
 
 ## Development notes
 

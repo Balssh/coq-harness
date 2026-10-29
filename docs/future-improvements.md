@@ -18,6 +18,15 @@ value.
   file like `data/creatures.json`) or a lookup in the game's quest data through the mod.
 - **Point at healing items.** Run 7 died with a salve injector and three witchwood barks unused.
   When `DANGER:` is up, the line could name the healing item to use and the exact `use_item` call.
+- **Use abilities more.** ML4 barely touches its active abilities: 16 `use_ability` calls in nine
+  runs, 6 of them failed (invented names like "Sling and Run", Sprint while engulfed). The status
+  line could list the ready abilities with a one-line "when to use" each (Sprint to escape, Force
+  Bubble when surrounded), `DANGER:` could suggest the one that fits, and the prompt could ask the
+  model to consider abilities before every fight. Unknown names should get the closest match.
+- **Spend points it can afford.** 19 of 45 `learn_skill` calls and 8 of 13 `raise_attribute` calls
+  failed, mostly on skills it couldn't afford or attribute points it didn't have. `list_skills`
+  could show only what's affordable now, and the status line could show "SP N, attribute points N"
+  after a level-up.
 - **Hunger and resources.** Show "Hungry" more prominently and suggest the food to eat; warn before
   selling the last healing item or the ammo for the equipped weapon.
 - **A reflection pass.** There's one model call per step and no planner or critic. A slower call
@@ -61,6 +70,9 @@ value.
 
 - **Game systems not exposed yet:** tinkering, cooking, the water ritual and reading books have no
   tools. They matter later in the game rather than in the opening.
+- **`use_item` bugs.** The tool description offers `use`, but the mod rejects it ("unknown item
+  action: use"); it should be an alias of `apply`. Applying a bandage once threw "Index was out of
+  range … chunkLength" inside the mod.
 - **Tests.** There's no automated test suite. Recorded states in `runs/harness/*/states/` could
   drive tests of the compact formatting, pathing, `flee` and `go_to_place` without the game running.
 - **Faster turns.** Several tools wait for the turn to end by polling the state. An event pushed by

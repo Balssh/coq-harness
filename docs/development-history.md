@@ -15,8 +15,19 @@
 - **Cloud Vibe ("Vibe Nuage Agent") commits:** `15edca1`, `62a0111`, `5c58ea4`, `10c4d19`, `c507df3`
   and `ab4d1a0`. They came from cloud sessions, so no conversation logs exist for them.
 
-Commits authored as the repo owner were made by ML4 in the local sessions. The owner's messages in
-those sessions show how much they steered (see [How the ML4 sessions went](#how-the-ml4-sessions-went)).
+Commits authored as the repo owner (`balssh` and `George Bals` are both the owner) were made by ML4
+in the local sessions. The owner's messages in those sessions show how much they steered (see
+[How the ML4 sessions went](#how-the-ml4-sessions-went)).
+
+**Other projects the owner drew on:**
+- [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp) for the in-game MCP server design (see
+  Phase 2 below).
+- [Pi](https://github.com/badlogic/pi-mono) for the thin tools of the screenshot harness (see Phase 1).
+- Two other Qud projects:
+  - [llm-of-qud](https://github.com/ToaruPen/llm-of-qud): an LLM player for Qud with an in-game mod
+    and a Python harness that serves MCP.
+  - [raves-of-qud](https://github.com/TheMutantFactory/raves-of-qud): an in-game mod streams the game
+    over a local socket to a Godot client that renders it in 2.5D.
 
 ## What was done with ML4
 
@@ -35,7 +46,8 @@ those sessions show how much they steered (see [How the ML4 sessions went](#how-
   - the full harness: game controller and screen detection, tool registry, perception, memory and
     journal, agent prompts and schemas, turn loop and watchdog, episode manager, recorder and replay
     viewer;
-  - later reworked into "Pi-style" thin tools, then a raw-key "freeplay" mode.
+  - later reworked into "Pi-style" thin tools, after the minimal [Pi](https://github.com/badlogic/pi-mono)
+    coding agent (model as the policy, tools as thin primitives), then a raw-key "freeplay" mode.
 - **Episodes and prompt tuning:** about 28 episodes and many prompt iterations: anti-repeat warnings,
   flee rules, a "Joppa routine", lessons from deaths, and qudzoo novice-guide insights fetched through
   the Wayback Machine.
@@ -49,7 +61,9 @@ those sessions show how much they steered (see [How the ML4 sessions went](#how-
 
 ### Phase 2: in-game mod + MCP (10-26 → 10-27)
 
-- **`c507df3`, the pivot (cloud session):** a C# mod that runs a TCP server inside Qud and exposes
+- **`c507df3`, the pivot (cloud session):** inspired by
+  [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp) (a Mistral model playing Heroes of Might
+  and Magic III through an MCP server built into the game engine): a C# mod that runs a TCP server inside Qud and exposes
   structured state and semantic commands. It came with a Python agent stack (`mcp/`: client, tools,
   decide, loop, run, deploy, prompts) and architecture docs.
 - **`ab4d1a0`, fixes from a code review (cloud session):**

@@ -1,0 +1,4 @@
+node_modules/
+out/
+# copied from runs/ by scripts/clips.py
+public/clips/

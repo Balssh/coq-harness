@@ -1,0 +1,23 @@
+{
+  "name": "coq-harness-video",
+  "private": true,
+  "description": "Motion-graphics presentation of coq-harness, rendered with Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Presentation out/raw.mp4 && ffmpeg -y -v error -i out/raw.mp4 -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 192k out/coq-harness.mp4 && rm out/raw.mp4",
+    "render:nosubs": "remotion render Presentation out/raw-nosubs.mp4 --props='{\"subtitles\":false}' && ffmpeg -y -v error -i out/raw-nosubs.mp4 -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 192k out/coq-harness-nosubs.mp4 && rm out/raw-nosubs.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.539",
+    "@remotion/google-fonts": "4.0.539",
+    "@remotion/media-utils": "4.0.539",
+    "@remotion/transitions": "4.0.539",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.539"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "typescript": "5.9.3"
+  }
+}
