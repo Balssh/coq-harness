@@ -49,7 +49,14 @@ It writes `public/audio/*.mp3` and `src/narration.generated.json`.
 | `src/scenes.tsx` | The 13 scenes |
 | `src/components.tsx` | Qud-style frames (title set into the border), the footage player with thought captions, message-log lines, the typewriter |
 | `src/theme.ts` | Palette (Qud's teal, gold and red) and fonts (IBM Plex Mono and Sans, Newsreader) |
-| `public/viewer_*.png` | Screenshots of the replay viewer |
+| `public/viewer_frustum.png` | A 1920×1080 screenshot of the replay viewer at `?run=<run 2>&frame=95`, taken by hand |
+| `out/coq-harness.mp4` | The finished video, the only media file in git |
 
-`runs/` is git-ignored, so `public/clips/` (copied from it) is too. Re-running `clips.py` needs the
-recorded runs.
+**Generated media isn't committed:** the clip frames, the narration MP3s and the viewer screenshot
+are all git-ignored. Rebuilding the video needs three things:
+- the recorded runs in `runs/`, for `clips.py`;
+- a Mistral key, for `narrate.py`, which voices the scenes again;
+- a fresh viewer screenshot.
+
+`src/narration.generated.json` keeps the last take's timings, so the scenes stay in sync only with
+the audio that `narrate.py` produces.

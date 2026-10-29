@@ -22,7 +22,6 @@ in the local sessions. The owner's messages in those sessions show how much they
 **Other projects the owner drew on:**
 - [heroes-3-mcp](https://github.com/andreinwald/heroes-3-mcp) for the in-game MCP server design (see
   Phase 2 below).
-- [Pi](https://github.com/badlogic/pi-mono) for the thin tools of the screenshot harness (see Phase 1).
 - Two other Qud projects:
   - [llm-of-qud](https://github.com/ToaruPen/llm-of-qud): an LLM player for Qud with an in-game mod
     and a Python harness that serves MCP.

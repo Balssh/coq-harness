@@ -1,4 +1,9 @@
 node_modules/
-out/
-# copied from runs/ by scripts/clips.py
+# renders; only the finished video is kept
+out/*
+!out/coq-harness.mp4
+# generated media: scripts/clips.py copies frames out of runs/, scripts/narrate.py voices the audio,
+# and the replay viewer screenshots are taken by hand (see README.md)
 public/clips/
+public/audio/
+public/*.png

@@ -7,9 +7,6 @@ for replay. The MCP server also works with any MCP client, such as Mistral Vibe 
 
 Qud runs on Windows; the agent side runs in WSL (or on the same machine).
 
-**Video:** a 3:15 presentation with real footage of ML4's runs: VIDEO_LINK. It's rendered from
-[`video/`](video/README.md) with Remotion and narrated by Mistral's Voxtral.
-
 ## Results
 
 Nine supervised new-game runs of 118–300 steps (details in [`docs/ml4-assessment.md`](docs/ml4-assessment.md)):
@@ -161,8 +158,6 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4
     mod and a Python harness that serves MCP.
   - [raves-of-qud](https://github.com/TheMutantFactory/raves-of-qud) (Raves of Mud): an in-game mod
     streams what the player sees over a local socket to a Godot client that renders Qud in 2.5D.
-  - [Pi](https://github.com/badlogic/pi-mono): a minimal coding agent. Its thin tools shaped the
-    retired screenshot harness.
 - **Open source it builds on:**
   - the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk);
   - [Pillow](https://python-pillow.org/);

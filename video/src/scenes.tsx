@@ -466,10 +466,9 @@ const PHASES = [
 // each item: name, what, and when it appears (frames after sentence `cue` of the narration starts)
 const LISTS: { title: string; c: string; cue: number; items: [string, string, number][] }[] = [
   { title: "inspired by", c: C.gold, cue: 2, items: [
-    ["heroes-3-mcp", "a Mistral model plays Heroes III through MCP", 25],
-    ["llm-of-qud", "an LLM Qud player: mod plus MCP server", 60],
-    ["raves-of-qud", "Qud streamed to a 2.5D view in Godot", 98],
-    ["Pi", "minimal coding agent; early tool design", 132],
+    ["heroes-3-mcp", "a Mistral model plays Heroes III through MCP", 30],
+    ["llm-of-qud", "an LLM Qud player: mod plus MCP server", 75],
+    ["raves-of-qud", "Qud streamed to a 2.5D view in Godot", 115],
   ] },
   { title: "built on", c: C.teal, cue: 2, items: [
     ["MCP Python SDK", "", 165], ["Pillow, FFmpeg, uv", "", 165], ["Remotion + React", "this video", 165],

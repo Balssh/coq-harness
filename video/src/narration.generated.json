@@ -375,13 +375,13 @@
     },
     {
       "id": "built",
-      "text": "It was built by one developer, working with AI. Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see. It was inspired by heroes-3-mcp, llm-of-qud, raves-of-qud and Pi, and it stands on open source. The voice is Voxtral.",
+      "text": "It was built by one developer, working with AI. Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see. It was inspired by heroes-3-mcp, llm-of-qud and raves-of-qud, and it stands on open source. The voice is Voxtral.",
       "audio": "audio/built.mp3",
-      "seconds": 16.64,
+      "seconds": 16.5,
       "cbr": true,
       "tempo": 1.08,
-      "hash": "624216920ff6",
-      "match": 0.995,
+      "hash": "affbc3575306",
+      "match": 0.975,
       "cues": [
         {
           "text": "It was built by one developer, working with AI.",
@@ -391,17 +391,17 @@
         {
           "text": "Mistral Large 4 wrote the first version, and Claude Code rebuilt it into what you see.",
           "start": 3.15,
-          "end": 7.78
+          "end": 8.33
         },
         {
-          "text": "It was inspired by heroes-3-mcp, llm-of-qud, raves-of-qud and Pi, and it stands on open source.",
-          "start": 7.78,
-          "end": 15.46
+          "text": "It was inspired by heroes-3-mcp, llm-of-qud and raves-of-qud, and it stands on open source.",
+          "start": 8.33,
+          "end": 15.28
         },
         {
           "text": "The voice is Voxtral.",
-          "start": 15.46,
-          "end": 16.57
+          "start": 15.28,
+          "end": 16.39
         }
       ]
     },
