@@ -5,9 +5,6 @@ description = "Harness that lets an LLM (Mistral Large 4 by default) play Caves 
 requires-python = ">=3.10"
 dependencies = [
     "pillow>=10.0",
-    "pydantic>=2.0",
-    "mistralai>=1.0",
-    "jsonschema>=4.0",
     "mcp>=2.3",
 ]
 
@@ -17,27 +14,13 @@ dev = [
 ]
 
 [project.scripts]
-coq-harness = "main:main"
 coq-play = "harness.__main__:main"
-coq-replay = "recording.replay:main"
 
 [tool.uv]
 package = true
 
 [tool.setuptools]
-py-modules = ["main"]
-packages = [
-    "client",
-    "game",
-    "tools",
-    "perception",
-    "memory",
-    "agent",
-    "loop",
-    "run",
-    "recording",
-    "harness",
-]
+packages = ["harness"]
 
 [tool.setuptools.package-data]
 harness = ["prompts/*.md", "viewer/*.html"]

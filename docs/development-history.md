@@ -26,7 +26,8 @@ those sessions show how much they steered (see [How the ML4 sessions went](#how-
   - a WSL → Windows bridge in C# with a Mistral vision client, built before this repo existed;
   - it stalled on input that never reached the game;
   - the screenshots turned out to capture only part of the screen.
-- **Design (10-20):** ten component specs (`docs/specs/`) and `AGENTS.md`. They were written file by
+- **Design (10-20):** ten component specs (`docs/specs/`) and `AGENTS.md`, both now in the
+  `legacy/screenshot-harness` branch. They were written file by
   file in a brainstorming session the owner led.
 - **Windows bridge:** window capture, input injection with several focus-stealing strategies and a
   PostMessage fallback, a log-region frame diff as the turn clock, and a WSL relay.
@@ -40,7 +41,7 @@ those sessions show how much they steered (see [How the ML4 sessions went](#how-
   the Wayback Machine.
 - **Best results:**
   - 52 turns in the tool mode, a run that finished a conversation with Elder Irudad
-    (`docs/findings.md`);
+    (`docs/findings.md` in the `legacy/screenshot-harness` branch);
   - 111 play turns (168 including chargen) in freeplay, before dying to a croc.
 - **Where runs got stuck:** mostly the UI rather than the game. The model spammed Space in dialogue,
   pressed Escape on every interaction menu, got trapped in the Control Mapping menu, kept bumping into
@@ -312,7 +313,7 @@ The numbers match the caveats in the assessment below.
 | 6 | Hidden information | Creatures only if lit and in line of sight; objects only in explored cells; the map draws `?` for unexplored; pathing penalises unexplored cells | `IsVisible()` depends on a map the renderer fills, so it is always false off the render thread. Lit plus line of sight follows the game's own rule |
 | 7 | Missing play features | Containers and pickers, trading, skills and attribute points, `fire`, `attack`, `rest`, `use_ability`, `go_to` | Added when the play session needed them: a chest froze auto-explore, a level-5 character had unspent points, loot couldn't be sold |
 | 8 | Hard for an LLM to use | Compact action results (HP, hostiles, new messages); MCP keepalive; errors surfaced; the low-HP popup auto-dismissed (max 3 times per action) with a `WARNING:` line instead | The full state was ~3k tokens per step. The low-HP popup reappears every turn below the threshold (`XRLCore.PlayerTurn`), so dismissing it each time stalls an agent. The limit avoids an infinite loop if dismissing ever fails |
-| 9 | Drift between entry points | README names `mcp_server.py` as the maintained entry point; the follow-up harness replaced `mcp/run.py` and plays through `mcp_server.py` itself | The screenshot harness is still in the repo, marked as superseded |
+| 9 | Drift between entry points | README names `mcp_server.py` as the maintained entry point; the follow-up harness replaced `mcp/run.py` and plays through `mcp_server.py` itself | The screenshot harness was later retired to the `legacy/screenshot-harness` branch |
 
 ## Assessment of ML4
 

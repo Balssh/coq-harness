@@ -26,6 +26,10 @@ mod/ (C# mod compiled by Qud at startup)
 The mod reads state and drives the game from inside Qud, so nothing depends on screenshots, key
 injection or window focus. The window still must not be minimized.
 
+The original screenshot-based harness (window capture, key injection, an ML4 loop that read the
+screen) is retired to the [`legacy/screenshot-harness`](../../tree/legacy/screenshot-harness)
+branch. [`docs/how-it-works.md`](docs/how-it-works.md) walks through the current design.
+
 ## Quick start
 
 1. **Deploy the mod**: `uv run python -m harness.deploy` copies `mod/` to Qud's `Mods/CoQMcpBridge`.
@@ -118,8 +122,7 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4 (--sma
 | `harness/` | The LLM harness: play loop, LLM client, memory, recorder, replay viewer, prompts, and the mod deploy script |
 | `data/creatures.json` | Hand-written tactics for common early creatures, shown in `KNOW` lines |
 | `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs (hand-kept sections plus the latest 3 runs are read), `runs/bestiary.json` what each kind of creature has done to the player |
-| `bridge/`, `client/`, `game/`, `tools/`, `perception/`, `memory/`, `agent/`, `loop/`, `run/`, `recording/`, `main.py` | The original screenshot-based harness: Windows capture and input bridge plus an ML4 agent loop. It is superseded by the mod, and `AGENTS.md` and `docs/specs/` describe it. |
-| `docs/` | Design specs, research brief, findings from screenshot runs, guide notes, [development history](docs/development-history.md), [ML4 assessment](docs/ml4-assessment.md) |
+| `docs/` | [How it works](docs/how-it-works.md), [harness](docs/harness.md), [protocol](docs/protocol.md), research brief, guide notes, [development history](docs/development-history.md), [ML4 assessment](docs/ml4-assessment.md), [possible improvements](docs/future-improvements.md) |
 
 ## Development notes
 

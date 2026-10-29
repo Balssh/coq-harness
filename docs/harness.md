@@ -572,5 +572,4 @@ from about step 30 on, 85–95% of each prompt was reported as cached.
   notes and the journal.
 - **Screenshots need WSL.** They need `powershell.exe` and a Windows Qud; elsewhere the harness runs
   without them.
-- **The old screenshot harness** (`main.py`, `agent/`, `bridge/` …) is still in the repo. It is
-  superseded, and its own recorder and viewer under `recording/` aren't used by this harness.
+- More ideas are collected in [`future-improvements.md`](future-improvements.md).
