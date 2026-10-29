@@ -34,6 +34,13 @@ class _BackAtMenu(Exception):
 
 # Places a new character should not enter before this level (one reminder each per run).
 ZONE_GATES = [("Red Rock", 2)]
+_STATE_DUMPS = {"get_state", "get_map", "world_map", "trade_list", "list_skills"}
+_DANGER_LINE = re.compile(r"^DANGER: .*$", re.M)
+_MOVE_STEPS = {"n": (0, -1), "north": (0, -1), "up": (0, -1), "s": (0, 1), "south": (0, 1), "down": (0, 1),
+               "e": (1, 0), "east": (1, 0), "right": (1, 0), "w": (-1, 0), "west": (-1, 0), "left": (-1, 0),
+               "ne": (1, -1), "northeast": (1, -1), "up_right": (1, -1), "nw": (-1, -1), "northwest": (-1, -1),
+               "up_left": (-1, -1), "se": (1, 1), "southeast": (1, 1), "down_right": (1, 1),
+               "sw": (-1, 1), "southwest": (-1, 1), "down_left": (-1, 1)}
 
 _DEATH = re.compile(r"\byou (have )?died\b|\byou are dead\b", re.I)
 
@@ -47,8 +54,9 @@ class Config:
     character: str = "choose"         # new games: "choose" (the model picks, presets preferred), "random", or a preset name
     screenshots: bool = True
     shot_width: int = 1280
-    keep_steps: int = 30              # steps kept verbatim in the context before summarizing
-    full_result_steps: int = 6        # tool results older than this are shortened in the context
+    keep_steps: int = 24              # steps kept verbatim in the context before summarizing
+    full_result_steps: int = 4        # tool results older than this are shortened in the context
+    full_state_steps: int = 2         # big state dumps (get_state, get_map, world_map) are shortened sooner
     max_context_chars: int = 160_000  # also summarize when the context gets this big
     max_calls_per_step: int = 4
     autosave_every: int = 50
@@ -128,6 +136,8 @@ class Agent:
         self._progress: list[tuple] = []
         self._calls: list[str] = []
         self._shot_error_logged = False
+        self._danger = ""            # DANGER line of the latest game result
+        self._combat_checked = -99   # step of the last combat check
 
     # ── recording ──────────────────────────────────────────────────────
 
@@ -182,10 +192,14 @@ class Agent:
         msgs = [{"role": "system", "content": self._system()}, {"role": "user", "content": self.opening}]
         n = len(self.history)
         for i, step in enumerate(self.history):
-            old = n - i > self.cfg.full_result_steps
+            age = n - i
             for m in step:
-                if old and m["role"] == "tool" and len(m["content"]) > 1200:
-                    m = {**m, "content": m["content"][:1200] + "\n…(older result shortened; call again for fresh data)"}
+                if m["role"] == "tool":
+                    big = m.get("name") in _STATE_DUMPS
+                    keep = (300 if big and age > self.cfg.full_state_steps else
+                            600 if age > self.cfg.full_result_steps else None)
+                    if keep and len(m["content"]) > keep:
+                        m = {**m, "content": m["content"][:keep] + "\n…(older result shortened; call again for fresh data)"}
                 msgs.append(m)
         return msgs
 
@@ -195,6 +209,11 @@ class Agent:
         if len(self.history) <= self.cfg.keep_steps and size <= self.cfg.max_context_chars:
             return
         drop = max(1, len(self.history) - self.cfg.keep_steps // 2)
+        # Over the size limit, also drop enough steps to get well under it; dropping one step at a
+        # time re-summarized on every step while one huge message stayed in the context (run 7).
+        sizes = [sum(len(json.dumps(m)) for m in step) for step in self.history]
+        while drop < len(self.history) - 1 and size - sum(sizes[:drop]) > self.cfg.max_context_chars * 0.7:
+            drop += 1
         old, self.history = self.history[:drop], self.history[drop:]
         prompt = (PROMPTS / "summarize.md").read_text().format(
             previous=self.memory.summary or "(none)", turns=_render_steps(old))
@@ -258,6 +277,9 @@ class Agent:
                     text = ("" if "POPUP OPEN" in first else first + "\n\n") + note
         else:
             text, err = f"Unknown tool {call.name!r}.", True
+        if state is not None:
+            hit = _DANGER_LINE.search(text or "")
+            self._danger = hit.group(0) if hit else ""
         self.rec.event("tool", self.step, id=call.id, name=call.name, args=call.arguments, result=text,
                        is_error=err, latency=round(time.monotonic() - t0, 3), snapshot=self.n_snap - 1 if state else None)
         step_msgs.append({"role": "tool", "tool_call_id": call.id, "name": call.name, "content": text or "(no output)"})
@@ -336,6 +358,13 @@ class Agent:
                 self.rec.event("tool", self.step, id=call.id, name=call.name, args=call.arguments,
                                result=f"Not run: {why}.", is_error=True, latency=0, snapshot=None)
                 continue
+            check = self._combat_check(call)
+            if check:
+                step_msgs.append({"role": "tool", "tool_call_id": call.id, "name": call.name, "content": check})
+                self.rec.event("tool", self.step, id=call.id, name=call.name, args=call.arguments,
+                               result=check, is_error=True, latency=0, snapshot=None)
+                self.rec.event("nudge", self.step, kind="combat", text=check)
+                continue
             state = await self._run_call(call, step_msgs)
             print(f"      {call.name}({json.dumps(call.arguments)[1:-1][:80]}) -> "
                   f"{step_msgs[-1]['content'].splitlines()[0][:100] if step_msgs[-1]['content'] else ''}")
@@ -361,11 +390,33 @@ class Agent:
                 if place.lower() in name.lower() and level < min_level and zone_after not in self._gates_warned:
                     self._gates_warned.add(zone_after)
                     self._nudge(step_msgs, f"CAUTION: {place} is dangerous for a level-{level} character; the "
-                                f"plan is level {min_level}+ first. Go back toward Joppa and level up on weaker "
+                                f"plan is level {min_level}+ first. Go back toward Joppa (go_to_place) and level up on weaker "
                                 "creatures unless you have a strong reason; deeper in, hulking baboons and giant "
                                 "amoebas kill level-1 characters.", "gate")
         self.history.append(step_msgs)
         self._watchdog(step_msgs)
+
+    def _combat_check(self, call) -> str:
+        """Hold back the first melee blow while the last result said DANGER. Two of three deaths in the
+        supervised runs were fights the model had itself judged too dangerous; one pause to look at the
+        numbers is cheap, and repeating the call goes through."""
+        if call.name not in ("attack", "move") or not self._danger or self.step - self._combat_checked <= 2:
+            return ""
+        state = self.last_state
+        p = state.get("player") or {}
+        foes = {(c.get("x"), c.get("y")) for c in state.get("cells") or []
+                if c.get("isCreature") and c.get("isHostile") and c.get("distance") == 1}
+        if not foes:
+            return ""
+        if call.name == "move":
+            step = _MOVE_STEPS.get(str(call.arguments.get("direction", "")).strip().lower())
+            if not step or (p.get("x", 0) + step[0], p.get("y", 0) + step[1]) not in foes:
+                return ""
+        self._combat_checked = self.step
+        return (f"Not run (combat check): {self._danger.removeprefix('DANGER: ')} If fighting on really is "
+                "best (it is nearly dead, or there is no way out), make the same call again and it will run. "
+                "Otherwise heal now (use_item with 'apply'); stepping away from an adjacent enemy gives it free "
+                "hits, so flee() only once you have a head start.")
 
     def _watchdog(self, step_msgs: list[dict]) -> None:
         # Walking tile by tile with nothing hostile around: one step per tile burns the step budget.

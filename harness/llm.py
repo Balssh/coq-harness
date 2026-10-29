@@ -157,7 +157,9 @@ class ChatClient:
                 try:
                     args = json.loads(raw) if raw.strip() else {}
                 except json.JSONDecodeError:
-                    args = {"__invalid_json__": raw}
+                    # Keep only a preview: a degenerate reply once filled the arguments with
+                    # thousands of spaces, and the whole string stayed in the context.
+                    args, raw = {"__invalid_json__": " ".join(raw.split())[:300]}, "{}"
             calls.append(ToolCall(id=c.get("id") or f"call{len(calls)}", name=fn.get("name", ""),
                                   arguments=args if isinstance(args, dict) else {}, raw_arguments=raw))
         return Reply(text=text, reasoning=reasoning, tool_calls=calls, usage=data.get("usage") or {},

@@ -326,12 +326,28 @@ def _is_stairs(c: dict) -> bool:
 
 
 _seen_msgs: list[str] = []
+_msg_count = {"seen": None, "lower": 0}
 
 
-def _new_messages(msgs: list[str]) -> list[str]:
-    """Messages not shown by the previous state report (the log is a sliding window)."""
+def _new_messages(msgs: list[str], count: int | None = None) -> list[str]:
+    """Messages not shown by the previous state report. The mod sends the last 40 messages and the
+    log's total count; the count's increase is what's new. Comparing windows instead breaks when the
+    game merges a repeat into the last line ("... (x2)"), and an occasional stale snapshot (count
+    84 between 500 and 504 in run 7) then made all 40 old messages look new and get learned twice."""
     global _seen_msgs
     seen, _seen_msgs = _seen_msgs, list(msgs)
+    if isinstance(count, int):
+        prev = _msg_count["seen"]
+        if prev is not None and count < prev:
+            # A stale snapshot, or a new game; believe a lower count once it repeats.
+            _msg_count["lower"] += 1
+            if _msg_count["lower"] < 2:
+                _seen_msgs = seen
+                return []
+        _msg_count.update(seen=count, lower=0)
+        if prev is None or count < prev:
+            return msgs
+        return msgs[len(msgs) - min(count - prev, len(msgs)):] if count > prev else []
     for i in range(min(len(seen), len(msgs)), 0, -1):
         if msgs[:i] == seen[-i:]:
             return msgs[i:]
@@ -382,14 +398,18 @@ def _world_info(state: dict, radius: int = 6) -> dict | None:
 def _places(info: dict) -> list[dict]:
     """Known named places: revealed map notes plus named (capitalized) terrain such as Joppa or Red Rock."""
     places, names = [], set()
+
+    def key(text: str) -> str:
+        return re.sub(r"^(the|a|an|some) ", "", text.lower())
+
     for n in info.get("places", []):
         text = _clean(n.get("text", ""))
-        if text and text.lower() not in names:
-            names.add(text.lower())
+        if text and key(text) not in names:
+            names.add(key(text))
             places.append({**n, "text": text})
     for x, y, name in info.get("cells", []):
-        if name[:1].isupper() and name.lower() not in names:
-            names.add(name.lower())
+        if name[:1].isupper() and key(name) not in names:
+            names.add(key(name))
             places.append({"text": name, "x": x, "y": y, "zx": 1, "zy": 1, "visited": False})
     return places
 
@@ -439,6 +459,297 @@ def _around(info: dict, x: int, y: int) -> str:
                      for d, (dx, dy) in (("N", (0, -1)), ("E", (1, 0)), ("S", (0, 1)), ("W", (-1, 0))))
 
 
+# ── Creature knowledge ──────────────────────────────────────────────────
+# A kind of creature is known by its base name: the name without the words the game adds for its
+# state ("bloody hulking baboon", "wounded snapjaw"), which the mod reads from the creature's Render
+# part. Blueprints only link names together; variants like "Snapjaw Scavenger 0" and "... 1" are one
+# kind to the player. Messages carry display names, so a name from a message is matched to the known
+# name it shares the most trailing words with. What the player learns is kept across runs in
+# runs/bestiary.json.
+
+# "The baboon hits (x2) for 6 damage with its bite.", "The vine hits you (x1) with a seed for 2 damage!",
+# "The hulking baboon hits with a small boulder (x1) for 7 damage!"
+_HIT_RE = re.compile(r"^The (.+?) (?:critically )?hits (?:you )?(?:with [^(!]*?)?\(x\d+\)(?: with [^!]*?)? "
+                     r"for (\d+) damage", re.I)
+_MISS_RE = re.compile(r"^The (.+?) misses you\b", re.I)
+_DIES_RE = re.compile(r"^The (.+?) (?:dies|is destroyed)[.!]", re.I)
+_XP_RE = re.compile(r"^You gain \d+ XP", re.I)
+# The player's own actions end a creature's round of attacks.
+_PLAYER_ACT = re.compile(r"^(You (?:critically )?(?:hit|miss|fire|throw|reload|pass by|equip|eat|drink|apply)\b|"
+                         r"Your .+ fails to penetrate)", re.I)
+_HEALING = re.compile(r"salve injector|bandage|witchwood|tonic|medkit|ubernostrum", re.I)
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _name_key(name: Any) -> str:
+    """Lower-case name without markup or a leading article."""
+    return re.sub(r"^(the|a|an|some) ", "", " ".join(_clean(name or "").lower().split()))
+
+
+def _suffix_len(a: str, b: str) -> int:
+    """Words in the shorter name if it is the whole tail of the longer one, else 0."""
+    aw, bw = a.split(), b.split()
+    m = min(len(aw), len(bw))
+    return m if m and aw[-m:] == bw[-m:] else 0
+
+
+class _Bestiary:
+    def __init__(self, path: str, tactics_path: str):
+        self.path = path
+        try:
+            with open(path, encoding="utf-8") as f:
+                self.data: dict[str, dict] = json.load(f)
+        except (OSError, ValueError):
+            self.data = {}
+        try:
+            with open(tactics_path, encoding="utf-8") as f:
+                self.tactics = {k: v["tactics"] for k, v in json.load(f).items() if not k.startswith("_")}
+        except (OSError, ValueError, KeyError, TypeError):
+            self.tactics = {}
+        self.names = {n: k for k, e in self.data.items() for n in e.get("names", [])}  # name -> kind
+        self.shown: set[tuple] = set()  # (zone id, kind) already given a KNOW line
+        self.last_hitter = ""
+        self.dead = False
+
+    def entry(self, kind: str) -> dict:
+        e = self.data.setdefault(kind, {})
+        for k, v in (("names", []), ("blueprints", []), ("hpMax", 0), ("hits", []), ("rounds", []),
+                     ("kills", []), ("deaths", []), ("taken", 0)):
+            e.setdefault(k, v)
+        return e
+
+    def kind(self, c: dict) -> str:
+        """The kind of creature a state cell is: its base name, or what its blueprint was filed under."""
+        base = _name_key(c.get("baseName"))
+        if base:
+            return base
+        bp = c.get("blueprint")
+        known = next((k for k, e in self.data.items() if bp and bp in e.get("blueprints", [])), "")
+        return known or self.resolve(c.get("name")) or _name_key(c.get("name"))
+
+    def _merge(self, into: str, other: str) -> None:
+        a, b = self.entry(into), self.data.pop(other)
+        for k in ("names", "blueprints"):
+            a[k] += [x for x in b.get(k, []) if x not in a[k]]
+        for k in ("hits", "rounds", "kills", "deaths"):
+            a[k] = (a[k] + b.get(k, []))[-(10 if k == "rounds" else 12 if k == "hits" else 999):]
+        a["hpMax"] = max(a["hpMax"], b.get("hpMax", 0))
+        a["taken"] += b.get("taken", 0)
+        for n in a["names"]:
+            self.names[n] = into
+
+    def observe(self, cells: list[dict]) -> bool:
+        """Learn the names and HP of hostile creatures in view; True if anything new."""
+        changed = False
+        for c in cells:
+            if not (c.get("isCreature") and c.get("isHostile")):
+                continue
+            kind, bp, shown = self.kind(c), c.get("blueprint"), _name_key(c.get("name"))
+            if _name_key(c.get("baseName")):
+                # Fold in what was filed under an older guess for the same creatures ("wet glowfish").
+                for other in [k for k, e in self.data.items() if k != kind and bp in e.get("blueprints", [])]:
+                    self._merge(kind, other)
+                    changed = True
+            elif kind in self.data and len(shown.split()) < len(kind.split()) and _suffix_len(shown, kind):
+                # No base name from the mod: the shortest name seen is the best guess ("glowfish").
+                self._merge(shown, kind)
+                kind, changed = shown, True
+            e = self.entry(kind)
+            if bp and bp not in e["blueprints"]:
+                e["blueprints"].append(bp)
+                changed = True
+            for n in (kind, _name_key(c.get("name"))):
+                if n and n not in e["names"]:
+                    e["names"].append(n)
+                    changed = True
+                if n:
+                    self.names[n] = kind
+            if isinstance(c.get("hpMax"), int) and c["hpMax"] > e["hpMax"]:
+                e["hpMax"], changed = c["hpMax"], True
+        return changed
+
+    def resolve(self, name: str) -> str:
+        """The kind of creature a name from a message refers to ('' if unknown or ambiguous)."""
+        n = _name_key(name)
+        if n in self.names:
+            return self.names[n]
+        best, best_len, tie = "", 0, False
+        for k, kind in self.names.items():
+            m = _suffix_len(k, n)
+            if m > best_len:
+                best, best_len, tie = kind, m, False
+            elif m and m == best_len and kind != best:
+                tie = True
+        return "" if tie else best
+
+    def learn(self, messages: list[str], state: dict) -> None:
+        level = (state.get("player") or {}).get("level") or 0
+        changed = self.observe(state.get("cells") or [])
+        rounds: dict[str, int] = {}
+        died: list[str] = []
+        last = ""
+
+        def close_rounds() -> None:
+            for kind, dmg in rounds.items():
+                r = self.entry(kind)["rounds"]
+                r.append(dmg)
+                del r[:-10]
+            rounds.clear()
+
+        for m in messages:
+            m = _clean(m).strip()
+            if hit := _HIT_RE.match(m):
+                kind = self.resolve(hit.group(1)) or _name_key(hit.group(1))
+                self.names.setdefault(_name_key(hit.group(1)), kind)
+                e, dmg = self.entry(kind), int(hit.group(2))
+                if _name_key(hit.group(1)) not in e["names"]:
+                    e["names"].append(_name_key(hit.group(1)))
+                e["hits"].append(dmg)
+                del e["hits"][:-12]
+                e["taken"] += dmg
+                rounds[kind] = rounds.get(kind, 0) + dmg
+                last, changed = kind, True
+            elif _MISS_RE.match(m):
+                continue
+            elif dies := _DIES_RE.match(m):
+                if kind := self.resolve(dies.group(1)):
+                    died.append(kind)
+            elif _XP_RE.match(m) and died:
+                self.entry(died.pop(0))["kills"].append(level)
+                changed = True
+            elif _PLAYER_ACT.match(m):
+                close_rounds()
+        close_rounds()
+        self.last_hitter = last or self.last_hitter
+        dead = bool(state.get("isDead")) or (state.get("player") or {}).get("hp", 1) <= 0
+        if dead and not self.dead and self.last_hitter:
+            self.entry(self.last_hitter)["deaths"].append(level)
+            changed = True
+        self.dead = dead
+        if changed:
+            self.save()
+
+    def save(self) -> None:
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with open(self.path + ".tmp", "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=1)
+            os.replace(self.path + ".tmp", self.path)
+        except OSError:
+            pass
+
+    def hit_range(self, c: dict) -> tuple[int, int] | None:
+        hits = self.data.get(self.kind(c), {}).get("hits")
+        return (min(hits), max(hits)) if hits else None
+
+    def worst_round(self, c: dict) -> int:
+        return max(self.data.get(self.kind(c), {}).get("rounds") or [0])
+
+    def tactic(self, base: str) -> str:
+        """The tactics entry whose name ends (or starts) the creature's name, longest first."""
+        best, best_len = "", 0
+        for key, text in self.tactics.items():
+            m = _suffix_len(key, base)
+            if not m and base.split()[:len(key.split())] == key.split():
+                m = len(key.split()) - 0.5  # 'snapjaw' for 'snapjaw scavenger', below a tail match
+            if m > best_len:
+                best, best_len = text, m
+        return best
+
+    def record(self, c: dict) -> str:
+        e = self.data.get(self.kind(c))
+        if not e:
+            return ""
+        parts = []
+        if e.get("hpMax"):
+            parts.append(f"{e['hpMax']} HP")
+        if e.get("hits"):
+            worst = max(e.get("rounds") or [0])
+            parts.append(f"hits you for {min(e['hits'])}-{max(e['hits'])}"
+                         + (f", up to {worst} in one round" if worst > max(e["hits"]) else ""))
+        if e["kills"]:
+            parts.append(f"you killed {len(e['kills'])} (at level {min(e['kills'])}"
+                         + (f"-{max(e['kills'])}" if max(e["kills"]) != min(e["kills"]) else "") + ")")
+        if e["taken"]:
+            parts.append(f"they have done {e['taken']} damage to you in all")
+        if e["deaths"]:
+            parts.append(f"it killed you {len(e['deaths'])}x (at level {', '.join(map(str, e['deaths']))})")
+        return "; ".join(parts)
+
+    def know(self, c: dict) -> str:
+        base = self.kind(c)
+        tactic, record = self.tactic(base), self.record(c)
+        if not tactic and not record:
+            return ""
+        return f"KNOW {base}: " + (tactic + " " if tactic else "") + (f"Your record: {record}." if record else "")
+
+
+_beasts = _Bestiary(os.environ.get("COQ_BESTIARY") or os.path.join(_ROOT, "runs", "bestiary.json"),
+                    os.path.join(_ROOT, "data", "creatures.json"))
+
+
+def _know_lines(state: dict, hostiles: list[dict], only_new: bool = True, limit: int = 2) -> list[str]:
+    """KNOW lines for the creature types in view; by default only those not yet covered in this zone."""
+    zone, out, seen = (state.get("zone") or {}).get("id"), [], set()
+    for c in hostiles:
+        kind = _beasts.kind(c)
+        if not kind or kind in seen or (only_new and (zone, kind) in _beasts.shown):
+            continue
+        seen.add(kind)
+        _beasts.shown.add((zone, kind))
+        line = _beasts.know(c)
+        if line:
+            out.append(line)
+    return out[:limit] if limit else out
+
+
+def _danger(state: dict) -> str:
+    """A plain warning when the fight in front of the player is likely to kill them."""
+    p = state.get("player") or {}
+    hp, hp_max = p.get("hp"), p.get("hpMax") or 1
+    if not isinstance(hp, int) or _on_world_map(state):
+        return ""
+    near = [c for c in state.get("cells") or [] if c.get("isCreature") and c.get("isHostile")
+            and c.get("distance", 99) <= 3]
+    if not near:
+        return ""
+    reasons = []
+    for c in near:
+        name = _clean(c.get("name") or "?").strip()
+        rng, worst = _beasts.hit_range(c), _beasts.worst_round(c)
+        # Many creatures attack several times a round (a bite and fists): two of its worst rounds,
+        # or three of its hardest single hits.
+        if worst and hp <= 2 * worst:
+            reasons.append(f"the {name} has done up to {worst} damage in one round and you have {hp} HP")
+        elif rng and hp <= 3 * rng[1]:
+            reasons.append(f"the {name} has hit you for up to {rng[1]} at a time and you have {hp} HP")
+        if _clean(c.get("difficulty", "")) in ("Very Tough", "Impossible") and c.get("distance", 99) <= 1:
+            reasons.append(f"the {name} is rated {c['difficulty']} for you; don't trade melee blows with it")
+    if hp * 100 < hp_max * 40:
+        reasons.append(f"HP is below 40% ({hp}/{hp_max}) with {len(near)} hostile(s) within 3 tiles")
+    if not reasons:
+        return ""
+    worst_c = min(near, key=lambda c: c.get("distance", 99))
+    wname = _clean(worst_c.get("name", "?")).strip()
+    nearly_dead = (isinstance(worst_c.get("hp"), int) and isinstance(worst_c.get("hpMax"), int)
+                   and worst_c["hp"] * 4 <= worst_c["hpMax"])
+    heals = [_clean(i.get("name", "")) for i in state.get("inventory") or [] if _HEALING.search(i.get("name", ""))]
+    heal = (f"You carry {', '.join(heals)}: heal now with use_item(..., 'apply')" if heals
+            else "You carry nothing to heal with")
+    # Running from an adjacent enemy gives it free hits (run 7 died stepping away from a hulking
+    # baboon at 1 HP); flee() only helps with a head start.
+    if worst_c.get("distance", 99) <= 1:
+        advice = (f"The {wname} is next to you, and turning your back gives it free hits. {heal}"
+                  + (f"; it is nearly dead (HP {worst_c['hp']}/{worst_c['hpMax']}), so finishing it may be safest."
+                     if nearly_dead else "; flee() only helps once you have a head start."))
+    else:
+        advice = f"Leave now with flee() while you have a head start, or keep shooting from range. {heal}."
+    return "DANGER: " + "; ".join(dict.fromkeys(reasons)) + ". " + advice
+
+
+_world_shown = {"zone": None, "n": 0}
+
+
 def _fmt_compact(state: dict) -> str:
     """Short state for action results: vitals, threats, new messages. get_state has the rest."""
     lines = []
@@ -461,24 +772,36 @@ def _fmt_compact(state: dict) -> str:
                  f"XP {p.get('xp', '?')}/{p.get('xpNext', '?')}  at ({p.get('x', '?')},{p.get('y', '?')}) "
                  f"in {state.get('zone', {}).get('name', '?')}  {p.get('hunger', '?')}/{p.get('thirst', '?')}"
                  + ("  DEAD" if state.get("isDead") else ""))
-    world = _fmt_world(state)
-    if world:
-        lines.append(world)
+    # The World line is long and only changes with the zone: show it on entering a zone, then every
+    # 10th result (get_state always has it).
+    zone_id = (state.get("zone") or {}).get("id")
+    _world_shown["n"] += 1
+    if zone_id != _world_shown["zone"] or _world_shown["n"] >= 10:
+        world = _fmt_world(state)
+        if world:
+            lines.append(world)
+            _world_shown.update(zone=zone_id, n=0)
     effects = state.get("effects", [])
     if effects:
         lines.append("Effects: " + ", ".join(e.get("name", "?") for e in effects[:10]))
     cells = sorted(state.get("cells", []), key=lambda c: c.get("distance", 999))
     hostiles = [c for c in cells if c.get("isCreature") and c.get("isHostile")]
+    msgs = [_clean(m)[:200] for m in state.get("messages", []) if not isinstance(m, dict)]
+    new = _new_messages(msgs, state.get("msgCount"))
+    _beasts.learn(new, state)
     if hostiles:
         lines.append("Hostiles: " + "; ".join(
             f"{_clean(c.get('name') or c.get('blueprint', '?')).strip()} ({c['x']},{c['y']}) d={c.get('distance')} "
-            f"HP={c.get('hp', '?')}/{c.get('hpMax', '?')}{_difficulty(c)}" for c in hostiles[:6]))
+            f"HP={c.get('hp', '?')}/{c.get('hpMax', '?')}{_difficulty(c)}"
+            + (f" hits you for {r[0]}-{r[1]}" if (r := _beasts.hit_range(c)) else "") for c in hostiles[:6]))
+        lines += _know_lines(state, hostiles)
+        danger = _danger(state)
+        if danger:
+            lines.append(danger)
     adjacent = [c for c in cells if c.get("isCreature") and not c.get("isHostile") and c.get("distance") == 1]
     if adjacent:
         lines.append("Adjacent: " + "; ".join(
             f"{_clean(c.get('name') or '?').strip()} ({c['x']},{c['y']})" for c in adjacent))
-    msgs = [_clean(m)[:200] for m in state.get("messages", []) if not isinstance(m, dict)]
-    new = _new_messages(msgs)
     if new:
         lines.append("New messages:")
         recent: list[list] = []
@@ -527,6 +850,10 @@ def _fmt_state(state: dict, full: bool = False) -> str:
                  f"Screen: {state.get('screen', '?')}  "
                  f"Dead: {state.get('isDead', False)}")
     lines.append(f"Time: {'Day' if t.get('isDay') else 'Night'}, turn segment {t.get('segment', '?')}")
+    msgs = [m for m in state.get("messages", []) if not isinstance(m, dict)]
+    _beasts.learn(_new_messages([_clean(m)[:200] for m in msgs], state.get("msgCount")), state)
+    if _danger(state):
+        lines.append(_danger(state))
 
     effects = state.get("effects", [])
     if effects:
@@ -573,6 +900,8 @@ def _fmt_state(state: dict, full: bool = False) -> str:
             if c.get("isCreature") and _clean(c.get("difficulty") or "").strip():
                 tags.append(_clean(c["difficulty"]).strip())
             hp = f" HP={c.get('hp', '?')}/{c.get('hpMax', '?')}" if c.get("isCreature") else ""
+            if c.get("isHostile") and (r := _beasts.hit_range(c)):
+                hp += f" hits you for {r[0]}-{r[1]}"
             tag_str = f" [{', '.join(tags)}]" if tags else ""
             name = _clean(c.get("name") or "").strip() or c.get("blueprint", "?")
             return f"  ({c.get('x', '?')},{c.get('y', '?')}) d={c.get('distance', '?')} {name}{hp}{tag_str}"
@@ -585,9 +914,11 @@ def _fmt_state(state: dict, full: bool = False) -> str:
                 more = f" (nearest {limit} of {len(group)})" if len(group) > limit else ""
                 lines.append(f"{title}{more}:")
                 lines.extend(row(c) for c in group[:limit])
+        know = _know_lines(state, [c for c in creatures if c.get("isHostile")], only_new=False, limit=0)
+        if know:
+            lines.append("\n=== What you know about these creatures ===")
+            lines += know
 
-    msgs = [m for m in state.get("messages", []) if not isinstance(m, dict)]
-    _new_messages([_clean(m)[:200] for m in msgs])
     if msgs:
         lines.append(f"\n=== Messages ({len(msgs)}) ===")
         recent: list[list] = []
@@ -828,6 +1159,207 @@ def go_to(x: int, y: int, max_steps: int = 120) -> str:
             + _fmt_state(state))
 
 
+def _distances(state: dict, avoid: set, avoid_cost: int = 6) -> dict[tuple[int, int], int]:
+    """Walking cost from the player to every reachable cell; cells in `avoid` (next to hostiles)
+    cost extra."""
+    zone = state.get("zone") or {}
+    w, h = zone.get("width", 80), zone.get("height", 25)
+    p = state["player"]
+    start = (p["x"], p["y"])
+    blocked = _blocked(state, set()) - {start}
+    blocked |= {(c["x"], c["y"]) for c in state.get("cells", []) if c.get("isCreature")} - {start}
+    dist = {start: 0}
+    heap = [(0, start)]
+    while heap:
+        d, cur = heapq.heappop(heap)
+        if d > dist[cur]:
+            continue
+        for dx, dy in _STEP_DIRS:
+            nxt = (cur[0] + dx, cur[1] + dy)
+            if not (0 <= nxt[0] < w and 0 <= nxt[1] < h) or nxt in blocked or not _explored(state, *nxt):
+                continue
+            nd = d + 1 + (avoid_cost if nxt in avoid else 0)
+            if nd < dist.get(nxt, 1 << 30):
+                dist[nxt] = nd
+                heapq.heappush(heap, (nd, nxt))
+    return dist
+
+
+def _escape_target(state: dict) -> tuple[tuple[int, int], str] | None:
+    """The exit (zone edge or stairs) the player reaches soonest relative to the hostiles."""
+    zone = state.get("zone") or {}
+    w, h = zone.get("width", 80), zone.get("height", 25)
+    foes = [(c["x"], c["y"]) for c in state.get("cells", []) if c.get("isCreature") and c.get("isHostile")]
+    near_foes = {(fx + dx, fy + dy) for fx, fy in foes for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    dist = _distances(state, near_foes)
+    exits = {(x, y): "edge" for (x, y) in dist if x in (0, w - 1) or y in (0, h - 1)}
+    for c in state.get("cells", []):
+        if _is_stairs(c) and (c["x"], c["y"]) in dist:
+            exits[(c["x"], c["y"])] = "up" if "up" in _clean(c.get("name", "")).lower() else "down"
+    if not exits:
+        return None
+
+    def score(cell: tuple[int, int]) -> int:
+        foe = min((max(abs(cell[0] - fx), abs(cell[1] - fy)) for fx, fy in foes), default=99)
+        return dist[cell] - foe  # get there well before anything that chases you
+
+    best = min(exits, key=score)
+    return best, exits[best]
+
+
+@server.tool(description="Run from the hostiles in view: walks (up to max_steps) toward the zone edge or "
+                         "stairs you can reach well ahead of them, around walls and away from the enemies, then "
+                         "leaves the zone there (stepping across the edge, or taking the stairs). Pursuers that "
+                         "follow arrive one at a time. Use it when a fight is going badly.")
+def flee(max_steps: int = 15) -> str:
+    bridge = get_bridge()
+    state = bridge.get_state()
+    if state.get("popup"):
+        return "A popup is open — answer it first.\n\n" + _fmt_state(state)
+    if "player" not in state or _on_world_map(state):
+        return "FAILED flee: only works inside a zone.\n\n" + _fmt_state(state)
+    if not any(c.get("isCreature") and c.get("isHostile") for c in state.get("cells", [])):
+        return "No hostiles in view; nothing to flee from. Rest or move on.\n\n" + _fmt_state(state)
+    start_hp = state["player"].get("hp")
+    target = _escape_target(state)
+    if target is None:
+        return "FAILED flee: no reachable zone edge or stairs on the explored map. Fight, or heal.\n\n" + _fmt_state(state)
+    (tx, ty), kind = target
+    steps, reason = 0, "step limit reached"
+    zone = state.get("zone") or {}
+    w, h = zone.get("width", 80), zone.get("height", 25)
+    zone_id = zone.get("id")
+    while steps < max_steps:
+        p = state["player"]
+        here = (p["x"], p["y"])
+        if here == (tx, ty):
+            if kind in ("up", "down"):
+                out = go_stairs(kind)
+                return f"Fled {steps} steps to the stairs and went {kind}.\n" + out
+            d = "west" if here[0] == 0 else "east" if here[0] == w - 1 else "north" if here[1] == 0 else "south"
+            out = move(d)
+            return (f"Fled {steps} steps to the zone edge at ({tx},{ty}) and stepped {d} into the next zone; "
+                    f"pursuers arrive one at a time. Step back or keep going.\n" + out)
+        foes = {(c["x"], c["y"]) for c in state.get("cells", []) if c.get("isCreature") and c.get("isHostile")}
+        near_foes = {(fx + dx, fy + dy) for fx, fy in foes for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+        others = {(c["x"], c["y"]) for c in state.get("cells", []) if c.get("isCreature")} - {here}
+        path = _find_path(state, (tx, ty), others, avoid=near_foes, avoid_cost=6)
+        if not path:
+            reason = "the way out is blocked"
+            break
+        nxt = path[0]
+        if any(c.get("isCreature") and (c["x"], c["y"]) == nxt for c in state.get("cells", [])):
+            reason = f"something is in the way at ({nxt[0]},{nxt[1]})"
+            break
+        res = bridge.send_command("move", direction=_STEP_DIRS[(nxt[0] - here[0], nxt[1] - here[1])])
+        if "error" in res:
+            reason = f"move failed: {res['error']}"
+            break
+        state, _ = bridge.wait_for_turn(state)
+        steps += 1
+        if state.get("popup"):
+            reason = "a popup opened"
+            break
+        if (state.get("zone") or {}).get("id") != zone_id or _is_dead(state):
+            reason = "left the zone"
+            break
+        p = state.get("player") or {}
+        if (p.get("x"), p.get("y")) == here:
+            reason = "could not move (held, or the way is blocked)"
+            break
+    p = state.get("player") or {}
+    hp = f"; HP {start_hp} -> {p.get('hp')}/{p.get('hpMax')}" if p.get("hp") != start_hp else ""
+    return (f"flee: {reason} after {steps} steps toward the {'stairs' if kind != 'edge' else 'zone edge'} at "
+            f"({tx},{ty}), now at ({p.get('x')},{p.get('y')}){hp}.\n\n" + _fmt_state(state))
+
+
+def _is_dead(state: dict) -> bool:
+    return bool(state.get("isDead")) or (state.get("player") or {}).get("hp", 1) <= 0
+
+
+# Terrain that kills low-level characters (see the novice notes); go_to_place routes around it.
+_RISKY_TERRAIN = ("jungle", "mountain", "hills", "river", "banana", "rainbow", "fungal", "ruins", "lake", "flower")
+
+
+def _find_place(info: dict, place: str) -> dict | None:
+    want = place.strip().lower()
+    places = _places(info)
+    m = re.fullmatch(r"\(?\s*(\d+)\s*,\s*(\d+)\s*\)?", want)
+    if m:
+        return {"text": f"parasang ({m.group(1)},{m.group(2)})", "x": int(m.group(1)), "y": int(m.group(2)),
+                "zx": 1, "zy": 1}
+    return (next((n for n in places if n["text"].lower() == want), None)
+            or next((n for n in places if want in n["text"].lower()), None))
+
+
+@server.tool(description="Walk to a known place (a name from the World line or world_map, e.g. 'Red Rock', or "
+                         "parasang coordinates '11,20') zone by zone on the surface, up to max_zones zones per "
+                         "call. Avoids jungles, hills, rivers and other risky terrain where it can, and stops when "
+                         "hostiles block the way, a popup opens or you take damage. Call again to continue.")
+def go_to_place(place: str, max_zones: int = 9) -> str:
+    bridge = get_bridge()
+    state = bridge.get_state()
+    if "player" not in state:
+        return "Not in game."
+    info = bridge.send_command("world_info", radius=12)
+    if not info.get("ok"):
+        return f"FAILED go_to_place: {info.get('error', 'no world map here')}"
+    target = _find_place(info, place)
+    if target is None:
+        known = ", ".join(n["text"] for n in _places(info)[:12])
+        return f"FAILED go_to_place: no known place matches {place!r}. Known: {known or 'none'}."
+    terrain = {(x, y): n for x, y, n in info.get("cells", [])}
+    level = (state.get("player") or {}).get("level") or 1
+    log: list[str] = []
+    for _ in range(max_zones):
+        if _on_world_map(state):
+            return ("You are on the world map; go_stairs('down') to enter the zones here first, then call "
+                    "go_to_place again.\n" + _fmt_compact(state))
+        pos = _world_pos((state.get("zone") or {}).get("id", ""))
+        if not pos:
+            return "FAILED go_to_place: can't tell where this zone is.\n" + _fmt_compact(state)
+        x, y, z = pos
+        if z != 10:
+            return "FAILED go_to_place: you are underground; take the stairs up to the surface first.\n" + _fmt_compact(state)
+        tx, ty = target["x"] * 3 + target.get("zx", 1), target["y"] * 3 + target.get("zy", 1)
+        if (x, y) == (tx, ty):
+            return (f"Arrived at {target['text']}" + (f" ({'; '.join(log)})" if log else "") + ".\n"
+                    + _fmt_compact(state))
+        options = []
+        for d, (dx, dy), gap in (("east", (1, 0), tx - x), ("west", (-1, 0), x - tx),
+                                 ("south", (0, 1), ty - y), ("north", (0, -1), y - ty)):
+            if gap <= 0:
+                continue
+            nx, ny = (x + dx) // 3, (y + dy) // 3
+            name = terrain.get((nx, ny), "")
+            risky = (level < 10 and (nx, ny) != (target["x"], target["y"])
+                     and any(r in name.lower() for r in _RISKY_TERRAIN))
+            options.append((risky, -gap, d, name))
+        options.sort()
+        if not options:
+            break
+        risky, _, d, name = options[0]
+        if risky:
+            return (f"Stopped: every way toward {target['text']} from here goes through risky terrain "
+                    f"({name}) for a level-{level} character. Choose a route yourself (world_map), or go "
+                    f"anyway with travel.\n" + _fmt_compact(state))
+        before_zone = (state.get("zone") or {}).get("id")
+        hp0 = (state.get("player") or {}).get("hp")
+        out = travel(d)
+        state = bridge.get_state()
+        if (state.get("zone") or {}).get("id") == before_zone or state.get("popup"):
+            return (f"go_to_place {target['text']}: stopped going {d}"
+                    + (f" after {'; '.join(log)}" if log else "") + ".\n" + out)
+        log.append(d)
+        hp1 = (state.get("player") or {}).get("hp")
+        if any(c.get("isCreature") and c.get("isHostile") for c in state.get("cells", [])) or \
+                (isinstance(hp0, int) and isinstance(hp1, int) and hp1 < hp0):
+            return (f"go_to_place {target['text']}: stopped after {len(log)} zone(s) ({', '.join(log)}): "
+                    f"hostiles in view or you took damage.\n" + _fmt_compact(state))
+    return (f"go_to_place {target['text']}: crossed {len(log)} zone(s) ({', '.join(log)}); call again to "
+            f"continue.\n" + _fmt_compact(state))
+
+
 def _map_char(cs: list[dict]) -> str:
     if any(c.get("isCreature") for c in cs):
         return "H" if any(c.get("isHostile") for c in cs) else "c"
@@ -1051,41 +1583,75 @@ def travel(direction: str) -> str:
         return {"n": p.get("y") == 0, "s": p.get("y") == zone.get("height", 25) - 1,
                 "w": p.get("x") == 0, "e": p.get("x") == zone.get("width", 80) - 1}[d]
 
-    def calm(state: dict) -> bool:
-        return not state.get("popup") and not any(
-            c.get("isCreature") and c.get("isHostile") for c in state.get("cells") or [])
+    def hostiles(state: dict) -> list[dict]:
+        return [c for c in state.get("cells") or [] if c.get("isCreature") and c.get("isHostile")]
+
+    def walkable(state: dict) -> bool:
+        # Walking is fine with hostiles far off; the game only refuses to *run* while any is in view.
+        return not state.get("popup") and all(c.get("distance", 99) > 6 for c in hostiles(state))
+
+    def pos(state: dict) -> tuple:
+        p = state.get("player") or {}
+        return (state.get("zone") or {}).get("id"), p.get("x"), p.get("y")
+
+    def walk_to_edge(state: dict, offsets, origin: tuple | None = None) -> str:
+        """go_to the first reachable cell on the edge at one of the offsets along it from origin
+        (default: the player's position)."""
+        zone, p = state.get("zone") or {}, state.get("player") or {}
+        w, h = zone.get("width", 80), zone.get("height", 25)
+        x0, y0 = origin or (p.get("x", 0), p.get("y", 0))
+        p = {"x": p.get("x"), "y": p.get("y")}
+        for off in offsets:
+            tx, ty = {"n": (x0 + off, 0), "s": (x0 + off, h - 1), "w": (0, y0 + off), "e": (w - 1, y0 + off)}[d]
+            if 0 <= tx < w and 0 <= ty < h and (tx, ty) != (p["x"], p["y"]) \
+                    and "arrived" in go_to(tx, ty).split("\n", 1)[0]:
+                return f"({tx},{ty})"
+        return ""
+
+    def cross(state: dict) -> str:
+        """Step over the edge; if the cell beyond is blocked, try nearby edge cells."""
+        out = move(direction)
+        after = bridge.get_state()
+        origin = ((state.get("player") or {}).get("x", 0), (state.get("player") or {}).get("y", 0))
+        for off in (1, -1, 2, -2, 4, -4, 8, -8):
+            if pos(after)[0] != pos(state)[0] or after.get("popup") or not walkable(after):
+                break
+            if walk_to_edge(after, (off,), origin):
+                out = f"(the way across was blocked; tried {off:+d} along the edge)\n" + move(direction)
+                after = bridge.get_state()
+        return out
 
     state = bridge.get_state()
     if _on_world_map(state):  # the game's travel command doesn't work here; a step is one parasang
         return move(direction)
     if at_edge(state):  # running stops at the edge; the next zone is one plain step away
-        return move(direction)
-    before = (state.get("player") or {}).get("x"), (state.get("player") or {}).get("y")
-    out = _act("travel", f"Travel {direction}", takes_turn=True, quiet=4, direction=direction)
-    state = bridge.get_state()
-    p = state.get("player") or {}
-    if (p.get("x"), p.get("y")) == before and calm(state) and not out.startswith("FAILED"):
-        # Blocked straight ahead: walk to a reachable cell on that edge instead.
-        zone = state.get("zone") or {}
-        w, h = zone.get("width", 80), zone.get("height", 25)
-        x0, y0 = p.get("x", 0), p.get("y", 0)
-        for off in (0, 4, -4, 10, -10, 20, -20):
-            tx, ty = {"n": (x0 + off, 0), "s": (x0 + off, h - 1), "w": (0, y0 + off), "e": (w - 1, y0 + off)}[d]
-            if not (0 <= tx < w and 0 <= ty < h):
-                continue
-            res = go_to(tx, ty)
-            if "arrived" in res.split("\n", 1)[0]:
-                out = f"Travel {direction} was blocked; walked around to ({tx},{ty}) instead."
-                break
+        return cross(state)
+    start = pos(state)
+    out = ""
+    for _ in range(3):  # the game stops running whenever something comes into view; keep going
+        before = pos(state)
+        out = _act("travel", f"Travel {direction}", takes_turn=True, quiet=4, direction=direction)
         state = bridge.get_state()
-    if at_edge(state) and calm(state):
-        return out.split("\n", 1)[0] + "\n" + move(direction)
-    p = state.get("player") or {}
-    hostiles = [c for c in state.get("cells") or [] if c.get("isCreature") and c.get("isHostile")]
-    if (p.get("x"), p.get("y")) == before and hostiles and not state.get("popup"):
-        near = ", ".join(f"{_clean(c.get('name', '?'))} ({c['x']},{c['y']})" for c in hostiles[:3])
+        if out.startswith("FAILED") or at_edge(state) or pos(state) == before or hostiles(state) \
+                or state.get("popup"):
+            break
+    if pos(state) == start and walkable(state) and not out.startswith("FAILED"):
+        # Blocked straight ahead, or hostiles far off in view: walk to a reachable cell on that edge.
+        cell = walk_to_edge(state, (0, 4, -4, 10, -10, 20, -20))
+        if cell:
+            out = (f"Travel {direction} couldn't run" + (" (hostiles in view, all far away)" if hostiles(state) else "")
+                   + f"; walked to {cell} instead.")
+        state = bridge.get_state()
+    if at_edge(state) and walkable(state):
+        return out.split("\n", 1)[0] + "\n" + cross(state)
+    near = ", ".join(f"{_clean(c.get('name', '?'))} ({c['x']},{c['y']}) d={c.get('distance')}" for c in hostiles(state)[:3])
+    if pos(state) == start and near and not state.get("popup"):
         out = (f"Travel {direction} did not move: the game won't run while hostiles are in view ({near}). "
                f"Fight them, or walk away with go_to/move.\n" + out.split("\n", 1)[-1])
+    elif pos(state)[0] == start[0] and not at_edge(state) and not state.get("popup"):
+        p = state.get("player") or {}
+        out = (f"Travel {direction} stopped at ({p.get('x')},{p.get('y')}) before the edge"
+               + (f": hostiles in view ({near})" if near else "") + ".\n" + out.split("\n", 1)[-1])
     return out
 
 
@@ -1355,6 +1921,22 @@ def fire(x: int = -1, y: int = -1) -> str:
     if before.get("popup"):
         return "A popup is open — answer it first.\n\n" + _fmt_state(before)
     auto = x < 0 or y < 0
+    p = before.get("player") or {}
+    if not auto and (x, y) == (p.get("x"), p.get("y")):
+        return (f"FAILED fire: ({x},{y}) is your own position. Give a hostile's x, y, or no arguments to shoot "
+                "the nearest hostile.\n" + _fmt_compact(before))
+    note = ""
+    if not auto and not any(c.get("isCreature") and (c["x"], c["y"]) == (x, y) for c in before.get("cells", [])):
+        # Coordinates from an older result: the target has usually moved a tile or two (run 7 spent
+        # 12 of 36 arrows on empty cells). Follow it if it is close; otherwise don't waste the turn.
+        near = sorted((c for c in before.get("cells", []) if c.get("isCreature") and c.get("isHostile")
+                       and max(abs(c["x"] - x), abs(c["y"] - y)) <= 2),
+                      key=lambda c: max(abs(c["x"] - x), abs(c["y"] - y)))
+        if not near:
+            return (f"Not fired: there is no creature at ({x},{y}) now, so the shot would be wasted. "
+                    "Call fire() with no arguments to shoot the nearest hostile.\n" + _fmt_compact(before))
+        note = f" (nothing was at ({x},{y}) any more; aimed at the {_clean(near[0].get('name', '?'))} instead)"
+        x, y = near[0]["x"], near[0]["y"]
     state = before
     for attempt in range(2):
         if auto:  # (re)aim at the nearest hostile — it may have moved while we reloaded
@@ -1384,7 +1966,7 @@ def fire(x: int = -1, y: int = -1) -> str:
     if "no more ammo" in new or "out of ammo" in new:
         return "Out of ammo — nothing to reload with. Fight in melee or find/buy ammo.\n" + _fmt_state(state)
     target = r.get("target") or "nothing there"
-    return f"Fired at ({x},{y}) [{target}].\n" + _fmt_state(state)
+    return f"Fired at ({x},{y}) [{_clean(target)}]{note}.\n" + _fmt_state(state)
 
 
 @server.tool(description="Buy a skill or power by name with skill points (see list_skills).")

@@ -48,7 +48,7 @@ injection or window focus. The window still must not be minimized.
 | Area | Tools |
 |---|---|
 | State | `get_state` (full), `get_state_raw` (JSON), `get_map` (ASCII map with x/y rulers), `world_map` (terrain and known places around you) |
-| Movement | `move`, `go_to(x, y)`, `travel`, `go_stairs`, `auto_explore`, `wait`, `rest` |
+| Movement | `move`, `go_to(x, y)`, `travel`, `go_to_place(place)`, `flee()`, `go_stairs`, `auto_explore`, `wait`, `rest` |
 | Combat | `move` into a hostile, `attack(x?, y?)` or `attack(direction)` (default: the adjacent hostile), `fire(x?, y?)`, `use_ability(name, x?, y?)` (targeted abilities aim at the cell or the nearest hostile) |
 | Items | `get`, `use_item(item, item_action)` (eat, drink, apply, equip, unequip, drop) |
 | Popups | `respond_popup(option / button / dismiss / text)`, which covers conversations, Yes/No prompts and container pickers |
@@ -90,7 +90,7 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4 (--sma
   - The model keeps a goal and numbered notes (`set_goal`, `note`, `forget_note`), shown every turn.
   - When the context grows past `--keep-steps` steps (default 30), the oldest are summarised into
     "the story so far" and dropped. Older tool results are shortened.
-  - At the end of a run the model writes lessons into `runs/journal.md`, which the next runs read.
+  - At the end of a run the model writes lessons into `runs/journal.md`; the next runs read its hand-kept sections and the latest 3 runs' lessons.
 - **Watchdog:** if nothing changes for 8 turns, or the same call repeats 5 times, the harness tells the
   model to try something else. It also points out zone changes.
 - **Stops** at death, `--max-steps` (default 300), `--max-minutes`, or Ctrl-C. It saves every 50
@@ -116,7 +116,8 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4 (--sma
 | `mod/` | C# Qud mod (the bridge inside the game) |
 | `mcp_server.py` | stdio MCP server, the maintained entry point |
 | `harness/` | The LLM harness: play loop, LLM client, memory, recorder, replay viewer, prompts, and the mod deploy script |
-| `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs |
+| `data/creatures.json` | Hand-written tactics for common early creatures, shown in `KNOW` lines |
+| `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs (hand-kept sections plus the latest 3 runs are read), `runs/bestiary.json` what each kind of creature has done to the player |
 | `bridge/`, `client/`, `game/`, `tools/`, `perception/`, `memory/`, `agent/`, `loop/`, `run/`, `recording/`, `main.py` | The original screenshot-based harness: Windows capture and input bridge plus an ML4 agent loop. It is superseded by the mod, and `AGENTS.md` and `docs/specs/` describe it. |
 | `docs/` | Design specs, research brief, findings from screenshot runs, guide notes, [development history](docs/development-history.md) |
 

@@ -1,0 +1,55 @@
+{
+  "_about": "How to fight early-game creatures. Keys are creature names without state words; a creature matches the entry whose name is the longest run of its trailing words ('shrewd baboon' -> 'baboon', 'hulking baboon' -> 'hulking baboon'). mcp_server.py shows the tactic in a KNOW: line the first time the creature appears in a zone. Sources: the Qudzoo novice guide (docs/qudzoo-novice-guide.txt) and our own runs.",
+  "baboon": {
+    "tactics": "Throws a few stones from the edge of its throw range and backs off if you approach, pulling you into other baboons. With 1-2 of them, stand still (wait) instead of chasing, and don't spend arrows at long range: once out of stones it walks up to melee you, and you kill it then. With 3 or more, step across the zone edge and one tile back, then wait: they come through one at a time and can't throw until they're on your screen.",
+    "source": "Qudzoo guide"
+  },
+  "hulking baboon": {
+    "tactics": "Much stronger than the tan baboons: one big boulder throw plus stones, and bites several times a round (6-9 each in run 7). Not before level 4, and only one at a time. Keep it out of melee and chip it down from range; decide to leave while it is still a few tiles away, because once it is next to you stepping away gives it free bites (run 7 died that way). If it reaches you, heal or finish it.",
+    "source": "Qudzoo guide, run 7"
+  },
+  "glowfish": {
+    "tactics": "Weak and hardly fights back; easy early XP in the salt marsh.",
+    "source": "Qudzoo guide"
+  },
+  "croc": {
+    "tactics": "Common in the salt marsh around Joppa; bites for 3-4 (run 7). Fine one at a time at level 1-2; rest to full between crocs.",
+    "source": "run 7"
+  },
+  "girshling": {
+    "tactics": "The vermin eating Joppa's watervine, in the caves under Red Rock (stratum 4). A bit weaker than a hulking baboon. Kill it without burning it, pick up its corpse, and show it to Elder Irudad in Joppa.",
+    "source": "Qudzoo guide"
+  },
+  "giant centipede": {
+    "tactics": "Very hard to hit in melee (dodgy); use ranged attacks or abilities. Bites for 1-4 at levels 3-5 (our runs).",
+    "source": "Qudzoo guide, our runs"
+  },
+  "gelatinous frustum": {
+    "tactics": "70 HP and engulfs you, then hurts you every turn (6-7 a turn at level 4). Kill it at range before it reaches you; once engulfed, moving does nothing and healing can't keep up, so attack it every turn.",
+    "source": "run 2"
+  },
+  "giant amoeba": {
+    "tactics": "Hits for 8-11 against a level-1 character. Don't melee it at low level; leave by the stairs or the zone edge early.",
+    "source": "our runs"
+  },
+  "dreadroot": {
+    "tactics": "A hostile plant that causes terror, also when it dies near you. It doesn't block movement, so walking into it doesn't attack: use attack().",
+    "source": "our runs"
+  },
+  "seed-spitting vine": {
+    "tactics": "A plant that stays put and spits seeds (2-5 damage). Walk out of its line of fire, or kill it with attack() when next to it.",
+    "source": "run 5"
+  },
+  "young ivory": {
+    "tactics": "Latches onto your tile and makes you bleed when you step away. Kill it first, then move.",
+    "source": "run 3"
+  },
+  "snapjaw": {
+    "tactics": "Hyena-folk that roam in groups, often with a tougher leader. A lone snapjaw is fine early; against a group, fight in a doorway or across a zone edge so they come one at a time.",
+    "source": "general"
+  },
+  "naphtaali": {
+    "tactics": "Jungle tribe, [Tough] at level 4, several dagger hits a round. Jungles are far above early levels: leave.",
+    "source": "run 5"
+  }
+}

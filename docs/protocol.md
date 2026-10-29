@@ -194,6 +194,8 @@ Tools added to `mcp_server.py` on top of the raw protocol actions:
 | `respond_popup(option/button/dismiss/text)` | No | Answer any popup, conversation, or item picker (containers: `button="take_all"`) |
 | `go_to(x, y)` | Yes | Walk a shortest path; stops next to an occupied target, on damage, popups, new hostiles |
 | `get_map()` | No | ASCII map of the zone with x/y rulers |
+| `flee(max_steps?)` | Yes | Walk to the zone edge or stairs the player reaches well ahead of the visible hostiles (around walls, away from them), then leave the zone there |
+| `go_to_place(place, max_zones?)` | Yes | Walk zone by zone to a known place (name or parasang `x,y`) on the surface, around jungles, hills, rivers and other risky terrain below level 10; stops on hostiles, popups or damage |
 | `attack(direction?, x?, y?)` | Yes | Melee-attack an adjacent cell by coordinates or direction, or the adjacent hostile by default; also force-attacks walk-over creatures such as dreadroots |
 | `fire(x?, y?)` | Yes | Shoot the missile weapon at a cell or the nearest hostile; reloads automatically |
 | `rest()` | Yes | Wait until healed (stops if something happens) |
@@ -205,8 +207,11 @@ Tools added to `mcp_server.py` on top of the raw protocol actions:
 | `chargen_presets()` / `chargen_auto(preset?)` | No | List the game's preset characters; create a Classic character from a preset (mod action `chargen_auto` with `pregen`, through the game's Pregen path) or at random |
 
 Action results return a compact status (HP, hostiles with the game's threat rating such as
-`[Tough]`, a `World:` line with the zone's world coordinates, the terrain of the neighbouring
-parasangs and how many zones away the known places are, new messages); `get_state` returns everything, including the quest log.
+`[Tough]` and how hard each has hit the player (`hits you for 2-8`, from the bestiary learned from
+the message log), a `KNOW <kind>:` line with tactics and the player's record the first time a kind
+of creature appears in a zone, a `DANGER:` line when the fight can kill the player, a `World:` line
+on entering a zone and every 10th result with the zone's world coordinates, the terrain of the
+neighbouring parasangs and how many zones away the known places are, new messages); `get_state` returns everything, including the quest log.
 The state only contains what the player knows: creatures in line of sight and objects in explored
 cells (`zone.explored` holds one `0`/`1` row string per y). Item names spell out the stat glyphs
 (`boar-skin gloves AV1 DV0`, `short bow PV4`, `slender pestle PV3/5 dmg 1d2-1`).

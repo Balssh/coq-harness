@@ -88,6 +88,8 @@ for any LLM driving the MCP tools.
 - `attack()` with no arguments hits the adjacent hostile; `attack(x, y)` hits that
   adjacent cell. Safer than working out compass directions for a bump-attack.
   Dreadroots cause terror when they die nearby.
+- `flee()` does the zone-edge trick for you: it walks to the edge or stairs you reach well ahead
+  of the hostiles and leaves the zone. `go_to_place("Joppa")` walks to a known place zone by zone.
 - `go_to(x, y)` stops next to a creature target without attacking; then use
   `move` / `attack` toward it.
 - The "Your health has dropped below 60%!" popup is dismissed for you and shows

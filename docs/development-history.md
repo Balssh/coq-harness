@@ -249,6 +249,28 @@ broken `_on_world_map` tool and no single-step move. That explains why ML4's Vib
   while idle at the map (every other lookup timed out), so the action falls back to building on the
   bridge thread, like the state snapshot. The run journal was pruned by hand of lessons that were
   wrong or had been fixed in the tools.
+- **Helping the model act on what it knows** (after the six runs):
+  - *Combat check.* `mcp_server.py` learns how hard each creature has hit the player from the message
+    log (`hits you for 2-8`) and adds a `DANGER:` line when two such hits would kill, a Very Tough or
+    Impossible enemy is adjacent, or HP is under 40% with enemies close. The harness holds back the
+    first melee blow after such a line once; repeating the call fights on.
+  - *`flee()`* picks the zone edge or stairs the player reaches well ahead of the hostiles, walks
+    there around walls and enemies, and leaves the zone (the zone-edge trick, done by the tool).
+  - *`go_to_place(place)`* walks zone by zone to a known place, around risky terrain below level 10.
+  - *Context:* old state dumps are cut sooner (300 characters after 2 steps), other results after 4
+    steps, and compaction keeps 24 steps instead of 30.
+  - *Journal:* runs read the hand-kept sections plus the latest 3 runs' lessons; the lessons prompt
+    asks for game lessons, not rules about tools.
+- **Runs 7 and 8** with these helpers reached level 4 by step 130–141 (run 7 died at level 5 to
+  hulking baboons; run 8 was alive at level 6 at the step limit). Run 7's death led to name matching
+  without state words, a wider `DANGER:` margin, distance-dependent advice that lists the healing
+  items carried, and a throttled `World:` line. A second Claude session worked in parallel on the
+  same files, coordinated by messages: it fixed oversized invalid tool arguments and compaction, and
+  added creature knowledge (mod 0.13.23: base names, a bestiary in `runs/bestiary.json`, tactics in
+  `data/creatures.json`, `KNOW` lines, a `fire` retarget guard, message counting by the game's count).
+  Run 9, the first with creature knowledge, was alive at level 5 on Red Rock's stratum 2 at the
+  step limit. [`harness.md`](harness.md#second-round-acting-on-what-the-model-knows-runs-79) has the
+  details.
 
 ### Approach
 

@@ -264,6 +264,8 @@ namespace CoQMcpBridge
                             sb.Append(Json.Num("level", SafeGet(() => obj.GetStatValue("Level"), 0)));
                             sb.Append(",");
                             sb.Append(Json.Str("faction", SafeGet(() => GetFactionName(obj))));
+                            sb.Append(",");
+                            sb.Append(Json.Str("baseName", SafeGet(() => BaseName(obj), "")));
                             if (obj != player)
                             {
                                 // The game's own threat rating ("Tough", "Impossible"), as on look.
@@ -278,6 +280,18 @@ namespace CoQMcpBridge
                 }
             }
             sb.Append("]");
+        }
+
+        // The creature's own name without the words the game adds for its state ("bloody",
+        // "wounded", "wet"...): the Render part's DisplayName. Read by reflection, since its
+        // member has been both a field and a property across game versions.
+        private static string BaseName(GameObject obj)
+        {
+            var render = obj.GetPart("Render");
+            if (render == null) return "";
+            var t = render.GetType();
+            object v = t.GetProperty("DisplayName")?.GetValue(render, null) ?? t.GetField("DisplayName")?.GetValue(render);
+            return PopupBridge.Clean(v as string ?? "");
         }
 
         // The zone's visibility map is filled by the renderer and isn't current

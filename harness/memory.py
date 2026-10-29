@@ -8,6 +8,7 @@
   runs/journal.md and shown to the next runs.
 """
 
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -77,20 +78,29 @@ class Memory:
         return {"goal": self.goal, "notes": list(self.notes), "summary": self.summary}
 
 
+RUN_HEADING = re.compile(r"## \d{4}-\d\d-\d\d \d\d:\d\d — ")
+
+
 class Journal:
     """Lessons across runs, kept as a markdown file people can read and edit."""
 
     def __init__(self, path: Path):
         self.path = path
 
-    def recent(self, max_chars: int = 4000) -> str:
+    def recent(self, max_chars: int = 4000, runs: int = 3) -> str:
+        """Hand-kept sections (headings that don't name a run) always, then the latest `runs` run
+        entries. Lessons the model writes are often wrong; old ones age out instead of piling up."""
         try:
             text = self.path.read_text(encoding="utf-8").strip()
         except OSError:
             return ""
-        if len(text) <= max_chars:
-            return text
-        cut = text[-max_chars:]
+        sections = [s.strip() for s in re.split(r"\n(?=## )", "\n" + text) if s.strip()]
+        kept = [s for s in sections if not RUN_HEADING.match(s)]
+        latest = [s for s in sections if RUN_HEADING.match(s)][-runs:]
+        out = "\n\n".join(kept + latest)
+        if len(out) <= max_chars:
+            return out
+        cut = out[-max_chars:]
         return "…" + cut[cut.find("\n## ") if "\n## " in cut else 0:]
 
     def append(self, run_id: str, header: str, lessons: str) -> None:

@@ -6,7 +6,7 @@ namespace CoQMcpBridge
     public static class Protocol
     {
         public const int DefaultPort = 47321;
-        public const string Version = "1.1.22";
+        public const string Version = "1.1.23";
         public const int ProtocolVersion = 1;
 
         public static byte[] Frame(string json)

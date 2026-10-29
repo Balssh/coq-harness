@@ -134,7 +134,9 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
     zone; prefer `go_to` to many single moves;
   - the whole of `docs/qud_novice_notes.md`, so game knowledge lives in one file shared with other
     clients;
-  - the last ~4000 characters of `runs/journal.md`.
+  - from `runs/journal.md`: every hand-kept section (a `##` heading that doesn't start with a
+    date and run id) plus the lessons of the latest 3 runs, at most ~4000 characters. Older run
+    lessons age out instead of piling up, since the model's own lessons are often wrong.
 - **Memory block:** appended to the system prompt every step, so it is never lost.
   - **Goal:** set by `set_goal`.
   - **Notes:** numbered, written by `note` and removed by `forget_note`. At most 40 notes of 300
@@ -148,10 +150,12 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
   It sits at the end of the system message rather than in a separate message because Mistral is
   strict about message order (no user message straight after a tool message). The fixed part of the
   prompt stays first so providers can cache it.
-- **Recent steps:** kept verbatim. Tool results older than 6 steps are cut to 1200 characters, since
-  old `get_state` dumps are the biggest cost.
+- **Recent steps:** kept verbatim, except that old tool results are cut: state dumps (`get_state`,
+  `get_map`, `world_map`, `trade_list`, `list_skills`) to 300 characters after 2 steps, everything
+  else to 600 characters after 4 steps. In run 6 those dumps were most of the ~12.5k prompt tokens a
+  step.
 - **Compaction:**
-  - Triggers when there are more than `--keep-steps` steps (default 30) or the context passes about
+  - Triggers when there are more than `--keep-steps` steps (default 24) or the context passes about
     160k characters.
   - The oldest steps are rendered as a plain transcript, keeping the newest `keep_steps/2`. The model
     rewrites "the story so far" from the previous summary plus that transcript (`prompts/summarize.md`,
@@ -162,8 +166,11 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
   - At the end of a run of 5+ steps, the model writes 3–6 one-line lessons from its last 25 steps
     (`prompts/lessons.md`).
   - They go into `runs/journal.md` under a header with the run id, model, outcome and level. The file
-    is plain markdown, so you can edit or prune it.
-  - Every later run reads it.
+    is plain markdown, so you can edit or prune it; lessons worth keeping for good go under a
+    heading of your own, which every run reads.
+  - The prompt asks for lessons about the game and decisions, and to describe odd tool behaviour
+    rather than turn it into a rule: earlier runs wrote "travel only works from zone edges" when
+    the cause was hostiles in view.
 
 ## Guards
 
@@ -173,6 +180,7 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
 | Stuck | same zone, position, HP, turn counter, screen and popup for 8 steps | `WATCHDOG:` hint appended to the last result |
 | Repeat | the same call with the same arguments and the same outcome 5 times in a row | `WATCHDOG:` hint |
 | Walking | 6 steps in a row of only `move`/`get_map` with no hostile in sight | `TIP:` to use `go_to` or `auto_explore` |
+| Combat check | `attack`, or a `move` into an adjacent hostile, while the latest result had a `DANGER:` line (at most once per 3 steps) | not run; the model gets the danger and is told that repeating the call fights on, otherwise heal now (stepping away from an adjacent enemy gives it free hits) and `flee()` only with a head start |
 | Zone gate | entering a `ZONE_GATES` place below its level (Red Rock before level 2) | a `CAUTION:` on each gated zone entered (once per zone) |
 | Message popups | a call leaves a popup with no options, no text input and at most an Accept/OK button | accepted for the model (chains up to 8); the result lists their text under `[harness] Message popup(s) accepted for you`. If the call itself was refused because of the popup, it is run again. Recorded as `auto_popup` events |
 | Call limit | more than 4 calls in one response | the extras are answered "Not run" |
@@ -474,6 +482,66 @@ go to Red Rock, the way a careful human (or Claude, playing through the same too
 called too dangerous), long-range navigation, and multi-step quest logic. The harness can give the
 model the facts (ratings, directions, quest steps), but it still has to act on them. Each run costs
 roughly 1.5–4M prompt tokens for 120–300 steps.
+
+### Second round: acting on what the model knows (runs 7–9)
+
+After the six runs, the harness added tools and checks aimed at the remaining weak spots: a combat
+check, `flee()`, `go_to_place()`, world-map knowledge, shorter old results and an aging journal
+(see the guards table and the [protocol tool list](protocol.md#available-tools)).
+
+| Run | Character (model's pick) | Result | Levels reached (step) | Notes |
+|---|---|---|---|---|
+| `ml4-opening-7` | First Gardener | died at 178 | 2 (96), 3–4 (130), 5 (167) | Clean opening: swept Joppa, took both quests, traded for armor and a long sword. The combat check held back one blow at 8 HP against a croc at 2/13 HP; the model finished it, which was right. `go_to_place` took it between Joppa and Red Rock. Killed by two hulking baboons it shot at while they closed in; it crossed a zone edge at 8 HP and one followed it |
+| `ml4-opening-8` | Gunwing | step limit 250, alive | 2 (100), 3 (116), 4 (141), 5 (165), 6 (188) | Fought at range throughout (127 `fire` calls); `go_to_place` six times between Joppa and Red Rock. Sold its bandages for ammo; with akimbo revolvers each shot costs two slugs |
+
+| `ml4-opening-9` | Praetorian Prime | step limit 250, alive | 2 (77), 3 (111), 4 (120), 5 (143) | First run with creature knowledge (mod 0.13.23): `KNOW` lines in 14 results, one shot held back by the `fire` guard. Used `go_to_place` 8 times, `flee()` and `world_map` once each; ended on Red Rock's stratum 2, short of the girshlings on stratum 4 |
+
+All three reached level 4 by step 120–141; of the first six runs, only two got there, at steps 83
+and 205. Runs 7 and 8 never used `flee()` or `world_map` (the model walked off zone edges by hand);
+run 9 used each once. Average prompt per step: 13.4k tokens in runs 7 and 8, 12.3k in run 9.
+
+**What run 7 changed:**
+- **Hit memory** treated "bloody hulking baboon" as a different creature from "hulking baboon", so the
+  `DANGER:` line came late. Names are now matched without state words. The other session's
+  bestiary (below) replaced this matching with the game's base name.
+- **`DANGER:` threshold** raised from two of a creature's hardest hits to three, and then to two of
+  its worst rounds: a hulking baboon took 8 HP in one round when the line still said there was room.
+- **Advice depends on distance.** Turning your back on an adjacent enemy gives it free hits, so the
+  line now says to heal (listing the healing items carried) or finish it when it's nearly dead, and to
+  `flee()` only with a head start. Run 7 died with a salve injector and three witchwood barks unused.
+  The system prompt also says never to sell healing items.
+- **The `World:` line** appears in a result only on entering a zone and on every 10th result, since
+  it repeated in every result.
+- **Invalid tool arguments** (a reply that hit the token limit produced a 158k-character argument)
+  are cut to a 300-character preview, and size-triggered compaction drops enough steps to get under
+  70% of the limit; run 7 had re-summarized on every step from 82 to 97.
+- **Place names** that differ only by an article ("the Sumur Neighborhood") are listed once, and
+  `fire(x, y)` no longer accepts the player's own cell.
+
+**Creature knowledge** (mod 0.13.23, done by a second Claude session in parallel):
+- **Base names.** Creature cells carry `baseName`, the name without state words like "bloody" or
+  "wounded".
+- **Bestiary.** `mcp_server.py` keeps a bestiary per kind of creature in `runs/bestiary.json`
+  (`COQ_BESTIARY` overrides the path), learned from the message log. It records:
+  - every hit on the player, and damage per round;
+  - HP;
+  - kills, with the player's level;
+  - deaths, with the level;
+  - total damage taken.
+
+  It was seeded from the saved states of all earlier runs.
+- **Tactics.** Hand-written tactics for common early creatures are in `data/creatures.json`.
+- **`KNOW` line.** The first time a kind of creature appears in a zone, the result gets a `KNOW <kind>:`
+  line with its tactic and the record, e.g. "hits you for 1-9; you killed 1 (at level 5); it killed
+  you 1x (at level 5)".
+- **`fire(x, y)` on an empty cell** aims at the nearest hostile within 2 tiles, or doesn't fire. Run 7
+  spent 12 of 36 arrows on empty cells.
+- **New-message tracking** uses the game's message count instead of comparing message windows. A stale
+  snapshot had made 40 old messages look new.
+
+**Tokens:** the trimming didn't lower the per-step prompt (13.4k tokens on average in both runs, 12.6k
+in run 6); the context still fills to the compaction limit. Mistral's prompt cache covers most of it:
+from about step 30 on, 85–95% of each prompt was reported as cached.
 
 
 ## Known limitations and ideas
