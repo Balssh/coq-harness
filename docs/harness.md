@@ -539,6 +539,21 @@ run 9 used each once. Average prompt per step: 13.4k tokens in runs 7 and 8, 12.
 - **New-message tracking** uses the game's message count instead of comparing message windows. A stale
   snapshot had made 40 old messages look new.
 
+**After run 9:**
+- **`fire` reports what the shot did**, from the shot's own messages: whom it hit and for how much,
+  whether it died, a miss, a hit that didn't get through armor, or terrain in the line of fire.
+  Before, kills and shots into rock both read "[nothing there]" (13 of run 9's 44 shots), and the
+  model wrote the false lesson that `fire()` shoots at empty terrain.
+- **`fire` no longer says "Out of ammo" after a successful reload** (6 times in run 9 while carrying
+  about 50 slugs).
+- **`travel` is more robust:**
+  - when the cell across the edge is blocked, it tries edge cells 1, 2, 4 and 8 away;
+  - when the game's run stops early with nothing hostile in view, it runs again (up to 3 times);
+  - when the only hostiles are more than 6 tiles away, it walks to the edge instead of refusing;
+  - when it stops, it gives the reason, e.g. "stopped at (55,3) before the edge: hostiles in view".
+
+  The retry at a blocked crossing hasn't been tested live yet.
+
 **Tokens:** the trimming didn't lower the per-step prompt (13.4k tokens on average in both runs, 12.6k
 in run 6); the context still fills to the compaction limit. Mistral's prompt cache covers most of it:
 from about step 30 on, 85–95% of each prompt was reported as cached.

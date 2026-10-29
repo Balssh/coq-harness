@@ -1645,13 +1645,14 @@ def travel(direction: str) -> str:
     if at_edge(state) and walkable(state):
         return out.split("\n", 1)[0] + "\n" + cross(state)
     near = ", ".join(f"{_clean(c.get('name', '?'))} ({c['x']},{c['y']}) d={c.get('distance')}" for c in hostiles(state)[:3])
+    # The status under these lines is fresh: `out` may describe a position before a later walk.
     if pos(state) == start and near and not state.get("popup"):
         out = (f"Travel {direction} did not move: the game won't run while hostiles are in view ({near}). "
-               f"Fight them, or walk away with go_to/move.\n" + out.split("\n", 1)[-1])
+               f"Fight them, or walk away with go_to/move.\n" + _fmt_compact(state))
     elif pos(state)[0] == start[0] and not at_edge(state) and not state.get("popup"):
         p = state.get("player") or {}
         out = (f"Travel {direction} stopped at ({p.get('x')},{p.get('y')}) before the edge"
-               + (f": hostiles in view ({near})" if near else "") + ".\n" + out.split("\n", 1)[-1])
+               + (f": hostiles in view ({near})" if near else "") + ".\n" + _fmt_compact(state))
     return out
 
 
@@ -1962,11 +1963,50 @@ def fire(x: int = -1, y: int = -1) -> str:
             state, _ = bridge.wait_for_turn(state, quiet=2)
             continue
         break
-    new = " ".join(m for m in state.get("messages", [])[-4:] if isinstance(m, str)).lower()
-    if "no more ammo" in new or "out of ammo" in new:
+    shot = _messages_since(before, state)
+    low = [m.lower() for m in shot]
+    empty = max((i for i, m in enumerate(low) if "no more ammo" in m or "out of ammo" in m), default=-1)
+    # "has no more ammo!" followed by "You reload ..." is a successful reload, not an empty pack.
+    if empty >= 0 and not any(m.startswith("you reload") for m in low[empty + 1:]) \
+            and not any(_SHOT_RE.match(m) for m in shot[empty + 1:]):
         return "Out of ammo — nothing to reload with. Fight in melee or find/buy ammo.\n" + _fmt_state(state)
-    target = r.get("target") or "nothing there"
-    return f"Fired at ({x},{y}) [{_clean(target)}]{note}.\n" + _fmt_state(state)
+    return f"Fired at ({x},{y}): {_shot_summary(shot, before)}{note}.\n" + _fmt_state(state)
+
+
+# "You critically hit the baboon (x4) with a lead slug for 20 damage!", "You hit the shale (x1) ..."
+_SHOT_RE = re.compile(r"^You (?:critically )?hit (?:the )?(.+?) \(x\d+\)", re.I)
+
+
+def _messages_since(before: dict, after: dict) -> list[str]:
+    """Messages added between two states, by the log's message count (last 6 if unknown)."""
+    msgs = [_clean(m) for m in after.get("messages", []) if isinstance(m, str)]
+    c0, c1 = before.get("msgCount"), after.get("msgCount")
+    n = c1 - c0 if isinstance(c0, int) and isinstance(c1, int) and c1 >= c0 else 6
+    return msgs[len(msgs) - min(n, len(msgs)):] if n > 0 else []
+
+
+def _shot_summary(shot: list[str], before: dict) -> str:
+    """What a shot did, from its messages. The mod's own label reads the target cell after the shot,
+    so a kill or a shot into a rock both came back as "nothing there" (run 9)."""
+    creatures = [_name_key(c.get("name")) for c in before.get("cells", []) if c.get("isCreature")]
+    out = []
+    for m in shot:
+        if hit := _SHOT_RE.match(m):
+            name = _name_key(hit.group(1))
+            dmg = f" for {d.group(1)} damage" if (d := re.search(r"for (\d+) damage", m)) else ""
+            if name == "something" or any(_suffix_len(name, c) for c in creatures):
+                out.append(f"hit the {name}{dmg}")
+            else:
+                out.append(f"hit the {name}{dmg}: it is in your line of fire, so aim from elsewhere")
+        elif dies := _DIES_RE.match(m):
+            out.append(f"the {_name_key(dies.group(1))} died")
+        elif m.lower().startswith("you hit something"):
+            out.append("hit something you can't see")
+        elif "fails to penetrate" in m.lower():
+            out.append("hit but didn't get through its armor")
+        elif m.lower().startswith("you miss"):
+            out.append("missed")
+    return "; ".join(dict.fromkeys(out)) or "no hit reported"
 
 
 @server.tool(description="Buy a skill or power by name with skill points (see list_skills).")
