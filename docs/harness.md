@@ -554,7 +554,9 @@ run 9 used each once. Average prompt per step: 13.4k tokens in runs 7 and 8, 12.
 
   The retry at a blocked crossing hasn't been tested live yet.
 
-**Tokens:** the trimming didn't lower the per-step prompt (13.4k tokens on average in both runs, 12.6k
+**Tokens:** runs 7–9 still kept 30 steps before summarizing, because the `--keep-steps` command-line
+default (30) overrode the new `Config` default of 24; the command-line default is 24 now. The
+trimming didn't lower the per-step prompt (13.4k tokens on average in both runs, 12.6k
 in run 6); the context still fills to the compaction limit. Mistral's prompt cache covers most of it:
 from about step 30 on, 85–95% of each prompt was reported as cached.
 

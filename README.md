@@ -119,7 +119,7 @@ uv run python -m harness export <run> --speed 2     # render a run to MP4 (--sma
 | `data/creatures.json` | Hand-written tactics for common early creatures, shown in `KNOW` lines |
 | `runs/` | Git-ignored. `runs/harness/<run>/` holds recordings, `runs/journal.md` the lessons carried between runs (hand-kept sections plus the latest 3 runs are read), `runs/bestiary.json` what each kind of creature has done to the player |
 | `bridge/`, `client/`, `game/`, `tools/`, `perception/`, `memory/`, `agent/`, `loop/`, `run/`, `recording/`, `main.py` | The original screenshot-based harness: Windows capture and input bridge plus an ML4 agent loop. It is superseded by the mod, and `AGENTS.md` and `docs/specs/` describe it. |
-| `docs/` | Design specs, research brief, findings from screenshot runs, guide notes, [development history](docs/development-history.md) |
+| `docs/` | Design specs, research brief, findings from screenshot runs, guide notes, [development history](docs/development-history.md), [ML4 assessment](docs/ml4-assessment.md) |
 
 ## Development notes
 

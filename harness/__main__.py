@@ -78,7 +78,7 @@ def main() -> None:
     p.add_argument("--character", default="choose", help="for --new-game: 'choose' (default; the model picks, "
                    "preferring the game's preset characters), 'random', or a preset name such as 'Marsh Taur'")
     p.add_argument("--objective", help="replace the default objective in the system prompt")
-    p.add_argument("--keep-steps", type=int, default=30, help="steps kept verbatim before older ones are summarized")
+    p.add_argument("--keep-steps", type=int, default=24, help="steps kept verbatim before older ones are summarized")
     p.add_argument("--no-screenshots", action="store_true", help="don't capture the game window")
     p.add_argument("--label", default="", help="name for this run in the replay list")
     p.set_defaults(func=_play)
