@@ -47,8 +47,11 @@ for any LLM driving the MCP tools.
    **Hulking baboons** (yellow, throw boulders): skip until level 4+.
 4. Aim for level 5-7 before going down the Red Rock stairs. Underground you need
    a light source (torch equipped).
-5. On stratum 4: kill a **girshling**, pick up its corpse, return to Joppa and
-   show it to **Elder Irudad** -> meds reward (salve injectors).
+5. The watervine vermin are **girshlings**, in the caves under Red Rock (take
+   the stairs down; on stratum 4 in our runs). Kill one, pick up its corpse,
+   return to Joppa and show it to **Elder Irudad** -> meds reward (salve
+   injectors). Other corpses (snapjaws, baboons) don't count: the quest log's
+   "Find the Vermin" step ticks only when you find the girshlings.
 6. Give Argyve cheap artifacts for his quest; his reward line gives a
    **recoiler** (teleport home) — get one before deeper cave diving.
 
@@ -81,7 +84,9 @@ for any LLM driving the MCP tools.
   hulking baboon while it walks up killed it before it reached melee. Ammo is
   consumed — keep track of arrows.
 - Some hostile plants (dreadroots) don't block movement, so walking into them
-  doesn't attack: use `attack(direction)` (works on anything, incl. vines).
+  doesn't attack: use `attack` (works on anything, incl. vines).
+- `attack()` with no arguments hits the adjacent hostile; `attack(x, y)` hits that
+  adjacent cell. Safer than working out compass directions for a bump-attack.
   Dreadroots cause terror when they die nearby.
 - `go_to(x, y)` stops next to a creature target without attacking; then use
   `move` / `attack` toward it.

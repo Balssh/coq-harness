@@ -2,7 +2,7 @@
 
     python -m harness play [--model M] [--max-steps N] [--new-game] ...
     python -m harness replay [RUN]
-    python -m harness export RUN [--seconds-per-frame 1.0]
+    python -m harness export RUN [--speed 2] [--smart] [--annotations]
     python -m harness.deploy            # copy the mod into Qud's Mods folder
 """
 
@@ -22,7 +22,8 @@ def _play(args) -> None:
     llm = make_client(args.provider, REPO_ROOT, model=args.model, base_url=args.base_url, key_env=args.key_env,
                       reasoning=args.reasoning, temperature=args.temperature, extra_body=extra)
     cfg = Config(objective=args.objective or DEFAULT_OBJECTIVE, max_steps=args.max_steps,
-                 max_minutes=args.max_minutes, new_game=args.new_game, screenshots=not args.no_screenshots,
+                 max_minutes=args.max_minutes, new_game=args.new_game, character=args.character,
+                 screenshots=not args.no_screenshots,
                  keep_steps=args.keep_steps, runs_dir=REPO_ROOT / "runs" / "harness",
                  journal=REPO_ROOT / "runs" / "journal.md", label=args.label,
                  llm_info={"provider": args.provider, "temperature": args.temperature,
@@ -52,7 +53,8 @@ def _export(args) -> None:
     def progress(done: int, total: int) -> None:
         if done == total or done % 25 == 0:
             print(f"  {done}/{total} frames")
-    out = export(run_dir, Path(args.out) if args.out else None, args.seconds_per_frame, progress=progress)
+    out = export(run_dir, Path(args.out) if args.out else None, args.seconds_per_frame, speed=args.speed,
+                 smart=args.smart, annotations=args.annotations, progress=progress)
     print(f"Wrote {out}")
 
 
@@ -71,8 +73,10 @@ def main() -> None:
     p.add_argument("--extra-body", help='extra JSON for the chat request, e.g. \'{"reasoning_effort": "high"}\'')
     p.add_argument("--max-steps", type=int, default=300, help="model responses before stopping (default 300)")
     p.add_argument("--max-minutes", type=float, default=0, help="wall-clock limit (default none)")
-    p.add_argument("--new-game", action="store_true", help="from the main menu, roll a new random character "
+    p.add_argument("--new-game", action="store_true", help="start a new character (see --character) "
                    "instead of continuing the last save")
+    p.add_argument("--character", default="choose", help="for --new-game: 'choose' (default; the model picks, "
+                   "preferring the game's preset characters), 'random', or a preset name such as 'Marsh Taur'")
     p.add_argument("--objective", help="replace the default objective in the system prompt")
     p.add_argument("--keep-steps", type=int, default=30, help="steps kept verbatim before older ones are summarized")
     p.add_argument("--no-screenshots", action="store_true", help="don't capture the game window")
@@ -87,8 +91,12 @@ def main() -> None:
 
     e = sub.add_parser("export", help="render a recorded run to MP4 (needs ffmpeg)")
     e.add_argument("run", help="run id or directory")
-    e.add_argument("--seconds-per-frame", type=float, default=1.0, help="how long each snapshot is shown (default 1.0)")
-    e.add_argument("--out", help="output file (default: <run>/replay.mp4)")
+    e.add_argument("--speed", type=float, default=1.0, help="playback speed: 2 = twice as fast, 0.5 = half (default 1)")
+    e.add_argument("--seconds-per-frame", type=float, default=1.0,
+                   help="how long each snapshot is shown at speed 1 (default 1.0)")
+    e.add_argument("--smart", action="store_true", help="smart pacing: linger on fights and events, skip idle frames")
+    e.add_argument("--annotations", action="store_true", help="burn the reviewer notes from the viewer into the video")
+    e.add_argument("--out", help="output file (default: <run>/replay_<speed>x[_smart][_notes].mp4)")
     e.set_defaults(func=_export)
 
     args = ap.parse_args()

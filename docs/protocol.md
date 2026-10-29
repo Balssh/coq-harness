@@ -133,7 +133,8 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
       "distance": 1,
       "hp": 30, "hpMax": 30,
       "level": 3,
-      "faction": "Villagers"
+      "faction": "Villagers",
+      "difficulty": "Average"
     }
   ],
   "messages": ["You enter Joppa.", "The village spreads before you.", {"msgCount": 42}],
@@ -144,6 +145,11 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
   ],
   "abilities": [
     {"name": "Long Sword", "command": "CmdLongSword", "hotkey": "1"}
+  ],
+  "quests": [
+    {"name": "What's Eating the Watervine?", "giver": "Mehmet", "giverLocation": "Joppa",
+     "steps": [{"name": "Travel to Red Rock", "text": "Journey two parasangs north of Joppa to Red Rock.",
+                "finished": false, "failed": false, "optional": false}]}
   ],
   "time": {
     "segment": 4200, "segmentsPerDay": 12000,
@@ -166,14 +172,14 @@ The mod exposes a simple TCP protocol on `127.0.0.1:47321`:
 | `wait(turns?)` | Yes | Wait/rest to heal |
 | `interact(direction)` | Yes | Interact with adjacent tile |
 | `get()` | Yes | Pick up items on current tile |
-| `use_item(item, item_action)` | Yes | Use inventory item (equip/drop/quaff/eat/unequip) |
+| `use_item(item, item_action)` | Yes | Use inventory item (eat/drink/equip/apply or use/unequip/drop); the item is looked up on the game thread |
 | `press_key(key)` | No | Press a single key |
 | `press_command(command)` | Varies | Send raw Qud command (e.g. CmdFire) |
 | `open_screen(screen)` | No | Open inventory/equipment/skills/etc. |
 | `close_menu()` | No | Close the open popup or screen through its own Exit/Cancel (does nothing on the plain map; Escape there would open the system menu) |
 | `choose_option(option)` | No | Select numbered dialogue option (1-9) |
 | `auto_explore()` | Yes | Trigger auto-explore |
-| `travel(direction)` | Yes | Travel to zone edge (cardinal only) |
+| `travel(direction)` | Yes | Run to the zone edge (cardinal only) and step into the next zone; walks around terrain that blocks the straight line, and says so when hostiles in view stop it |
 | `go_stairs(direction)` | Yes | Take stairs up/down |
 | `save()` | No | Save the game |
 | `quit()` | No | Quit to main menu |
@@ -188,15 +194,19 @@ Tools added to `mcp_server.py` on top of the raw protocol actions:
 | `respond_popup(option/button/dismiss/text)` | No | Answer any popup, conversation, or item picker (containers: `button="take_all"`) |
 | `go_to(x, y)` | Yes | Walk a shortest path; stops next to an occupied target, on damage, popups, new hostiles |
 | `get_map()` | No | ASCII map of the zone with x/y rulers |
-| `attack(direction)` | Yes | Force-attack (needed for walk-over creatures such as dreadroots) |
+| `attack(direction?, x?, y?)` | Yes | Melee-attack an adjacent cell by coordinates or direction, or the adjacent hostile by default; also force-attacks walk-over creatures such as dreadroots |
 | `fire(x?, y?)` | Yes | Shoot the missile weapon at a cell or the nearest hostile; reloads automatically |
 | `rest()` | Yes | Wait until healed (stops if something happens) |
 | `use_ability(name, x?, y?)` | Yes | Activated abilities (Sprint, Freezing Ray, ...); targeted ones are aimed at (x, y) or the nearest visible hostile (mod action `pick_target`) |
 | `list_skills(all?)` / `learn_skill(name)` | No | Spend skill points |
 | `raise_attribute(attribute)` | No | Spend attribute points |
 | `trade_list()` / `trade_select(side, index, count)` / `trade_offer()` | No | Buy and sell on the open trade screen (side 0 = trader, 1 = you) |
+| `world_map(radius?)` | No | The parasangs around you as a letter grid, a legend with each terrain's look description, and the known places with directions (mod action `world_info`: terrain per parasang plus revealed map notes) |
+| `chargen_presets()` / `chargen_auto(preset?)` | No | List the game's preset characters; create a Classic character from a preset (mod action `chargen_auto` with `pregen`, through the game's Pregen path) or at random |
 
-Action results return a compact status (HP, hostiles, new messages); `get_state` returns everything.
+Action results return a compact status (HP, hostiles with the game's threat rating such as
+`[Tough]`, a `World:` line with the zone's world coordinates, the terrain of the neighbouring
+parasangs and how many zones away the known places are, new messages); `get_state` returns everything, including the quest log.
 The state only contains what the player knows: creatures in line of sight and objects in explored
 cells (`zone.explored` holds one `0`/`1` row string per y). Item names spell out the stat glyphs
 (`boar-skin gloves AV1 DV0`, `short bow PV4`, `slender pestle PV3/5 dmg 1d2-1`).

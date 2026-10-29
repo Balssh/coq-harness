@@ -40,20 +40,21 @@ injection or window focus. The window still must not be minimized.
      `vibe mcp add caves-of-qud --transport stdio --command /path/to/uv --arg=run --arg=--project --arg=/path/to/coq-harness --arg=python --arg=/path/to/coq-harness/mcp_server.py`
 
    The server finds the game through `COQ_HOST`, then localhost, then the WSL gateway.
-   Then play: `continue_game` (or `start_new_game` + `chargen_auto`), then `get_state`.
+   Then play: `continue_game` (or `start_new_game` + `chargen_auto`, optionally with a preset name
+   from `chargen_presets`), then `get_state`.
 
 ## Tools
 
 | Area | Tools |
 |---|---|
-| State | `get_state` (full), `get_state_raw` (JSON), `get_map` (ASCII map with x/y rulers) |
+| State | `get_state` (full), `get_state_raw` (JSON), `get_map` (ASCII map with x/y rulers), `world_map` (terrain and known places around you) |
 | Movement | `move`, `go_to(x, y)`, `travel`, `go_stairs`, `auto_explore`, `wait`, `rest` |
-| Combat | `move` into a hostile, `attack(direction)`, `fire(x?, y?)`, `use_ability(name, x?, y?)` (targeted abilities aim at the cell or the nearest hostile) |
+| Combat | `move` into a hostile, `attack(x?, y?)` or `attack(direction)` (default: the adjacent hostile), `fire(x?, y?)`, `use_ability(name, x?, y?)` (targeted abilities aim at the cell or the nearest hostile) |
 | Items | `get`, `use_item(item, item_action)` (eat, drink, apply, equip, unequip, drop) |
 | Popups | `respond_popup(option / button / dismiss / text)`, which covers conversations, Yes/No prompts and container pickers |
 | Character | `list_skills`, `learn_skill`, `raise_attribute` |
 | Trade | `trade_list`, `trade_select(side, index, count)`, `trade_offer` |
-| Game | `continue_game`, `start_new_game`, `chargen_auto`, `list_saves`, `save_game`, `quit_to_menu`, `open_screen`, `close_menu` |
+| Game | `continue_game`, `start_new_game`, `chargen_presets`, `chargen_auto(preset?)`, `list_saves`, `save_game`, `quit_to_menu`, `open_screen`, `close_menu` |
 
 - **Compact results:** each action returns a short status with HP, visible hostiles and new messages.
 - **No hidden information:** the state only contains what the character could know, meaning creatures
@@ -66,9 +67,10 @@ injection or window focus. The window still must not be minimized.
 
 ```
 uv run python -m harness play                       # ML4 plays the loaded game (or continues the last save)
-uv run python -m harness play --new-game --max-steps 500 --label first-try
+uv run python -m harness play --new-game --max-steps 500 --label first-try   # the model picks a preset character
+uv run python -m harness play --new-game --character "Marsh Taur"             # or name one, or --character random
 uv run python -m harness replay                     # pick a run in the browser
-uv run python -m harness export <run>               # render a run to MP4 (also a button in the viewer)
+uv run python -m harness export <run> --speed 2     # render a run to MP4 (--smart pacing, --annotations; also in the viewer)
 ```
 
 `uv run coq-play ...` works too. [`docs/harness.md`](docs/harness.md) documents the implementation.

@@ -73,6 +73,8 @@ namespace CoQMcpBridge
             sb.Append(",");
             AppendAbilities(sb, player);
             sb.Append(",");
+            AppendQuests(sb);
+            sb.Append(",");
             AppendTime(sb);
             sb.Append("}");
 
@@ -262,6 +264,13 @@ namespace CoQMcpBridge
                             sb.Append(Json.Num("level", SafeGet(() => obj.GetStatValue("Level"), 0)));
                             sb.Append(",");
                             sb.Append(Json.Str("faction", SafeGet(() => GetFactionName(obj))));
+                            if (obj != player)
+                            {
+                                // The game's own threat rating ("Tough", "Impossible"), as on look.
+                                sb.Append(",");
+                                sb.Append(Json.Str("difficulty", SafeGet(() => PopupBridge.Clean(
+                                    XRL.World.Capabilities.DifficultyEvaluation.GetDifficultyDescription(obj, player, null, false) ?? ""), "")));
+                            }
                         }
 
                         sb.Append("}");
@@ -328,6 +337,62 @@ namespace CoQMcpBridge
             }
             catch { }
             sb.Append("]");
+        }
+
+        // Active (unfinished) quests with their visible steps, as in the quest log.
+        private static void AppendQuests(StringBuilder sb)
+        {
+            sb.Append("\"quests\":[");
+            bool first = true;
+            try
+            {
+                foreach (var quest in MapValues(The.Game?.Quests))
+                {
+                    if (!(quest is XRL.World.Quest q) || q.Finished) continue;
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{");
+                    sb.Append(Json.Str("name", PopupBridge.Clean(q.DisplayName ?? q.Name ?? q.ID)));
+                    sb.Append(",");
+                    sb.Append(Json.Str("giver", PopupBridge.Clean(q.QuestGiverName ?? "")));
+                    sb.Append(",");
+                    sb.Append(Json.Str("giverLocation", PopupBridge.Clean(q.QuestGiverLocationName ?? "")));
+                    sb.Append(",\"steps\":[");
+                    bool firstStep = true;
+                    var steps = q.StepsByID?.Values.Where(st => st != null && !st.Hidden).OrderBy(st => st.Ordinal);
+                    foreach (var st in steps ?? Enumerable.Empty<XRL.World.QuestStep>())
+                    {
+                        if (!firstStep) sb.Append(",");
+                        firstStep = false;
+                        sb.Append("{");
+                        sb.Append(Json.Str("name", PopupBridge.Clean(st.Name ?? st.ID)));
+                        sb.Append(",");
+                        sb.Append(Json.Str("text", PopupBridge.Clean(st.Text ?? "")));
+                        sb.Append(",");
+                        sb.Append(Json.Bool("finished", st.Finished));
+                        sb.Append(",");
+                        sb.Append(Json.Bool("failed", st.Failed));
+                        sb.Append(",");
+                        sb.Append(Json.Bool("optional", st.Optional));
+                        sb.Append("}");
+                    }
+                    sb.Append("]}");
+                }
+            }
+            catch { }
+            sb.Append("]");
+        }
+
+        // StringMap<T> values without depending on its exact API.
+        private static System.Collections.Generic.IEnumerable<object> MapValues(object map)
+        {
+            if (!(map is System.Collections.IEnumerable items)) yield break;
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+                var value = item.GetType().GetProperty("Value")?.GetValue(item, null);
+                yield return value ?? item;
+            }
         }
 
         private static void AppendInventory(StringBuilder sb, GameObject player)

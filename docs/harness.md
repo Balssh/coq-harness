@@ -58,16 +58,29 @@ That copy drifted: it never got popups, trading, skills or `go_to`. The harness 
 
    The memory tools (`note`, `forget_note`, `set_goal`) are added on top.
 2. **Set up the game** (`_ensure_in_game`):
-   - **Already playing:** keep that game, unless `--new-game` is set. Then it calls `quit_to_menu`,
-     which saves and leaves through the system menu's "Save and Quit", followed by `start_new_game`
-     and `chargen_auto` (a random Classic character).
-   - **At the main menu:** `continue_game`, or the new-game pair with `--new-game`. If continuing
-     fails, it falls back to a new game. Right after Qud launches the menu can ignore
-     `start_new_game`, so the pair is retried up to three times.
+   - **Already playing:** keep that game, unless `--new-game` is set. Then it dismisses any open
+     popup and calls `quit_to_menu`, which saves and leaves through the system menu's "Save and
+     Quit" (passing one turn first if the new-game world-generation view is still up).
+   - **At the main menu:** `continue_game`, or a new game with `--new-game`. If continuing fails, it
+     falls back to a new game.
+   - **New game:** pick the character (below), then `start_new_game` and `chargen_auto`. Right after
+     Qud launches, the menu can ignore `start_new_game`, and world generation can fail because the
+     game's data is still loading ("The given key 'Snapjaw' was not present"), which drops back to
+     the main menu. Both are retried, up to three times.
    - **In character creation:** `chargen_auto`.
-3. **Opening:** the first user message is the full `get_state` text.
-4. **Steps** until a stop condition (below).
-5. **Teardown:**
+3. **Character** (`--character`, default `choose`): the harness lists the game's nine preset
+   characters (`chargen_presets`, read from Qud's `EmbarkModules.xml`) and asks the model to pick
+   one, with `random` allowed. The prompt (`prompts/character.md`) steers it toward presets marked
+   most or highly survivable and toward simple fighters, and includes the lessons journal. The
+   choice and its reason are recorded as a `setup` event. `--character random` or
+   `--character "Marsh Taur"` skip the question. In the mod, a preset goes through the game's own
+   path (character type "Pregen", `QudPregenModule.SelectPregen`), so it builds exactly like picking
+   it in the menu, starting in Joppa.
+4. **Opening:** the first user message is the full `get_state` text. For a brand-new character
+   (level 1, no XP) it adds "Follow the Opening plan", and the goal starts as the opening plan
+   until the model sets its own.
+5. **Steps** until a stop condition (below).
+6. **Teardown:**
    - save, unless the character died;
    - ask the model for lessons and append them to `runs/journal.md`;
    - finish `meta.json` and close the screenshot helper.
@@ -92,6 +105,8 @@ That copy drifted: it never got popups, trading, skills or `go_to`. The harness 
      the APIs require.
    - **Death** ends the step and the run.
 5. **Hints:** a zone change adds a hint to the last tool result ("You are now in a new zone…").
+   Entering a gated zone below its level (`ZONE_GATES`: Red Rock before level 2) adds a
+   `CAUTION` nudge to go back and level up near town.
 6. **Watchdog**, then compaction if needed.
 
 ### Stop conditions
@@ -111,7 +126,11 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
   - how a turn works;
   - a priority list for every turn: popup → open screen → danger → heal → spend level-up points →
     progress;
-  - exploration habits: `auto_explore` until done, then NPCs, containers and stairs, then leave the
+  - an opening plan for a new character: learn the character, sweep Joppa (explore, talk to every
+    named villager, take the quests), gear up at the merchants, level up on weak creatures near
+    Joppa until level 2, and only then go to Red Rock;
+  - exploration habits: `auto_explore` until done (it stops when a hostile comes into view, so it's
+    also the safe way through dangerous zones), then NPCs, containers and stairs, then leave the
     zone; prefer `go_to` to many single moves;
   - the whole of `docs/qud_novice_notes.md`, so game knowledge lives in one file shared with other
     clients;
@@ -121,6 +140,10 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
   - **Notes:** numbered, written by `note` and removed by `forget_note`. At most 40 notes of 300
     characters each; the oldest is dropped first.
   - **The story so far:** written during compaction.
+  - **Named people seen in this zone:** kept by the harness. The game state lists creatures only
+    while they are in sight, so after each snapshot the harness records every named (capitalized),
+    non-hostile creature's position per zone, e.g. "Mehmet (42,19); Tam, dromad merchant (70,19)".
+    Without it the model spent many steps looking for villagers it had already seen.
 
   It sits at the end of the system message rather than in a separate message because Mistral is
   strict about message order (no user message straight after a tool message). The fixed part of the
@@ -149,6 +172,9 @@ The model's context is always `[system prompt + memory] [opening] [steps…]`.
 | No tool call | response without tool calls | user message: "You must call at least one tool every turn…" |
 | Stuck | same zone, position, HP, turn counter, screen and popup for 8 steps | `WATCHDOG:` hint appended to the last result |
 | Repeat | the same call with the same arguments and the same outcome 5 times in a row | `WATCHDOG:` hint |
+| Walking | 6 steps in a row of only `move`/`get_map` with no hostile in sight | `TIP:` to use `go_to` or `auto_explore` |
+| Zone gate | entering a `ZONE_GATES` place below its level (Red Rock before level 2) | a `CAUTION:` on each gated zone entered (once per zone) |
+| Message popups | a call leaves a popup with no options, no text input and at most an Accept/OK button | accepted for the model (chains up to 8); the result lists their text under `[harness] Message popup(s) accepted for you`. If the call itself was refused because of the popup, it is run again. Recorded as `auto_popup` events |
 | Call limit | more than 4 calls in one response | the extras are answered "Not run" |
 | Popup or screen | calls queued behind a popup or screen | answered "Not run: …" |
 | Autosave | every 50 steps and at the end | `save_game` (not shown to the model) |
@@ -177,7 +203,8 @@ Event types:
   produced).
 - **`memory`:** goal, notes and summary after every change.
 - **`summary`:** compaction, with the number of dropped steps and the new summary.
-- **`nudge`:** `kind` is one of `no_tool`, `stuck`, `repeat` or `zone`.
+- **`nudge`:** `kind` is one of `no_tool`, `stuck`, `repeat`, `zone`, `gate` or `walking`.
+- **`auto_popup`:** the text of message popups the harness accepted for the model.
 - **`autosave`, `lessons`, `error`, `run_end`.**
 
 **Screenshots** come from a single `powershell.exe` started from WSL. It loops on stdin, finds the
@@ -191,47 +218,101 @@ behind other windows and never takes focus. The process is DPI-aware so the wind
 ## Replay viewer
 
 `uv run python -m harness replay` serves `runs/harness/` on `http://localhost:8765/` and opens the
-browser.
+browser. Press `?` in the viewer for the keyboard shortcuts.
 
-- **Run list:** start time, model, label, outcome, steps, final level and duration.
-- **Run view:**
-  - the screenshot;
-  - a map drawn from the recorded state:
-    - creatures by their first letter, coloured hostile, friendly or neutral;
-    - walls, items, containers, doors and stairs;
-    - unexplored cells in black;
-    - hover shows names;
-  - an HP bar and stats;
-  - messages, with new ones highlighted;
-  - the step panel: hidden reasoning (collapsible), the model's text, and each tool call with its
-    result. The call that produced the current frame is outlined.
-  - the memory as it was at that moment;
-  - nudges, summaries and errors for the step.
-- **HP timeline:** dashed lines mark level-ups, ticks mark nudges, summaries, errors and death.
-  Click it to seek.
-- **Controls:** play/pause with Space, step with ←/→, Home/End, speed from 0.5× to 10×.
-- **Links:** `?run=<id>&frame=N` opens a specific moment.
-- **Live runs:** a run that's still in progress is polled every 3 s, and "follow live" keeps the
-  view on the newest frame.
+- **Run list:** one card per run with:
+  - the last screenshot (the first one on hover) and an outcome badge (`died`, `running`,
+    `unfinished` for a run that stopped without an end);
+  - steps, max level, zones visited, duration, tokens and harness nudges;
+  - an HP sparkline, the zones in order, and the number of reviewer notes.
+- **Compare:** tick two cards and press Compare (`?compare=<a>,<b>`). It shows both last frames, a
+  table of the numbers above (the better value in green where better is clear), both HP curves on
+  one chart, tool-call counts side by side and the zones each run visited. The server computes
+  these numbers from `events.jsonl` and caches them until the file changes.
+- **Run view:** one screen on a wide display, in three columns:
+  - **Step list:** one line per step, with its tool calls (`move×3`), the start of the model's text,
+    the HP change, and icons for death, error, nudge, popup, zone change, level-up, context summary
+    and reviewer note. Fights and damage have a coloured edge. Click a line to jump there.
+    - **Search** covers thoughts, reasoning, call arguments and results, nudges and notes, and
+      highlights the match.
+    - **Filters:** fights, nudges, errors, popups, zones and notes. With a search or filter
+      active, `[` and `]` jump between matching steps, and the timeline marks them.
+  - **Game:** the screenshot, the map, or both side by side (`V`).
+    - The map shows the last 40 positions in the zone as a trail. Long moves from `auto_explore`
+      or `go_to` are drawn dashed and faint.
+    - The frame's call target is marked with a line and crosshair: `go_to`, `fire` and
+      `use_ability` coordinates, and the cell an `attack`, `move` or `interact` direction points to.
+  - Under the game: stats, an HP bar that turns red below 35 %, the latest messages with new ones
+    highlighted, and **what changed** since the previous frame. Changes covered: HP, level, XP,
+    zone or distance moved, items and effects gained or lost (by base name, so a waterskin
+    losing a dram doesn't count), goal changed, notes added or removed, context summarized and
+    popup opened.
+  - **Model:** the step's tags, latency and tokens; thinking (collapsible); the text; and every
+    call with its result. The call that produced the current frame is outlined; click another
+    call to show its frame. Nudges, summaries and errors follow, then the reviewer note and the
+    memory at that moment (newly added notes in green).
+- **Timeline:** the HP curve plus one lane each for damage, fights, popups, zone changes, nudges,
+  summaries, errors, level-ups and reviewer notes. A red line marks death. Hovering shows that
+  frame's screenshot, step, HP, tags, call and text; click to seek. `[` and `]` jump to the
+  previous or next event.
+- **Reviewer notes:** write a note on any step (`A`, then Ctrl+Enter or click away). Notes are
+  saved to `runs/harness/<run>/annotations.json` through `POST /api/annotate`, keyed by step;
+  an empty note deletes it. They appear in the step list, the timeline and, if you choose, the
+  MP4.
+- **Playback:** Space plays at 0.5× to 10×. **Smart playback** (`S`) uses the MP4 export's pacing
+  rule, below.
+- **Keys:** ←/→ frame, Shift+←/→ or J/K step, `[`/`]` event, Home/End, `/` search, `V` view,
+  `S` smart, `A` note, `L` step list, `E` export, `T` theme (auto, dark or light), `?` help.
+- **Layout:** below 1400 px the step list becomes a drawer (`☰ Steps` or `L`). Below 900 px
+  everything stacks into one column: game, stats, step, note, messages, memory, timeline.
+- **Links:** the address bar follows the current frame, so `?run=<id>&frame=N` can be copied as a
+  link to that moment.
+- **Live runs:** a run still in progress is polled every 3 s, and "follow live" keeps the view on
+  the newest frame.
 
 ## MP4 export
 
-`uv run python -m harness export <run> [--seconds-per-frame 1.0] [--out file.mp4]`, or the
-**Export MP4** button in the viewer. The button renders on the server, shows progress, and then
-offers `replay.mp4` for download.
+```
+uv run python -m harness export <run> [--speed 2] [--smart] [--annotations] [--seconds-per-frame 1.0] [--out file.mp4]
+```
 
-- **Frames:** one 1920×1080 frame per snapshot, drawn with Pillow:
+The viewer's **Export MP4** menu (`E`) does the same on the server, shows progress, and lists
+every export of the run for download. It also estimates the video length for the chosen settings.
+
+- **Speed:** each snapshot is shown for `seconds-per-frame / speed` seconds (the default is 1 s).
+  The viewer offers 0.25× to 8×.
+- **Smart pacing** multiplies each frame's time by what happened in it:
+  - death 3×;
+  - damage, fights and frames with a reviewer note 2×;
+  - level-ups 1.75×;
+  - zone changes 1.4×;
+  - popups, nudges and errors 1.25×;
+  - idle frames 0.3×. A frame is idle when it is a look at state or map, a memory call or a
+    `wait`, and nothing (position, HP, zone, popup) changed.
+
+  The rule is `frame_kinds()` and `pace()` in `video.py`, and the viewer has a copy for smart
+  playback. On the first live run it gives 4:09 at 1× instead of 3:48, with fights slower and
+  idle stretches faster.
+- **Annotations** (`--annotations`, or "Burn in reviewer notes") draws each step's note as a
+  yellow banner over the screenshot.
+- **File names** encode the settings so exports sit side by side:
+  `replay_<speed>x[_smart][_notes].mp4` in the run directory.
+- **Frames:** 1920×1080, drawn with Pillow:
   - the header (run, model, step, time);
   - the game screenshot;
   - an HP bar and stats;
-  - the map drawn from the recorded state;
-  - the step panel: thinking, the model's text, the tool calls with the current call's result, and
-    harness nudges;
+  - the map with the movement trail;
+  - the step panel: "what changed" badges, thinking, the model's text, the tool calls with the
+    current call's result, and harness nudges;
   - memory (goal and notes);
   - the latest messages, with new ones highlighted;
-  - the HP timeline with a cursor.
-- **Encoding:** frames are piped to `ffmpeg` (libx264, CRF 23, 30 fps), which must be on PATH. The
-  first live run (228 frames at 1 s each) took 36 s to render and came out at 3:48 and 14 MB.
+  - the timeline: the HP curve, the same event lanes as the viewer, and a cursor.
+- **Encoding:** frames are piped to `ffmpeg` (libx264, CRF 23, `-tune stillimage`), which must be
+  on PATH. Each picture is written once per output frame it covers, at 10 fps (up to 30 fps when
+  frames are shorter than 0.1 s).
+
+  The first live run (228 frames) took about 30 s to render at 2× (1:54, 12 MB) and about 40 s
+  with smart pacing at 1×.
 
 ## Models
 
@@ -344,6 +425,56 @@ Replay it with `uv run python -m harness replay 20261028-215600_ml4-live-1`.
 **On the model:** ML4 played sensibly in town and managed its quests and notes well. In combat it
 didn't follow its own notes: it re-entered the zone it had marked dangerous and auto-explored there
 at low HP. The lessons it wrote say exactly that, and later runs will see them in the journal.
+
+## Supervised opening runs (2026-10-29)
+
+Six new-game runs of ML4, each changing the harness based on what the previous ones showed. The goal
+was a better start: sweep Joppa, take the quests, gear up, level on weak creatures, and only then
+go to Red Rock, the way a careful human (or Claude, playing through the same tools) does it.
+
+| Run | Character (model's pick) | Result | Levels reached (step) | Notes |
+|---|---|---|---|---|
+| `ml4-opening-1` | Praetorian Prime | step limit 250, alive | 2 (137) | Good Joppa sweep and quests; 85 single `move`s and 55 `respond_popup`s, mostly plain message popups |
+| `ml4-opening-2` | Praetorian Prime | died at 118 | 4 (83) | Fast start; engulfed by a gelatinous frustum (70 HP) it had called "too dangerous" |
+| `ml4-opening-3` | Praetorian Prime | step limit 300, alive | 2 (120), 3 (199) | Ground glowfish for 150 steps; got lost heading east when Joppa was west |
+| `ml4-opening-4` | Gunwing | died at 127, level 1 | – | Kept going into Red Rock past the one-time CAUTION; moves that silently failed while it was surrounded; killed by a hulking baboon |
+| `ml4-opening-5` | Praetorian Prime | died at 222 | 2 (108), 3 (119), 4 (205) | Obeyed the gate; level 4 around Red Rock; left via the world map, where `travel` failed and `go_to` walked it into a jungle |
+| `ml4-opening-6` | Praetorian Prime | step limit 300, alive | 2 (123), 3 (156) | First run with every fix below. Hunted baboons at range (incl. [Tough] ones), escaped hulking baboons, found an artifact and finished Argyve's quest; spent its last ~50 steps trying to hand in a snapjaw corpse as the watervine vermin (the notes now say girshlings) |
+
+**What changed, and why:**
+- **Preset characters** (all runs): the model picks from the game's presets; it chose Praetorian Prime
+  ("most survivable") five times out of six.
+- **Opening plan** in the system prompt, a seeded goal for new characters, and the Red Rock gate
+  (run 1). The gate's level went from 3 to 2 after run 3 spent 150 steps grinding, and became a
+  warning on every gated zone after run 4 walked past the single one.
+- **Message popups accepted by the harness** (after run 1): 30–50 popups per run no longer cost a
+  step each. A call refused because such a popup appeared is run again (seen in run 2's first try).
+- **Quest log in the state** (after run 1, where the model spent steps looking for it), and
+  **people map memory** (after run 2's search for villagers).
+- **Threat ratings** on every creature (after run 2's frustum).
+- **`World:` line** with zone coordinates and the way to Joppa and Red Rock (after run 3), and a
+  world-map version with parasang coordinates (after run 5). Since then it is built from the game's
+  world map instead of two hardcoded landmarks: the terrain of the four neighbouring parasangs and
+  the direction to every place the character knows (named terrain and revealed map notes). The
+  `world_map` tool shows the surroundings as a letter grid with each terrain's look description.
+- **`travel`** steps into the next zone itself, walks around terrain in the way, says when hostiles
+  stop it, and steps one parasang on the world map (runs 3 and 5).
+- **`move`** says when the move didn't happen, or that it was a bump attack (run 4).
+- **`attack()`** without arguments hits the adjacent hostile, or `attack(x, y)` (run 3's direction
+  mix-ups).
+- **`use_item`** looks the item up on the game thread, which fixes an intermittent "Index was out of
+  range" crash, and accepts `use` (run 3).
+- **Setup:** retries a new game when world generation fails right after Qud launches, passes the
+  world-generation screen before `quit_to_menu`, and gets past a previous character's death screens.
+- **Walking tip** after 6 steps of single moves with nothing hostile in sight.
+- **Notes:** the watervine vermin are girshlings in the caves under Red Rock; other corpses don't
+  count (run 6).
+
+**Still weak:** combat judgment at low level (two of the three deaths were fights the model itself had
+called too dangerous), long-range navigation, and multi-step quest logic. The harness can give the
+model the facts (ratings, directions, quest steps), but it still has to act on them. Each run costs
+roughly 1.5–4M prompt tokens for 120–300 steps.
+
 
 ## Known limitations and ideas
 

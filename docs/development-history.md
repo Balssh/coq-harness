@@ -226,6 +226,30 @@ broken `_on_world_map` tool and no single-step move. That explains why ML4's Vib
 - **Viewer:** rendered in headless Chromium.
 - **Not yet done:** the first run against the live game.
 
+### Follow-up: viewer, presets and the opening (mod 0.13.20)
+
+- **Replay viewer:** step list, event timeline lanes, per-frame "what changed", three-column layout,
+  map trail and targets, search and filters, reviewer notes, run cards and run comparison, smart
+  playback. MP4 export takes a speed (0.25x–8x), smart pacing and burned-in notes.
+- **Preset characters:** the mod lists the game's presets (from `EmbarkModules.xml`) and builds one
+  through the game's own Pregen path (`QudPregenModule.SelectPregen`). Two shortcuts failed first:
+  applying the preset's build code to a "New" character only filled the genotype, and overwriting a
+  random roll with it broke world generation. The decompiler couldn't be installed this time, so the
+  module's methods were found with a small `describe_type` reflection action added to the mod.
+  A "The given key 'Snapjaw' was not present" crash on the world-generation screen turned out to be
+  starting a new game too soon after launch, not the preset; setup now retries.
+- **Six supervised ML4 runs** drove a series of harness and tool fixes: auto-accepted message
+  popups, quest log, threat ratings, a `World:` line, people map memory, honest `move` results,
+  better `travel`, `attack()` targeting, a `use_item` threading fix and a stronger Red Rock gate.
+  [`harness.md`](harness.md#supervised-opening-runs-2026-10-29) has the table and the reasons.
+- **World map knowledge** (mod 0.13.22): a `world_info` mod action reads the terrain of each
+  parasang around the player and the revealed map notes, the same things the world map and its look
+  command show a player. The `World:` line now names the neighbouring terrain and every known place,
+  and a `world_map` tool draws the surroundings. The game thread doesn't always drain its task queue
+  while idle at the map (every other lookup timed out), so the action falls back to building on the
+  bridge thread, like the state snapshot. The run journal was pruned by hand of lessons that were
+  wrong or had been fixed in the tools.
+
 ### Approach
 
 These are the working rules Claude used. They are the main difference from the ML4 sessions.

@@ -290,6 +290,11 @@ def _clean(text: Any) -> str:
     return _MARKUP_RE.sub("", str(text))
 
 
+def _difficulty(c: dict) -> str:
+    d = _clean(c.get("difficulty") or "").strip()
+    return f" [{d}]" if d else ""
+
+
 def _fmt_popup(popup: dict) -> str:
     lines = ["!!! POPUP OPEN — the game is paused until you answer it with respond_popup !!!"]
     if popup.get("title"):
@@ -333,6 +338,107 @@ def _new_messages(msgs: list[str]) -> list[str]:
     return msgs
 
 
+def _world_pos(zone_id: str) -> tuple[int, int, int] | None:
+    """Absolute zone x, y and depth from an id like JoppaWorld.11.22.1.1.10 (depth 10 = surface)."""
+    parts = (zone_id or "").split(".")
+    if len(parts) != 6 or not all(x.isdigit() for x in parts[1:]):
+        return None
+    px, py, zx, zy, z = map(int, parts[1:])
+    return px * 3 + zx, py * 3 + zy, z
+
+
+def _away(dx: int, dy: int) -> str:
+    """'2 N 1 E' for an offset, 'here' for none."""
+    return " ".join(f"{abs(d)} {w}" for d, w in ((dy, "N" if dy < 0 else "S"), (dx, "W" if dx < 0 else "E"))
+                    if d) or "here"
+
+
+# World-map lookups (mod action world_info) per parasang; refreshed when the player changes parasang
+# and now and then, since places get revealed by conversations and exploring.
+_world_cache: dict = {"key": None, "info": None, "uses": 0}
+
+
+def _world_info(state: dict, radius: int = 6) -> dict | None:
+    if _on_world_map(state):
+        p = state.get("player") or {}
+        key = (p.get("x"), p.get("y"))
+    else:
+        pos = _world_pos((state.get("zone") or {}).get("id", ""))
+        if not pos:
+            return None
+        key = (pos[0] // 3, pos[1] // 3)
+    c = _world_cache
+    c["uses"] += 1
+    # A failed lookup (e.g. while a save is still loading) is retried after a few calls.
+    if c["key"] != (key, radius) or c["uses"] > (25 if c["info"] else 3):
+        try:
+            info = get_bridge().send_command("world_info", radius=radius)
+        except Exception:
+            info = {}
+        c.update(key=(key, radius), info=info if info.get("ok") else None, uses=0)
+    return c["info"]
+
+
+def _places(info: dict) -> list[dict]:
+    """Known named places: revealed map notes plus named (capitalized) terrain such as Joppa or Red Rock."""
+    places, names = [], set()
+    for n in info.get("places", []):
+        text = _clean(n.get("text", ""))
+        if text and text.lower() not in names:
+            names.add(text.lower())
+            places.append({**n, "text": text})
+    for x, y, name in info.get("cells", []):
+        if name[:1].isupper() and name.lower() not in names:
+            names.add(name.lower())
+            places.append({"text": name, "x": x, "y": y, "zx": 1, "zy": 1, "visited": False})
+    return places
+
+
+def _terrain_at(info: dict, x: int, y: int) -> str:
+    return next((n for cx, cy, n in info.get("cells", []) if (cx, cy) == (x, y)), "?")
+
+
+def _fmt_world(state: dict) -> str:
+    """Where this zone is, what the parasangs around it are, and which way the known places are."""
+    info = _world_info(state)
+    if _on_world_map(state):
+        p = state.get("player") or {}
+        x, y = p.get("x"), p.get("y")
+        if not isinstance(x, int) or not isinstance(y, int):
+            return ""
+        here = f"WORLD MAP: you are at parasang ({x},{y})"
+        if not info:
+            return here + "; each move here is one parasang (3x3 zones). go_stairs('down') enters the local zones here."
+        places = sorted(_places(info), key=lambda n: max(abs(n["x"] - x), abs(n["y"] - y)))[:6]
+        return (f"{here}, {_terrain_at(info, x, y)}; each move here is one parasang (3x3 zones). "
+                f"Next parasangs: {_around(info, x, y)}. "
+                + (f"Known places, parasangs away: {'; '.join(n['text'] + ' ' + _away(n['x'] - x, n['y'] - y) for n in places)}. "
+                   if places else "")
+                + "go_stairs('down') enters the local zones here; world_map shows more.")
+    pos = _world_pos((state.get("zone") or {}).get("id", ""))
+    if not pos:
+        return ""
+    x, y, z = pos
+    depth = "surface" if z == 10 else f"{z - 10} levels underground" if z > 10 else f"{10 - z} levels up"
+    line = f"World: zone ({x},{y}), {depth}"
+    if not info:
+        return line
+    px, py = x // 3, y // 3
+    places = []
+    for n in _places(info):
+        dx, dy = n["x"] * 3 + n.get("zx", 1) - x, n["y"] * 3 + n.get("zy", 1) - y
+        places.append((max(abs(dx), abs(dy)), n["text"] + " " + _away(dx, dy)))
+    places = [t for _, t in sorted(places)[:6]]
+    return (f"{line}, in the {_terrain_at(info, px, py)} parasang ({px},{py}). "
+            f"Next parasangs: {_around(info, px, py)}"
+            + (f". Known places, zones away: {'; '.join(places)}" if places else ""))
+
+
+def _around(info: dict, x: int, y: int) -> str:
+    return ", ".join(f"{d} {_terrain_at(info, x + dx, y + dy)}"
+                     for d, (dx, dy) in (("N", (0, -1)), ("E", (1, 0)), ("S", (0, 1)), ("W", (-1, 0))))
+
+
 def _fmt_compact(state: dict) -> str:
     """Short state for action results: vitals, threats, new messages. get_state has the rest."""
     lines = []
@@ -355,6 +461,9 @@ def _fmt_compact(state: dict) -> str:
                  f"XP {p.get('xp', '?')}/{p.get('xpNext', '?')}  at ({p.get('x', '?')},{p.get('y', '?')}) "
                  f"in {state.get('zone', {}).get('name', '?')}  {p.get('hunger', '?')}/{p.get('thirst', '?')}"
                  + ("  DEAD" if state.get("isDead") else ""))
+    world = _fmt_world(state)
+    if world:
+        lines.append(world)
     effects = state.get("effects", [])
     if effects:
         lines.append("Effects: " + ", ".join(e.get("name", "?") for e in effects[:10]))
@@ -363,7 +472,7 @@ def _fmt_compact(state: dict) -> str:
     if hostiles:
         lines.append("Hostiles: " + "; ".join(
             f"{_clean(c.get('name') or c.get('blueprint', '?')).strip()} ({c['x']},{c['y']}) d={c.get('distance')} "
-            f"HP={c.get('hp', '?')}/{c.get('hpMax', '?')}" for c in hostiles[:6]))
+            f"HP={c.get('hp', '?')}/{c.get('hpMax', '?')}{_difficulty(c)}" for c in hostiles[:6]))
     adjacent = [c for c in cells if c.get("isCreature") and not c.get("isHostile") and c.get("distance") == 1]
     if adjacent:
         lines.append("Adjacent: " + "; ".join(
@@ -412,6 +521,8 @@ def _fmt_state(state: dict, full: bool = False) -> str:
     lines.append(f"Position: ({p.get('x', '?')}, {p.get('y', '?')})  "
                  f"Location: {p.get('location', '?')}  "
                  f"Zone: {z.get('name', '?')}")
+    if _fmt_world(state):
+        lines.append(_fmt_world(state))
     lines.append(f"In Combat: {p.get('inCombat', False)}  "
                  f"Screen: {state.get('screen', '?')}  "
                  f"Dead: {state.get('isDead', False)}")
@@ -424,6 +535,18 @@ def _fmt_state(state: dict, full: bool = False) -> str:
     abilities = state.get("abilities", [])
     if abilities:
         lines.append(f"\nAbilities: {', '.join(a.get('name', '?') for a in abilities[:15])}")
+
+    quests = state.get("quests", [])
+    if quests:
+        lines.append(f"\n=== Quests ({len(quests)}) ===")
+        for q in quests:
+            giver = f" (from {q['giver']}{', ' + q['giverLocation'] if q.get('giverLocation') else ''})" if q.get("giver") else ""
+            lines.append(f"  {q.get('name', '?')}{giver}")
+            for st in q.get("steps", []):
+                mark = "x" if st.get("finished") else "FAILED" if st.get("failed") else " "
+                opt = " (optional)" if st.get("optional") else ""
+                text = f": {' '.join(st['text'].split())[:200]}" if st.get("text") and not st.get("finished") else ""
+                lines.append(f"    [{mark}] {st.get('name', '?')}{opt}{text}")
 
     inv = state.get("inventory", [])
     if inv:
@@ -447,6 +570,8 @@ def _fmt_state(state: dict, full: bool = False) -> str:
             if c.get("isHostile"): tags.append("HOSTILE")
             elif c.get("isFriendly"): tags.append("friendly")
             elif c.get("isNeutral"): tags.append("neutral")
+            if c.get("isCreature") and _clean(c.get("difficulty") or "").strip():
+                tags.append(_clean(c["difficulty"]).strip())
             hp = f" HP={c.get('hp', '?')}/{c.get('hpMax', '?')}" if c.get("isCreature") else ""
             tag_str = f" [{', '.join(tags)}]" if tags else ""
             name = _clean(c.get("name") or "").strip() or c.get("blueprint", "?")
@@ -528,11 +653,41 @@ def _on_world_map(state: dict) -> bool:
 
 @server.tool(description=f"Move the player one tile. Valid directions: {_DIRECTIONS}. Moving into a creature attacks it.")
 def move(direction: str) -> str:
+    bridge = get_bridge()
+    before = bridge.get_state()
     # A world-map step passes hours of game time, several seconds in real time.
-    world = _on_world_map(get_bridge().get_state())
-    return _act("move", f"Moved {direction}", takes_turn=True, quiet=3 if world else 2,
-                timeout=30.0 if world else TURN_TIMEOUT, direction=direction)
+    world = _on_world_map(before)
+    out = _act("move", f"Moved {direction}", takes_turn=True, quiet=3 if world else 2,
+               timeout=30.0 if world else TURN_TIMEOUT, direction=direction)
+    if world or out.startswith("FAILED") or "POPUP OPEN" in out:
+        return out
+    # Say when the move didn't happen; "Moved south" while standing still misleads.
+    b, after = before.get("player") or {}, bridge.get_state()
+    a = after.get("player") or {}
+    same_zone = (before.get("zone") or {}).get("id") == (after.get("zone") or {}).get("id")
+    if not same_zone or (a.get("x"), a.get("y")) != (b.get("x"), b.get("y")):
+        return out
+    step = next((k for k, v in _STEP_DIRS.items() if v == _FULL_DIRS.get(direction.strip().lower())), None)
+    target = (b.get("x", 0) + step[0], b.get("y", 0) + step[1]) if step else None
+    occupant = next((c for c in before.get("cells") or [] if c.get("isCreature")
+                     and (c["x"], c["y"]) == target), None)
+    if occupant:
+        what = (f"Attacked {_clean(occupant.get('name', '?'))} at ({target[0]},{target[1]}) "
+                f"(moving into a creature attacks it); you did not move")
+    else:
+        held = [_clean(e.get("name", "")) for e in after.get("effects") or []
+                if re.search(r"stuck|engulf|grab|held|paraly|immobil|web|pinned|prone|stun", _clean(e.get("name", "")), re.I)]
+        what = (f"Did not move {direction}: ({target[0]},{target[1]}) is blocked"
+                + (f", or an effect holds you ({', '.join(held)})" if held else ""))
+    return what + out[len(f"Moved {direction}"):]
 
+
+_FULL_DIRS = {"n": "north", "north": "north", "up": "north", "s": "south", "south": "south", "down": "south",
+              "e": "east", "east": "east", "right": "east", "w": "west", "west": "west", "left": "west",
+              "ne": "northeast", "northeast": "northeast", "up_right": "northeast",
+              "nw": "northwest", "northwest": "northwest", "up_left": "northwest",
+              "se": "southeast", "southeast": "southeast", "down_right": "southeast",
+              "sw": "southwest", "southwest": "southwest", "down_left": "southwest"}
 
 _STEP_DIRS = {(0, -1): "north", (0, 1): "south", (1, 0): "east", (-1, 0): "west",
               (1, -1): "northeast", (-1, -1): "northwest", (1, 1): "southeast", (-1, 1): "southwest"}
@@ -711,6 +866,47 @@ def get_map() -> str:
     return "\n".join(lines)
 
 
+@server.tool(description="The world map around you, as the game's world map and look command show it: one "
+                         "letter per parasang (3x3 zones) with a legend that names and describes each terrain, "
+                         "and the named places you know (villages, lairs, sites) with their direction. Use it to "
+                         "plan travel and to see what kind of land lies in each direction.")
+def world_map(radius: int = 5) -> str:
+    state = get_bridge().get_state()
+    if "player" not in state:
+        return "Not in game."
+    info = get_bridge().send_command("world_info", radius=max(1, min(radius, 12)))
+    if not info.get("ok"):
+        return f"FAILED world_map: {info.get('error', 'no world here')}"
+    x0, y0 = info["x"], info["y"]
+    cells = {(cx, cy): n for cx, cy, n in info.get("cells", [])}
+    letters: dict[str, str] = {}
+    for name in dict.fromkeys(cells.values()):
+        named = name[:1].isupper()
+        pool = [ch.upper() if named else ch.lower() for ch in name if ch.isalpha()] + list("0123456789")
+        letters[name] = next((ch for ch in pool if ch not in letters.values() and ch != "@"), "~")
+    xs = sorted({cx for cx, _ in cells})
+    ys = sorted({cy for _, cy in cells})
+    lines = [f"World map around parasang ({x0},{y0}); @ = you, north is up, one letter = one parasang.",
+             "     " + " ".join(f"{cx:>2}"[-2] for cx in xs), "     " + " ".join(f"{cx:>2}"[-1] for cx in xs)]
+    for cy in ys:
+        lines.append(f"{cy:>3}  " + " ".join("@" if (cx, cy) == (x0, y0) else letters.get(cells.get((cx, cy), ""), " ")
+                                            for cx in xs))
+    lines.append("Legend:")
+    for name, ch in letters.items():
+        desc = " ".join(_clean(info.get("terrain", {}).get(name, "")).split())
+        if len(desc) > 220:
+            desc = desc[:217].rsplit(" ", 1)[0] + "..."
+        lines.append(f"  {ch} {name}" + (f": {desc}" if desc else ""))
+    places = sorted(_places(info), key=lambda n: max(abs(n["x"] - x0), abs(n["y"] - y0)))
+    if places:
+        lines.append("Known places (parasangs away):")
+        for n in places[:20]:
+            lines.append(f"  {n['text']}: {_away(n['x'] - x0, n['y'] - y0)}"
+                         + (f" (category {n['category']})" if n.get("category") else "")
+                         + (", visited" if n.get("visited") else ""))
+    return "\n".join(lines)
+
+
 @server.tool(description="Wait for N turns (default 1). Passes time without moving.")
 def wait(turns: int = 1) -> str:
     return _act("wait", f"Waited {turns} turn(s)", takes_turn=True, quiet=4,
@@ -737,7 +933,7 @@ def get() -> str:
     return _act("get", "Get", takes_turn=True)
 
 
-@server.tool(description="Use an item from inventory. item_action: eat, drink/quaff, equip/wear/wield, apply, drop, unequip. item is the item name (partial match OK).")
+@server.tool(description="Use an item from inventory. item_action: eat, drink/quaff, equip/wear/wield, apply/use (injectors, bandages, tonics), drop, unequip. item is the item name (partial match OK).")
 def use_item(item: str, item_action: str = "eat") -> str:
     return _act("use_item", f"Used {item} ({item_action})", takes_turn=True, item=item, item_action=item_action)
 
@@ -841,17 +1037,56 @@ def auto_explore() -> str:
     return f"Auto-explored.\n{_fmt_state(state)}"
 
 
-@server.tool(description="Travel far in a cardinal direction (north/south/east/west) until something interesting happens. At the zone edge it steps into the next zone.")
+@server.tool(description="Travel far in a cardinal direction (north/south/east/west) until something interesting "
+                         "happens; on reaching the zone edge it steps into the next zone. If terrain blocks the "
+                         "straight line it walks around it.")
 def travel(direction: str) -> str:
-    # Running stops at the zone's edge; from there the next zone is one plain step away.
-    state = get_bridge().get_state()
-    p, zone = state.get("player") or {}, state.get("zone") or {}
     d = direction.strip().lower()[:1]
-    at_edge = {"n": p.get("y") == 0, "s": p.get("y") == zone.get("height", 25) - 1,
-               "w": p.get("x") == 0, "e": p.get("x") == zone.get("width", 80) - 1}.get(d, False)
-    if at_edge and not _on_world_map(state):
+    if d not in "nsew" or not d:
+        return f"FAILED travel: direction must be north, south, east or west, not {direction!r}"
+    bridge = get_bridge()
+
+    def at_edge(state: dict) -> bool:
+        p, zone = state.get("player") or {}, state.get("zone") or {}
+        return {"n": p.get("y") == 0, "s": p.get("y") == zone.get("height", 25) - 1,
+                "w": p.get("x") == 0, "e": p.get("x") == zone.get("width", 80) - 1}[d]
+
+    def calm(state: dict) -> bool:
+        return not state.get("popup") and not any(
+            c.get("isCreature") and c.get("isHostile") for c in state.get("cells") or [])
+
+    state = bridge.get_state()
+    if _on_world_map(state):  # the game's travel command doesn't work here; a step is one parasang
         return move(direction)
-    return _act("travel", f"Travel {direction}", takes_turn=True, quiet=4, direction=direction)
+    if at_edge(state):  # running stops at the edge; the next zone is one plain step away
+        return move(direction)
+    before = (state.get("player") or {}).get("x"), (state.get("player") or {}).get("y")
+    out = _act("travel", f"Travel {direction}", takes_turn=True, quiet=4, direction=direction)
+    state = bridge.get_state()
+    p = state.get("player") or {}
+    if (p.get("x"), p.get("y")) == before and calm(state) and not out.startswith("FAILED"):
+        # Blocked straight ahead: walk to a reachable cell on that edge instead.
+        zone = state.get("zone") or {}
+        w, h = zone.get("width", 80), zone.get("height", 25)
+        x0, y0 = p.get("x", 0), p.get("y", 0)
+        for off in (0, 4, -4, 10, -10, 20, -20):
+            tx, ty = {"n": (x0 + off, 0), "s": (x0 + off, h - 1), "w": (0, y0 + off), "e": (w - 1, y0 + off)}[d]
+            if not (0 <= tx < w and 0 <= ty < h):
+                continue
+            res = go_to(tx, ty)
+            if "arrived" in res.split("\n", 1)[0]:
+                out = f"Travel {direction} was blocked; walked around to ({tx},{ty}) instead."
+                break
+        state = bridge.get_state()
+    if at_edge(state) and calm(state):
+        return out.split("\n", 1)[0] + "\n" + move(direction)
+    p = state.get("player") or {}
+    hostiles = [c for c in state.get("cells") or [] if c.get("isCreature") and c.get("isHostile")]
+    if (p.get("x"), p.get("y")) == before and hostiles and not state.get("popup"):
+        near = ", ".join(f"{_clean(c.get('name', '?'))} ({c['x']},{c['y']})" for c in hostiles[:3])
+        out = (f"Travel {direction} did not move: the game won't run while hostiles are in view ({near}). "
+               f"Fight them, or walk away with go_to/move.\n" + out.split("\n", 1)[-1])
+    return out
 
 
 @server.tool(description="Go up or down stairs. direction: 'up' or 'down'.")
@@ -876,6 +1111,9 @@ def quit_to_menu() -> str:
         return "Not in a game."
     if state.get("popup"):
         return "Answer the open popup first.\n" + _fmt_state(state)
+    if "WorldCreationProgress" in str(state.get("viewStack") or ""):
+        # A new game shows this view until the first turn passes; Escape does nothing there.
+        wait(turns=1)
     saved = bridge.send_command("save_game")
     if "error" in saved:
         return f"FAILED quit_to_menu: could not save first: {saved['error']}"
@@ -935,11 +1173,26 @@ def continue_game(save_id: str = "") -> str:
     return "Load requested, but the game was not in play after 120s.\n\n" + _fmt_state(bridge.get_state())
 
 
-@server.tool(description="Auto-complete character creation with random choices. Selects Classic mode and Random character.")
-def chargen_auto() -> str:
+@server.tool(description="List the game's preset characters (name, genotype, short description) for chargen_auto.")
+def chargen_presets() -> str:
+    r = get_bridge().send_command("chargen_presets")
+    if "error" in r:
+        return f"FAILED chargen_presets: {r['error']}"
+    return "\n".join(f"{p['name']} ({p['genotype']}): {p['description']}" for p in r.get("presets", []))
+
+
+@server.tool(description="Auto-complete character creation in Classic mode. preset = a preset character's "
+                         "name from chargen_presets (starts in Joppa); empty or 'random' rolls a random character.")
+def chargen_auto(preset: str = "") -> str:
     bridge = get_bridge()
+    pregen = ""
+    if preset and preset.lower() != "random":
+        names = [p["name"] for p in bridge.send_command("chargen_presets").get("presets", [])]
+        pregen = next((n for n in names if n.lower() == preset.strip().lower()), "")
+        if not pregen:
+            return f"FAILED chargen_auto: no preset named {preset!r}. Presets: {', '.join(names)}"
     for _ in range(20):  # start_new_game returns before the character builder exists
-        res = bridge.send_command("chargen_auto")
+        res = bridge.send_command("chargen_auto", pregen=pregen)
         if "EmbarkBuilder not found" not in str(res.get("error", "")):
             break
         time.sleep(0.5)
@@ -1017,9 +1270,24 @@ _ATTACK_DIRS = {"n": "N", "north": "N", "up": "N", "s": "S", "south": "S", "down
                 "down_left": "SW"}
 
 
-@server.tool(description=f"Melee-attack in a direction even if nothing would block a move there — needed for "
-                         f"creatures you can walk over (e.g. hostile plants like dreadroots). Directions: {_DIRECTIONS}.")
-def attack(direction: str) -> str:
+@server.tool(description=f"Melee-attack an adjacent cell: give its x, y (as listed in results), or a direction "
+                         f"({_DIRECTIONS}); with neither, the adjacent hostile. Works even where a move wouldn't "
+                         f"attack, e.g. hostile plants like dreadroots you can walk over.")
+def attack(direction: str = "", x: int = -1, y: int = -1) -> str:
+    if not direction:
+        state = get_bridge().get_state()
+        p = state.get("player") or {}
+        if x < 0 or y < 0:
+            adjacent = [c for c in state.get("cells") or []
+                        if c.get("isCreature") and c.get("isHostile") and c.get("distance") == 1]
+            if not adjacent:
+                return "FAILED attack: no hostile is adjacent; give x, y or a direction.\n" + _fmt_compact(state)
+            x, y = adjacent[0]["x"], adjacent[0]["y"]
+        dx, dy = x - p.get("x", 0), y - p.get("y", 0)
+        if max(abs(dx), abs(dy)) != 1:
+            return f"FAILED attack: ({x},{y}) is not adjacent to you at ({p.get('x')},{p.get('y')}); go_to it first."
+        direction = {(0, -1): "n", (0, 1): "s", (1, 0): "e", (-1, 0): "w",
+                     (1, -1): "ne", (-1, -1): "nw", (1, 1): "se", (-1, 1): "sw"}[(dx, dy)]
     d = _ATTACK_DIRS.get(direction.strip().lower())
     if d is None:
         return f"FAILED attack: invalid direction {direction!r}"

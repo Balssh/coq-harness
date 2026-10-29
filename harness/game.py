@@ -16,7 +16,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 HIDDEN_TOOLS = {
     "get_state_raw",                          # huge JSON; the harness records it
-    "save_game", "continue_game", "start_new_game", "chargen_auto", "list_saves",
+    "save_game", "continue_game", "start_new_game", "chargen_auto", "chargen_presets", "list_saves",
     "quit_to_menu", "quit_game", "abandon",   # run lifecycle is the harness's job
     "choose_option", "confirm_popup",         # duplicates of respond_popup
     "press_key", "focus_window", "look",      # legacy key injection / look mode

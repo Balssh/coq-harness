@@ -90,7 +90,13 @@ namespace CoQMcpBridge
                     case "complete_chargen":
                         return CompleteChargen(cmd.GetStr("code", ""));
                     case "chargen_auto":
-                        return ChargenAuto();
+                        return ChargenAuto(cmd.GetStr("pregen", ""));
+                    case "chargen_presets":
+                        return ChargenPresets();
+                    case "describe_type":
+                        return DescribeType(cmd.GetStr("typeName", ""));
+                    case "world_info":
+                        return WorldInfo(cmd.GetInt("radius", 6));
                     case "chargen_state":
                         return ChargenState();
                     case "chargen_advance":
@@ -214,6 +220,8 @@ namespace CoQMcpBridge
                 case "equip":
                 case "wear":
                 case "wield":   command = "Equip"; break;
+                case "use":
+                case "activate":
                 case "apply":   command = "Apply"; break;
                 case "unequip": command = "Unequip"; break;
                 case "drop":    command = "Drop"; break;
@@ -221,14 +229,10 @@ namespace CoQMcpBridge
                     return "{\"error\":\"unknown item action: " + Json.Escape(action) + "\"}";
             }
 
-            // Find the item in the player's inventory by name (fuzzy match)
-            GameObject item = FindItemInInventory(player, itemName);
-            if (item == null)
-                return "{\"error\":\"item not found in inventory: " + Json.Escape(itemName) + "\"}";
-
             GameObject capturedPlayer = player;
-            GameObject capturedItem = item;
             string capturedCommand = command;
+            GameObject item = null;
+            string itemLabel = itemName;
 
             // Fire the InventoryActionEvent on the game thread (where the
             // inventory UI runs it; on the Unity thread it NREs). Wait briefly
@@ -240,10 +244,19 @@ namespace CoQMcpBridge
             {
                 try
                 {
+                    // Matching by name builds display names, which isn't thread-safe off the
+                    // game thread ("Index was out of range ... chunkLength"); look up here.
+                    item = FindItemInInventory(capturedPlayer, itemName);
+                    if (item == null)
+                    {
+                        error = "not found";
+                        return;
+                    }
+                    itemLabel = item.DisplayNameOnly;
                     if (capturedCommand == "Equip")
-                        capturedPlayer.FireEvent(XRL.World.Event.New("CommandEquipObject", "Object", capturedItem));
+                        capturedPlayer.FireEvent(XRL.World.Event.New("CommandEquipObject", "Object", item));
                     else
-                        FireInventoryAction(capturedPlayer, capturedItem, capturedCommand);
+                        FireInventoryAction(capturedPlayer, item, capturedCommand);
                 }
                 catch (Exception e)
                 {
@@ -254,8 +267,10 @@ namespace CoQMcpBridge
                 finally { done.Set(); }
             });
             bool finished = done.Wait(1500);
+            if (finished && error == "not found")
+                return "{\"error\":\"item not found in inventory: " + Json.Escape(itemName) + "\"}";
             if (finished && error != null)
-                return "{\"error\":\"" + Json.Escape(capturedCommand + " " + item.DisplayNameOnly + " failed: " + error) + "\"}";
+                return "{\"error\":\"" + Json.Escape(capturedCommand + " " + itemLabel + " failed: " + error) + "\"}";
 
             return "{\"ok\":true,\"action\":\"use_item\",\"item\":\"" + Json.Escape(itemName) +
                    "\",\"itemAction\":\"" + Json.Escape(action) + "\"}";
@@ -834,7 +849,123 @@ namespace CoQMcpBridge
         /// Modules are enabled/disabled dynamically based on selections, so we
         /// configure them in dependency order and re-check after each step.
         /// </summary>
-        private static string ChargenAuto()
+        /// <summary>
+        /// What the player can learn from the world map: the terrain of each parasang within
+        /// `radius` of the player (name and the look description, as [l]ook shows them) and every
+        /// revealed map note (villages, lairs, sites learned from people or by visiting).
+        /// </summary>
+        private static string WorldInfo(int radius)
+        {
+            var player = The.Player;
+            if (player == null) return "{\"error\":\"not in game\"}";
+            radius = Math.Max(1, Math.Min(radius, 20));
+            // Display names are safest on the game thread, but its queue isn't always drained
+            // while the game idles at the map; like the state snapshot, fall back to building here.
+            string result = null;
+            var done = new System.Threading.ManualResetEventSlim(false);
+            Action build = () =>
+            {
+                try
+                {
+                    var zone = player.CurrentZone;
+                    string world = zone?.ZoneWorld ?? "JoppaWorld";
+                    bool onWorldMap = zone != null && zone.IsWorldMap();
+                    int cx = onWorldMap ? player.CurrentCell.X : zone.wX;
+                    int cy = onWorldMap ? player.CurrentCell.Y : zone.wY;
+                    var sb = new System.Text.StringBuilder(8192);
+                    sb.Append("{\"ok\":true,\"world\":\"").Append(Json.Escape(world)).Append("\",\"x\":").Append(cx)
+                      .Append(",\"y\":").Append(cy).Append(",\"onWorldMap\":").Append(onWorldMap ? "true" : "false");
+                    var descs = new System.Collections.Generic.Dictionary<string, string>();
+                    sb.Append(",\"cells\":[");
+                    bool first = true;
+                    for (int y = Math.Max(0, cy - radius); y <= Math.Min(24, cy + radius); y++)
+                        for (int x = Math.Max(0, cx - radius); x <= Math.Min(79, cx + radius); x++)
+                        {
+                            var t = ZoneManager.GetTerrainObjectForZone(x, y, world);
+                            if (t == null) continue;
+                            string name = PopupBridge.Clean(t.DisplayNameOnlyStripped ?? t.Blueprint);
+                            if (!descs.ContainsKey(name))
+                                descs[name] = PopupBridge.Clean(t.GetPart<Description>()?.Short ?? "");
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append("[").Append(x).Append(",").Append(y).Append(",\"").Append(Json.Escape(name)).Append("\"]");
+                        }
+                    sb.Append("],\"terrain\":{");
+                    sb.Append(string.Join(",", descs.Select(kv => "\"" + Json.Escape(kv.Key) + "\":\"" + Json.Escape(kv.Value) + "\"")));
+                    sb.Append("},\"places\":[");
+                    first = true;
+                    foreach (var n in Qud.API.JournalAPI.GetMapNotes(n => n.Revealed && n.WorldID == world))
+                    {
+                        if (!first) sb.Append(",");
+                        first = false;
+                        sb.Append("{\"text\":\"").Append(Json.Escape(PopupBridge.Clean(n.Text ?? ""))).Append("\",\"category\":\"")
+                          .Append(Json.Escape(n.Category ?? "")).Append("\",\"x\":").Append(n.ParasangX).Append(",\"y\":").Append(n.ParasangY)
+                          .Append(",\"zx\":").Append(n.ZoneX).Append(",\"zy\":").Append(n.ZoneY).Append(",\"z\":").Append(n.ZoneZ)
+                          .Append(",\"visited\":").Append(n.Visited ? "true" : "false").Append("}");
+                    }
+                    sb.Append("]}");
+                    result = sb.ToString();
+                }
+                catch (Exception e)
+                {
+                    result = "{\"error\":\"" + Json.Escape(e.GetType().Name + ": " + e.Message) + "\"}";
+                    System.Console.WriteLine("[mcp] WorldInfo error: " + e);
+                }
+                finally { done.Set(); }
+            };
+            int claimed = 0;
+            GameManager.Instance.gameQueue.queueTask(() => { if (System.Threading.Interlocked.Exchange(ref claimed, 1) == 0) build(); });
+            if (done.Wait(500)) return result;
+            if (System.Threading.Interlocked.Exchange(ref claimed, 1) == 0) build();
+            done.Wait(5000);
+            return result ?? "{\"error\":\"world lookup did not finish\"}";
+        }
+
+        /// <summary>Developer aid: the members of a game type, to find what to call by reflection.</summary>
+        private static string DescribeType(string name)
+        {
+            var t = FindType(name);
+            if (t == null) return "{\"error\":\"type not found\"}";
+            var flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            var members = new System.Collections.Generic.List<string>();
+            foreach (var m in t.GetMethods(flags))
+                members.Add(m.ReturnType.Name + " " + m.Name + "(" + string.Join(", ", m.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")");
+            foreach (var f in t.GetFields(flags)) members.Add("field " + f.FieldType.Name + " " + f.Name);
+            foreach (var pr in t.GetProperties(flags)) members.Add("prop " + pr.PropertyType.Name + " " + pr.Name);
+            return "{\"ok\":true,\"base\":\"" + Json.Escape(t.BaseType?.FullName ?? "") + "\",\"members\":[\"" +
+                   string.Join("\",\"", members.Select(Json.Escape)) + "\"]}";
+        }
+
+        /// <summary>
+        /// List the game's preset characters (EmbarkModules.xml pregens) with
+        /// their build codes, so a client can start one via chargen_auto(code).
+        /// </summary>
+        private static string ChargenPresets()
+        {
+            try
+            {
+                string path = System.IO.Path.Combine(UnityEngine.Application.streamingAssetsPath, "Base", "EmbarkModules.xml");
+                string xml = System.IO.File.ReadAllText(path);
+                var items = new System.Collections.Generic.List<string>();
+                foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(xml,
+                    "<pregen Name=\"([^\"]+)\" Genotype=\"([^\"]+)\"[^>]*>\\s*<code>([^<]+)</code>\\s*<description>([\\s\\S]*?)</description>"))
+                {
+                    string desc = System.Net.WebUtility.HtmlDecode(m.Groups[4].Value);
+                    desc = System.Text.RegularExpressions.Regex.Replace(desc, "&[a-zA-Z]|\\{\\{[A-Za-z]\\||\\}\\}|\u00f9", "");
+                    desc = System.Text.RegularExpressions.Regex.Replace(desc, "\\s*\\n\\s*", "; ").Trim(' ', ';');
+                    items.Add("{\"name\":\"" + Json.Escape(m.Groups[1].Value) + "\",\"genotype\":\"" +
+                              Json.Escape(m.Groups[2].Value) + "\",\"description\":\"" + Json.Escape(desc) +
+                              "\",\"code\":\"" + Json.Escape(m.Groups[3].Value.Trim()) + "\"}");
+                }
+                return "{\"ok\":true,\"presets\":[" + string.Join(",", items) + "]}";
+            }
+            catch (Exception e)
+            {
+                return "{\"error\":\"" + Json.Escape(e.Message) + "\"}";
+            }
+        }
+
+        private static string ChargenAuto(string pregen)
         {
             string result = null;
             bool completed = BridgeMainThread.EnqueueAndWait(() =>
@@ -973,9 +1104,10 @@ namespace CoQMcpBridge
                                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                         if (selectType != null)
                         {
-                            System.Console.WriteLine("[mcp] ChargenAuto: selecting char type 'Random'");
-                            selectType.Invoke(charTypeModule, new object[] { "Random" });
-                            steps.Add("selected_char_type=Random");
+                            string charType = string.IsNullOrEmpty(pregen) ? "Random" : "Pregen";
+                            System.Console.WriteLine("[mcp] ChargenAuto: selecting char type '" + charType + "'");
+                            selectType.Invoke(charTypeModule, new object[] { charType });
+                            steps.Add("selected_char_type=" + charType);
                         }
                         else
                         {
@@ -987,22 +1119,53 @@ namespace CoQMcpBridge
                         steps.Add("QudChartypeModule_not_found");
                     }
 
-                    // Step 3: Random-select any remaining enabled modules (pass 1)
                     int seed = new System.Random().Next();
-                    int randomized = randomSelectAll(seed);
-                    steps.Add("randomized_modules=" + randomized);
-                    System.Console.WriteLine("[mcp] ChargenAuto: pass 1 randomized " + randomized + " modules");
+                    if (!string.IsNullOrEmpty(pregen))
+                    {
+                        // Step 3 (preset): the pregen module applies the preset's build to the
+                        // other modules. Presets don't all pin a starting location; use Joppa.
+                        var pregenModule = findModule("QudPregenModule");
+                        var selectPregen = pregenModule?.GetType().GetMethod("SelectPregen",
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                        if (selectPregen == null)
+                        {
+                            result = "{\"error\":\"QudPregenModule.SelectPregen not found\"}";
+                            return;
+                        }
+                        selectPregen.Invoke(pregenModule, new object[] { pregen });
+                        steps.Add("selected_pregen=" + pregen);
+                        var locModule = findModule("QudChooseStartingLocationModule");
+                        if (locModule != null && getEnabled != null && (bool)getEnabled.Invoke(locModule, null))
+                        {
+                            var data = baseModuleType.GetMethod("getData").Invoke(locModule, null);
+                            var locField = FindType("XRL.CharacterBuilds.Qud.QudChooseStartingLocationModuleData")?.GetField("StartingLocation");
+                            if (locField != null && string.IsNullOrEmpty(data == null ? null : locField.GetValue(data) as string))
+                            {
+                                var newData = Activator.CreateInstance(locField.DeclaringType);
+                                locField.SetValue(newData, "Joppa");
+                                baseModuleType.GetMethod("setData").Invoke(locModule, new object[] { newData });
+                                steps.Add("starting_location=Joppa");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Step 3: Random-select any remaining enabled modules (pass 1)
+                        int randomized = randomSelectAll(seed);
+                        steps.Add("randomized_modules=" + randomized);
+                        System.Console.WriteLine("[mcp] ChargenAuto: pass 1 randomized " + randomized + " modules");
 
-                    // Step 3b: Random-select again (pass 2) — dependent modules
-                    // (like subtype) may need a second pass after their
-                    // dependencies (like genotype) have been configured.
-                    int randomized2 = randomSelectAll(seed + 500);
-                    steps.Add("randomized_modules_pass2=" + randomized2);
-                    System.Console.WriteLine("[mcp] ChargenAuto: pass 2 randomized " + randomized2 + " modules");
+                        // Step 3b: Random-select again (pass 2) — dependent modules
+                        // (like subtype) may need a second pass after their
+                        // dependencies (like genotype) have been configured.
+                        int randomized2 = randomSelectAll(seed + 500);
+                        steps.Add("randomized_modules_pass2=" + randomized2);
+                        System.Console.WriteLine("[mcp] ChargenAuto: pass 2 randomized " + randomized2 + " modules");
 
-                    // Step 3c: Third pass with fresh seeds for any remaining invalid
-                    int randomized3 = randomSelectAll(seed + 1000);
-                    steps.Add("randomized_modules_pass3=" + randomized3);
+                        // Step 3c: Third pass with fresh seeds for any remaining invalid
+                        int randomized3 = randomSelectAll(seed + 1000);
+                        steps.Add("randomized_modules_pass3=" + randomized3);
+                    }
 
                     // Step 4: For any remaining invalid modules, try selecting
                     // the first available option via module-specific methods

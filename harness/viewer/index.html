@@ -7,157 +7,449 @@
 <style>
 :root {
   --bg: #0f1418; --panel: #172026; --panel2: #1d2830; --line: #2b3a44; --text: #d7e2e8; --muted: #8aa0ad;
-  --accent: #4fc3a1; --hp: #3fbf5f; --hpbg: #3a1f22; --warn: #e0a040; --bad: #e05a5a; --info: #5aa8e0;
+  --accent: #4fc3a1; --hp: #3fbf5f; --hpbg: #3a1f22; --warn: #e0a040; --bad: #e05a5a; --good: #5fd36a; --info: #5aa8e0;
+  --note: #f0dc5a; --notebg: #3a3410; --sel: #24343d;
+  --l-damage: #e05a5a; --l-fight: #f08250; --l-popup: #be96e6; --l-zone: #5aa8e0; --l-nudge: #e0a040;
+  --l-summary: #7896aa; --l-error: #ff4646; --l-level: #4fc3a1; --l-annotation: #f0dc5a;
   --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+  color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #eef2f4; --panel: #ffffff; --panel2: #f4f7f9; --line: #d3dde3; --text: #1b2a33; --muted: #5d7280;
-    --accent: #1f8f72; --hpbg: #f3d9db;
+    --accent: #1f8f72; --hpbg: #f3d9db; --good: #2f9a45; --note: #8a6d00; --notebg: #fff6c8; --sel: #e1eef0;
+    --l-annotation: #c9a400; color-scheme: light;
   }
 }
+:root[data-theme="light"] {
+  --bg: #eef2f4; --panel: #ffffff; --panel2: #f4f7f9; --line: #d3dde3; --text: #1b2a33; --muted: #5d7280;
+  --accent: #1f8f72; --hpbg: #f3d9db; --good: #2f9a45; --note: #8a6d00; --notebg: #fff6c8; --sel: #e1eef0;
+  --l-annotation: #c9a400; color-scheme: light;
+}
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
 a { color: var(--accent); }
-header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px;
-  border-bottom: 1px solid var(--line); background: var(--panel); }
-header h1 { font-size: 16px; margin: 0; }
-header button, header select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-  border-radius: 6px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
-.chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
+button, select, input, textarea { font: inherit; color: var(--text); }
+.btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.on { border-color: var(--accent); color: var(--accent); }
+select.btn { padding: 3px 6px; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .chip b { color: var(--text); font-weight: 600; }
-.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
-.controls button, .controls select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-  border-radius: 6px; padding: 4px 10px; font-size: 14px; cursor: pointer; }
-.controls input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
-#pos { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 220px; }
-main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; padding: 12px 16px; }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+.muted { color: var(--muted); }
+kbd { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--panel2); }
+
+/* ── page frame ── */
+#app { display: flex; flex-direction: column; min-height: 100%; }
+header { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+header h1 a { color: var(--text); text-decoration: none; }
+#meta { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.hright { margin-left: auto; display: flex; gap: 6px; align-items: center; position: relative; }
+
+/* ── run viewer: one screen on wide displays ── */
+#viewer:not([hidden]) { display: contents; }
+body.viewing { overflow: hidden; }
+body.viewing #app { height: 100%; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--line); }
+.controls .grp { display: flex; gap: 4px; align-items: center; }
+.controls input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+#pos { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.controls label { font-size: 13px; color: var(--muted); white-space: nowrap; display: flex; gap: 4px; align-items: center; }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr) minmax(360px, 32%); gap: 10px; padding: 10px 16px; }
+main > * { min-height: 0; overflow: auto; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+.card:last-child { margin-bottom: 0; }
+.card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+.card h2 .sp { flex: 1; }
+#stepsDrawerBtn { display: none; }
+
+/* step list */
+#steps { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+#steps .top { padding: 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+#q { width: 100%; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; }
+.filters button { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.filters button.on { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+#count { font-size: 12px; color: var(--muted); }
+#slist { overflow: auto; flex: 1; min-height: 0; }
+.srow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 2px 6px; padding: 4px 8px 4px 6px; border-left: 3px solid transparent; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 12px; }
+.srow:hover { background: var(--panel2); }
+.srow.cur { background: var(--sel); border-left-color: var(--accent); }
+.srow.k-fight { border-left-color: var(--l-fight); } .srow.k-damage { border-left-color: var(--l-damage); }
+.srow.k-death { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.srow.cur.k-fight, .srow.cur.k-damage { border-left-color: var(--accent); }
+.srow .n { font-family: var(--mono); color: var(--muted); }
+.srow .tools { font-family: var(--mono); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .txt { grid-column: 2 / 4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .ann { grid-column: 2 / 4; color: var(--note); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .ic { display: flex; gap: 3px; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.ic i { font-style: normal; font-size: 11px; }
+.dhp { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 0 4px; border-radius: 4px; }
+.dhp.neg { color: var(--bad); background: color-mix(in srgb, var(--bad) 15%, transparent); }
+.dhp.pos { color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent); }
+mark { background: color-mix(in srgb, var(--note) 45%, transparent); color: inherit; border-radius: 2px; }
+
+/* game column */
+.tabs { display: flex; gap: 2px; margin-left: auto; text-transform: none; letter-spacing: 0; }
+.tabs button { font-size: 12px; padding: 1px 9px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.tabs button:first-child { border-radius: 6px 0 0 6px; } .tabs button:last-child { border-radius: 0 6px 6px 0; }
+.tabs button.on { color: var(--text); border-color: var(--accent); }
+#views { display: grid; gap: 8px; grid-template-columns: 1fr; }
+#views.split { grid-template-columns: 1fr 1fr; align-items: start; }
+#views.v-screen #mapbox, #views.v-map #shotbox { display: none; }
 #shot { width: 100%; display: block; border-radius: 4px; background: #000; }
-#noshot { color: var(--muted); font-size: 13px; padding: 8px 0; }
+#noshot { color: var(--muted); font-size: 13px; padding: 30px 0; text-align: center; }
 #mapwrap { position: relative; }
 #map { width: 100%; display: block; border-radius: 4px; background: #0b1013; }
-#tip { position: absolute; pointer-events: none; background: var(--panel2); border: 1px solid var(--line);
-  padding: 3px 6px; border-radius: 4px; font-size: 12px; display: none; white-space: nowrap; z-index: 2; }
-.stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
-.stats span b { font-weight: 600; }
-.hpbar { height: 8px; background: var(--hpbg); border-radius: 4px; overflow: hidden; margin: 6px 0; }
-.hpbar div { height: 100%; background: var(--hp); }
-pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0; }
+#tip { position: absolute; pointer-events: none; background: var(--panel2); border: 1px solid var(--line); padding: 3px 6px; border-radius: 4px; font-size: 12px; display: none; white-space: nowrap; z-index: 2; }
+.legend { font-size: 11px; margin-top: 4px; }
+.stats { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; }
+.hpbar { height: 8px; background: var(--hpbg); border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+.hpbar div { height: 100%; background: var(--hp); transition: width .2s; }
+#diff { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 20px; }
+.badge { font-size: 12px; padding: 0 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; font-weight: 600; }
+.badge.bad { color: var(--bad); } .badge.good { color: var(--good); } .badge.info { color: var(--info); } .badge.muted { color: var(--muted); font-weight: 400; }
 .msgs div { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .msgs div.new { color: var(--text); }
-.thought { white-space: pre-wrap; }
+
+/* model column */
+pre { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.thought { white-space: pre-wrap; margin: 4px 0; }
 details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-details .reasoning { white-space: pre-wrap; font-size: 13px; color: var(--muted); max-height: 260px; overflow: auto;
-  border-left: 2px solid var(--line); padding-left: 8px; margin-top: 4px; }
-.call { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-top: 8px; background: var(--panel2); }
-.call.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+details .reasoning { white-space: pre-wrap; font-size: 13px; color: var(--muted); max-height: 300px; overflow: auto; border-left: 2px solid var(--line); padding-left: 8px; margin-top: 4px; }
+.call { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin-top: 6px; background: var(--panel2); cursor: pointer; }
+.call.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; cursor: default; }
 .call .name { font-family: var(--mono); font-size: 13px; font-weight: 600; }
 .call .args { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .call.err .name { color: var(--bad); }
-.call pre { margin-top: 4px; max-height: 220px; overflow: auto; }
+.call pre { margin-top: 4px; max-height: 240px; overflow: auto; }
+.call:not(.current) pre { max-height: 3.2em; overflow: hidden; opacity: .75; }
 .ev { font-size: 13px; padding: 4px 8px; border-radius: 4px; margin-top: 6px; }
 .ev.nudge { background: color-mix(in srgb, var(--warn) 18%, transparent); }
 .ev.summary { background: color-mix(in srgb, var(--info) 15%, transparent); }
 .ev.error { background: color-mix(in srgb, var(--bad) 18%, transparent); }
+.kinds { display: flex; gap: 4px; flex-wrap: wrap; text-transform: none; letter-spacing: 0; }
+.kinds span { font-size: 11px; padding: 0 6px; border-radius: 8px; color: var(--bg); font-weight: 600; }
 .notes { margin: 4px 0 0; padding-left: 20px; }
-.muted { color: var(--muted); }
-#timeline { padding: 0 16px 16px; }
-#tl { width: 100%; height: 70px; display: block; cursor: pointer; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
-tr.run { cursor: pointer; } tr.run:hover { background: var(--panel2); }
-#list { padding: 16px; }
+.notes li.added { color: var(--good); }
+#annbox textarea { width: 100%; min-height: 54px; resize: vertical; background: var(--notebg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+#annbox .row { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 12px; }
+
+/* timeline */
+#timeline { padding: 0 16px 10px; }
+#tlwrap { display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px 4px 4px; }
+.tllabels { display: grid; grid-template-rows: 34px repeat(9, 10px); font-size: 9px; line-height: 10px; color: var(--muted); text-align: right; padding-right: 6px; padding-top: 2px; }
+.tllabels div:first-child { line-height: 34px; font-size: 10px; }
+.tlplot { position: relative; }
+#tl { width: 100%; height: 126px; display: block; cursor: pointer; }
+#tltip { position: fixed; z-index: 20; pointer-events: none; display: none; width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; font-size: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+#tltip img { width: 100%; border-radius: 4px; display: block; margin-bottom: 4px; background: #000; }
+
+/* popovers */
+.pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,.4); font-size: 13px; }
+.pop h3 { margin: 0 0 8px; font-size: 13px; }
+.pop .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+.pop .files a { display: block; }
+.overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.overlay .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; max-width: 560px; width: 100%; max-height: 90vh; overflow: auto; }
+.overlay table td { padding: 3px 8px; font-size: 13px; border: 0; }
+.overlay table td:first-child { white-space: nowrap; text-align: right; }
+
+/* run list */
+#list, #compare { padding: 16px; max-width: 1500px; width: 100%; margin: 0 auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.rcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.rcard:hover { border-color: var(--accent); }
+.rcard .thumb { position: relative; aspect-ratio: 16 / 9; background: #000; cursor: pointer; }
+.rcard .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .2s; }
+.rcard .thumb img.first { position: absolute; inset: 0; opacity: 0; }
+.rcard .thumb:hover img.first { opacity: 1; }
+.rcard .outcome { position: absolute; left: 8px; top: 8px; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+.rcard .outcome.died { color: #fff; background: var(--bad); border-color: var(--bad); }
+.rcard .outcome.running { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.rcard .body { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.rcard .title { font-weight: 600; cursor: pointer; }
+.rcard .sub { font-size: 12px; color: var(--muted); }
+.rcard .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; font-size: 12px; }
+.rcard .grid b { display: block; font-size: 14px; }
+.rcard .zones { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rcard .foot { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 12px; }
+.rcard svg { width: 100%; height: 34px; display: block; }
+#cmpbar { position: sticky; bottom: 12px; margin-top: 14px; display: flex; justify-content: center; }
+#cmpbar .box { background: var(--panel); border: 1px solid var(--accent); border-radius: 20px; padding: 6px 8px 6px 16px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.cmpgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+table.kv { border-collapse: collapse; width: 100%; }
+table.kv th, table.kv td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+table.kv td.better { color: var(--good); font-weight: 600; }
+.bars div { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 6px; align-items: center; font-size: 12px; margin: 2px 0; }
+.bars .bar { height: 10px; border-radius: 3px; }
+.bars .a { background: var(--accent); justify-self: end; } .bars .b { background: var(--info); }
+.c-a { color: var(--accent); } .c-b { color: var(--info); }
+
+/* narrower screens: step list becomes a drawer */
+@media (max-width: 1400px) {
+  main { grid-template-columns: minmax(0, 1fr) minmax(340px, 38%); }
+  #steps { position: fixed; left: 0; top: 0; bottom: 0; width: min(340px, 90vw); z-index: 35; border-radius: 0; transform: translateX(-102%); transition: transform .2s; box-shadow: 0 0 30px rgba(0,0,0,.4); }
+  #steps.open { transform: none; }
+  #stepsDrawerBtn { display: inline-block; }
+}
+@media (max-width: 900px) {
+  body.viewing { overflow: auto; }
+  body.viewing #app { height: auto; }
+  header, .controls { padding-left: 12px; padding-right: 12px; }
+  main { display: flex; flex-direction: column; padding: 10px 12px; }
+  main > * { overflow: visible; }
+  #center, #right { display: contents; }
+  #gamecard { order: 1; } #statcard { order: 2; } #stepcard { order: 3; } #annbox { order: 4; } #msgcard { order: 5; } #memcard { order: 6; }
+  .card:last-child { margin-bottom: 10px; }
+  #views.split { grid-template-columns: 1fr; }
+  #timeline { padding: 0 12px 12px; }
+  .controls input[type=range] { order: 10; flex-basis: 100%; }
+  #pos { order: 11; }
+  .cmpgrid { grid-template-columns: 1fr; }
+  .pop { position: fixed; left: 12px; right: 12px; top: 60px; width: auto; }
+  .hide-narrow { display: none; }
+  #list, #compare { padding: 12px; }
+}
 </style>
 </head>
 <body>
+<div id="app">
 <header>
-  <h1>Qud run replay</h1>
-  <span id="meta"></span>
-  <span id="exportbox" style="margin-left:auto;font-size:13px" hidden>
-    <select id="spf" title="Seconds per frame in the video">
-      <option value="0.5">0.5 s/frame</option><option value="1" selected>1 s/frame</option><option value="2">2 s/frame</option>
-    </select>
-    <button id="export">Export MP4</button>
-    <span id="exportstatus" class="muted"></span>
-  </span>
-  <a href="?" style="font-size:13px">All runs</a>
+  <h1><a href="?" title="All runs">Qud run replay</a></h1>
+  <div id="meta"></div>
+  <div class="hright">
+    <span id="exportwrap" hidden>
+      <button class="btn" id="exportBtn" title="Export this run to MP4 (E)">Export MP4 ▾</button>
+      <div class="pop" id="exportPop" hidden>
+        <h3>Export MP4</h3>
+        <div class="muted" style="font-size:12px">Every frame with the game, map, stats, changes, the model's step, memory, messages and the event timeline.</div>
+        <div class="row"><span>Speed</span>
+          <select class="btn" id="xspeed">
+            <option value="0.25">0.25× (4 s/frame)</option><option value="0.5">0.5× (2 s/frame)</option>
+            <option value="1" selected>1× (1 s/frame)</option><option value="2">2× (0.5 s/frame)</option>
+            <option value="4">4× (0.25 s/frame)</option><option value="8">8× (0.125 s/frame)</option>
+          </select>
+          <span class="muted" id="xlen"></span>
+        </div>
+        <div class="row"><label><input type="checkbox" id="xsmart"> Smart pacing</label><span class="muted" style="font-size:12px">linger on fights and events, skip idle frames</span></div>
+        <div class="row"><label><input type="checkbox" id="xann" checked> Burn in reviewer notes</label></div>
+        <div class="row"><button class="btn" id="xgo">Render</button><span id="xstatus" class="muted"></span></div>
+        <div class="files" id="xfiles"></div>
+      </div>
+    </span>
+    <button class="btn" id="themeBtn" title="Theme: auto / dark / light (T)">◐</button>
+    <button class="btn" id="helpBtn" title="Keyboard shortcuts (?)">?</button>
+  </div>
 </header>
+
 <div id="list" hidden></div>
+<div id="compare" hidden></div>
+
 <div id="viewer" hidden>
   <div class="controls">
-    <button id="first" title="First (Home)">|◀</button>
-    <button id="prev" title="Previous (←)">▕◀</button>
-    <button id="play" title="Play/pause (Space)">▶</button>
-    <button id="next" title="Next (→)">▶▏</button>
-    <button id="last" title="Last (End)">▶▶|</button>
-    <select id="speed" title="Playback speed">
-      <option value="2000">0.5×</option><option value="1000" selected>1×</option>
-      <option value="500">2×</option><option value="250">4×</option><option value="100">10×</option>
+    <button class="btn" id="stepsDrawerBtn" title="Step list (L)">☰ Steps</button>
+    <div class="grp">
+      <button class="btn" id="first" title="First (Home)">|◀</button>
+      <button class="btn" id="prevEv" title="Previous event ([)">◀◆</button>
+      <button class="btn" id="prev" title="Previous frame (←)">◀</button>
+      <button class="btn" id="play" title="Play/pause (Space)">▶</button>
+      <button class="btn" id="next" title="Next frame (→)">▶</button>
+      <button class="btn" id="nextEv" title="Next event (])">◆▶</button>
+      <button class="btn" id="last" title="Last (End)">▶|</button>
+    </div>
+    <select class="btn" id="speed" title="Playback speed">
+      <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+      <option value="4">4×</option><option value="10">10×</option>
     </select>
-    <input id="slider" type="range" min="0" max="0" value="0">
+    <label title="Slow down in fights and on events, skip idle frames (S)"><input type="checkbox" id="smart"> smart</label>
+    <input id="slider" type="range" min="0" max="0" value="0" aria-label="Frame">
     <span id="pos"></span>
-    <label class="muted" style="font-size:13px"><input type="checkbox" id="follow"> follow live</label>
+    <label><input type="checkbox" id="follow"> follow live</label>
   </div>
   <main>
-    <section>
-      <div class="card">
-        <h2>Game</h2>
-        <img id="shot" alt="Game window at this point">
-        <div id="noshot" hidden>No screenshot for this frame.</div>
+    <aside id="steps">
+      <div class="top">
+        <input id="q" type="search" placeholder="Search thoughts, calls, results… ( / )" autocomplete="off">
+        <div class="filters" id="filters"></div>
+        <div id="count"></div>
       </div>
-      <div class="card">
-        <h2>Map (from the recorded state)</h2>
-        <div id="mapwrap"><canvas id="map"></canvas><div id="tip"></div></div>
-        <div class="muted" style="font-size:12px;margin-top:4px">@ you · letters = creatures (<span style="color:#ff5f56">hostile</span>, <span style="color:#5fd36a">friendly</span>, <span style="color:#e8c35a">neutral</span>) · # impassable · * item · = container · + door · &lt; &gt; stairs · black = unexplored · hover for names</div>
+      <div id="slist"></div>
+    </aside>
+    <section id="center">
+      <div class="card" id="gamecard">
+        <h2>Game <span class="muted" id="viewhint" style="text-transform:none;letter-spacing:0"></span>
+          <span class="tabs" id="tabs"><button data-v="screen">Screen</button><button data-v="map">Map</button><button data-v="split">Both</button></span></h2>
+        <div id="views">
+          <div id="shotbox"><img id="shot" alt="Game window at this point"><div id="noshot" hidden>No screenshot for this frame.</div></div>
+          <div id="mapbox">
+            <div id="mapwrap"><canvas id="map"></canvas><div id="tip"></div></div>
+            <div class="legend muted">@ you · <span style="color:#ff5f56">hostile</span> <span style="color:#5fd36a">friendly</span> <span style="color:#e8c35a">neutral</span> · # wall · * item · = container · + door · &lt; &gt; stairs · <span style="color:#4fc3a1">trail</span> · <span style="color:#ff8a50">target</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="statcard">
         <div class="hpbar"><div id="hpfill"></div></div>
         <div class="stats" id="stats"></div>
+        <div id="diff"></div>
       </div>
-      <div class="card"><h2>Messages</h2><div class="msgs" id="msgs"></div></div>
+      <div class="card" id="msgcard"><h2>Messages</h2><div class="msgs" id="msgs"></div></div>
     </section>
-    <section>
+    <section id="right">
       <div class="card" id="stepcard"></div>
+      <div class="card" id="annbox">
+        <h2>Reviewer note <span class="sp"></span><span class="muted" id="annstate" style="text-transform:none;letter-spacing:0"></span></h2>
+        <textarea id="ann" placeholder="Your note on this step (A). Saved with the run; shows in the step list, the timeline and optionally the MP4."></textarea>
+        <div class="row"><button class="btn" id="annsave">Save</button><span class="muted">Ctrl+Enter saves · empty deletes</span></div>
+      </div>
       <div class="card" id="memcard"></div>
     </section>
   </main>
-  <div id="timeline"><svg id="tl" preserveAspectRatio="none"></svg></div>
+  <div id="timeline">
+    <div id="tlwrap">
+      <div class="tllabels" id="tllabels"></div>
+      <div class="tlplot"><svg id="tl" preserveAspectRatio="none" aria-label="Timeline"></svg></div>
+    </div>
+  </div>
+  <div id="tltip"></div>
 </div>
+</div>
+
+<div class="overlay" id="help" hidden>
+  <div class="box">
+    <h3 style="margin-top:0">Keyboard shortcuts</h3>
+    <table>
+      <tr><td><kbd>Space</kbd></td><td>play / pause</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next frame</td></tr>
+      <tr><td><kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> or <kbd>K</kbd> <kbd>J</kbd></td><td>previous / next step</td></tr>
+      <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>previous / next event (damage, fight, popup, zone, nudge, error, level, note); with a search or filter active, the previous / next match</td></tr>
+      <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>first / last frame</td></tr>
+      <tr><td><kbd>/</kbd></td><td>search steps</td></tr>
+      <tr><td><kbd>V</kbd></td><td>cycle screen / map / both</td></tr>
+      <tr><td><kbd>S</kbd></td><td>toggle smart playback</td></tr>
+      <tr><td><kbd>A</kbd></td><td>write a reviewer note on this step</td></tr>
+      <tr><td><kbd>L</kbd></td><td>step list (on narrower screens)</td></tr>
+      <tr><td><kbd>E</kbd></td><td>MP4 export</td></tr>
+      <tr><td><kbd>T</kbd></td><td>theme: auto / dark / light</td></tr>
+      <tr><td><kbd>?</kbd> <kbd>Esc</kbd></td><td>this help / close</td></tr>
+    </table>
+    <p class="muted" style="font-size:12px;margin-bottom:0">Smart playback holds fights, damage and level-ups for 2×, zone changes, popups and nudges a little longer, and skips idle frames (looking at state or notes with nothing changing) at 0.3×. The MP4 export uses the same rule.</p>
+  </div>
+</div>
+
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const strip = (s) => String(s ?? "").replace(/\{\{[^|}]*\|([^}]*)\}\}/g, "$1").replace(/&[a-zA-Z]/g, "");
+function strip(s) {  // Qud colour markup, possibly nested: {{B|{{B|wet}}}}
+  let out = String(s ?? ""), prev;
+  do { prev = out; out = out.replace(/\{\{[^|{}]*\|([^{}]*)\}\}/g, "$1"); } while (out !== prev);
+  return out.replace(/&[a-zA-Z]/g, "");
+}
+const baseName = (n) => strip(n).replace(/\s*(\[[^\]]*\]|\([^)]*\)|x\d+)/g, "").trim();
 const params = new URLSearchParams(location.search);
 const runId = params.get("run");
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("qudreplay." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("qudreplay." + k, JSON.stringify(v)); } catch { /* private window */ } },
+};
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function fmtTime(s) { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s % 60).padStart(2, "0"); }
+const fmtK = (n) => n == null ? "" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 
-let meta = {}, events = [], frames = [], cur = 0, timer = null;
+// ── theme ──
+const THEMES = ["auto", "dark", "light"];
+function applyTheme(t) {
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  $("themeBtn").title = `Theme: ${t} (T)`;
+}
+applyTheme(store.get("theme", "auto"));
+function cycleTheme() {
+  const t = THEMES[(THEMES.indexOf(store.get("theme", "auto")) + 1) % 3];
+  store.set("theme", t); applyTheme(t);
+  if (frames.length) { drawTimeline(); show(cur); }
+}
+$("themeBtn").onclick = cycleTheme;
+
+// ── frame classification (mirrors frame_kinds / pace in harness/video.py) ──
+const PASSIVE = new Set(["get_state", "get_map", "note", "forget_note", "set_goal", "list_skills", "trade_list", "look"]);
+const FIGHT = new Set(["attack", "fire", "use_ability"]);
+const PACE = { death: 3, damage: 2, fight: 2, level: 1.75, annotation: 2, zone: 1.4, popup: 1.25, nudge: 1.25, error: 1.25, idle: 0.3 };
+const LANES = [["damage", "damage"], ["fight", "fight"], ["popup", "popup"], ["zone", "zone"], ["nudge", "nudge"],
+  ["summary", "summary"], ["error", "error"], ["level", "level"], ["annotation", "note"]];
+const NOTABLE = new Set(["damage", "fight", "popup", "zone", "nudge", "error", "level", "annotation", "death"]);
+const DIRS = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0], northeast: [1, -1], northwest: [-1, -1], southeast: [1, 1], southwest: [-1, 1],
+  n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0], ne: [1, -1], nw: [-1, -1], se: [1, 1], sw: [-1, 1] };
+
+let meta = {}, events = [], frames = [], annotations = {}, cur = 0, timer = null, playing = false;
+let kinds = [], toolAt = new Map(), memAt = [], steps = [], stepIdx = new Map(), viewStep = null;
 const stateCache = new Map();
 
-function fmtTime(s) { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
-
-async function showList() {
-  $("list").hidden = false;
-  const runs = await (await fetch("api/runs")).json();
-  if (!runs.length) { $("list").innerHTML = "<p class='muted'>No runs yet. Start one with <code>python -m harness play</code>.</p>"; return; }
-  $("list").innerHTML = `<table><tr><th>Started</th><th>Model</th><th>Label</th><th>Outcome</th><th>Steps</th><th>Level</th><th>Duration</th></tr>` +
-    runs.map((r) => `<tr class="run" data-id="${esc(r.id)}"><td>${esc(r.started)}</td><td>${esc(r.model)}</td><td>${esc(r.label)}</td>` +
-      `<td>${esc(r.outcome || (r.ended ? "" : "running…"))}</td><td>${r.steps ?? ""}</td><td>${r.final?.level ?? ""}</td>` +
-      `<td>${r.duration_s ? fmtTime(r.duration_s) : ""}</td></tr>`).join("") + `</table>`;
-  document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => location.search = "?run=" + encodeURIComponent(tr.dataset.id));
+function frameOfStep(step) {
+  let best = 0;
+  for (let k = 0; k < frames.length; k++) { if (frames[k].step <= step) best = k; else break; }
+  return best;
 }
+function computeKinds() {
+  kinds = frames.map(() => new Set());
+  toolAt = new Map();
+  const byIndex = new Map(frames.map((s, k) => [s.index, k]));
+  for (const e of events) {
+    if (e.type === "tool" && byIndex.has(e.snapshot)) {
+      const k = byIndex.get(e.snapshot);
+      toolAt.set(k, e);
+      if (FIGHT.has(e.name)) kinds[k].add("fight");
+      if (e.is_error) kinds[k].add("error");
+    } else if (e.type === "nudge" || e.type === "summary" || e.type === "error") {
+      kinds[frameOfStep(e.step)].add(e.type);
+    } else if (e.type === "run_end" && e.outcome === "died" && frames.length) kinds[frames.length - 1].add("death");
+  }
+  for (const st of Object.keys(annotations)) frames.forEach((s, k) => { if (String(s.step) === st) kinds[k].add("annotation"); });
+  frames.forEach((s, k) => {
+    if (s.dead) kinds[k].add("death");
+    const p = frames[k - 1]; if (!p) return;
+    if (s.hp != null && p.hp != null) { if (s.hp < p.hp) kinds[k].add("damage"); else if (s.hp > p.hp) kinds[k].add("heal"); }
+    if (s.zoneId && p.zoneId && s.zoneId !== p.zoneId) kinds[k].add("zone");
+    if (s.popup && s.popup !== p.popup) kinds[k].add("popup");
+    if (s.level != null && p.level != null && s.level > p.level) kinds[k].add("level");
+    const t = toolAt.get(k);
+    const still = s.x === p.x && s.y === p.y && s.hp === p.hp && s.zoneId === p.zoneId && (s.popup || "") === (p.popup || "");
+    if (still && !kinds[k].size && (!t || PASSIVE.has(t.name) || t.name === "wait")) kinds[k].add("idle");
+  });
+}
+const paceOf = (k) => kinds[k]?.has("idle") ? PACE.idle : Math.max(1, ...[...(kinds[k] || [])].map((x) => PACE[x] || 1));
 
-async function loadRun() {
-  const data = await (await fetch("api/run?id=" + encodeURIComponent(runId))).json();
-  meta = data.meta; events = data.events;
+function buildModel() {
   frames = events.filter((e) => e.type === "snapshot");
-  const t = meta.tokens ? `${Math.round((meta.tokens.prompt || 0) / 1000)}k in / ${Math.round((meta.tokens.completion || 0) / 1000)}k out` : "";
-  $("meta").innerHTML = [["model", meta.model], ["outcome", meta.outcome || "running…"], ["steps", meta.steps],
-    ["duration", meta.duration_s ? fmtTime(meta.duration_s) : ""], ["tokens", t], ["label", meta.label]]
-    .filter(([, v]) => v).map(([k, v]) => `<span class="chip">${k} <b>${esc(v)}</b></span>`).join(" ");
-  $("slider").max = Math.max(0, frames.length - 1);
-  drawTimeline();
+  computeKinds();
+  memAt = []; let mem = null;
+  for (const e of events) { if (e.type === "memory") mem = e; else if (e.type === "snapshot") memAt.push(mem); }
+  steps = []; stepIdx = new Map();
+  const get = (n) => { if (!stepIdx.has(n)) { const st = { step: n, first: -1, last: -1, llm: null, tools: [], evs: [], kinds: new Set() }; stepIdx.set(n, st); steps.push(st); } return stepIdx.get(n); };
+  frames.forEach((s, k) => { const st = get(s.step); if (st.first < 0) st.first = k; st.last = k; kinds[k].forEach((x) => st.kinds.add(x)); });
+  for (const e of events) {
+    if (e.type === "llm") get(e.step).llm = e;
+    else if (e.type === "tool") get(e.step).tools.push(e);
+    else if (["nudge", "summary", "error", "setup", "lessons", "run_end", "autosave", "auto_popup"].includes(e.type) && stepIdx.has(e.step)) stepIdx.get(e.step).evs.push(e);
+  }
+  steps.sort((a, b) => a.step - b.step);
+  for (const st of steps) {
+    if (st.first < 0) { st.first = st.last = frameOfStep(st.step); st.noFrame = true; }
+    if (st.evs.some((e) => e.type === "nudge")) st.kinds.add("nudge");
+    if (st.evs.some((e) => e.type === "error")) st.kinds.add("error");
+    if (st.evs.some((e) => e.type === "auto_popup")) st.kinds.add("popup");
+    if (annotations[st.step]) st.kinds.add("annotation");
+    const before = frames[st.first - 1] || frames[st.first], after = frames[st.last];
+    st.dhp = st.noFrame || !before || !after || after.hp == null || before.hp == null ? 0 : after.hp - before.hp;
+    if (st.step === 0) st.dhp = 0;
+    st.raw = strip([st.llm?.text, st.llm?.reasoning, ...st.tools.map((t) => `${t.name} ${JSON.stringify(t.args)} ${t.result}`),
+      ...st.evs.map((e) => e.text || e.message || e.action || ""), annotations[st.step]?.text].join("\n"));
+    st.search = st.raw.toLowerCase();
+  }
 }
 
 async function getState(f) {
@@ -168,6 +460,83 @@ async function getState(f) {
     stateCache.set(ev.index, fetch(`files/${encodeURIComponent(runId)}/states/${name}.json`).then((r) => r.ok ? r.json() : null).catch(() => null));
   }
   return stateCache.get(ev.index);
+}
+
+// ── step list: search + filters ──
+const FILTERS = [["all", "All"], ["fights", "Fights"], ["nudges", "Nudges"], ["errors", "Errors"], ["popups", "Popups"], ["zones", "Zones"], ["notes", "Notes"]];
+const FILTER_KINDS = { fights: ["fight", "damage", "death"], nudges: ["nudge"], errors: ["error"], popups: ["popup"], zones: ["zone"], notes: ["annotation"] };
+let filter = "all", query = "";
+$("filters").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" class="${k === "all" ? "on" : ""}">${l}</button>`).join("");
+$("filters").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; filter = b.dataset.f; document.querySelectorAll("#filters button").forEach((x) => x.classList.toggle("on", x === b)); applyFilter(); };
+let qTimer = null;
+$("q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { query = $("q").value.trim().toLowerCase(); applyFilter(); }, 120); });
+const filtering = () => filter !== "all" || !!query;
+function stepMatches(st) {
+  if (filter !== "all" && !FILTER_KINDS[filter].some((k) => st.kinds.has(k))) return false;
+  return !query || st.search.includes(query);
+}
+function hl(text) {
+  const t = esc(text);
+  if (!query) return t;
+  const i = text.toLowerCase().indexOf(query);
+  if (i < 0) return t;
+  return esc(text.slice(0, i)) + "<mark>" + esc(text.slice(i, i + query.length)) + "</mark>" + esc(text.slice(i + query.length));
+}
+function rowSnippet(st) {
+  const txt = (st.llm?.text || st.llm?.reasoning || st.evs.find((e) => e.type === "setup")?.action || "").replace(/\s+/g, " ").trim();
+  if (query && !txt.toLowerCase().includes(query)) {
+    const i = st.search.indexOf(query);
+    if (i >= 0) return "…" + st.raw.slice(Math.max(0, i - 30), i + 90).replace(/\s+/g, " ");
+  }
+  return txt;
+}
+function toolSummary(st) {
+  const names = st.tools.filter((t) => !["note", "set_goal", "forget_note"].includes(t.name)).map((t) => t.name);
+  const mem = st.tools.length - names.length;
+  const out = []; for (const n of names) { const l = out[out.length - 1]; if (l && l[0] === n) l[1]++; else out.push([n, 1]); }
+  return out.map(([n, c]) => c > 1 ? `${n}×${c}` : n).join(", ") + (mem ? (out.length ? " " : "") + "✎mem" : "") || (st.step === 0 ? "start" : "—");
+}
+const ICONS = { death: ["☠", "var(--bad)", "died"], error: ["✕", "var(--l-error)", "error"], nudge: ["!", "var(--l-nudge)", "harness nudge"], popup: ["◫", "var(--l-popup)", "popup"],
+  zone: ["→", "var(--l-zone)", "zone change"], level: ["▲", "var(--l-level)", "level up"], summary: ["≡", "var(--l-summary)", "context summarized"], annotation: ["✎", "var(--note)", "reviewer note"] };
+function renderList() {
+  $("slist").innerHTML = steps.map((st) => {
+    const cls = ["srow", st.kinds.has("death") ? "k-death" : st.kinds.has("damage") ? "k-damage" : st.kinds.has("fight") ? "k-fight" : ""].join(" ");
+    const ic = Object.entries(ICONS).filter(([k]) => st.kinds.has(k)).map(([, [g, c, t]]) => `<i style="color:${c}" title="${t}">${g}</i>`).join("");
+    const dhp = st.dhp ? `<span class="dhp ${st.dhp < 0 ? "neg" : "pos"}">${st.dhp > 0 ? "+" : ""}${st.dhp}</span>` : "";
+    const ann = annotations[st.step]?.text;
+    return `<div class="${cls}" data-step="${st.step}"><span class="n">#${st.step}</span><span class="tools">${esc(toolSummary(st))}</span>` +
+      `<span class="ic">${ic}${dhp}</span><span class="txt">${hl(rowSnippet(st))}</span>${ann ? `<span class="ann">✎ ${esc(ann)}</span>` : ""}</div>`;
+  }).join("");
+  applyFilter(true);
+  markList();
+}
+function applyFilter(keepScroll) {
+  let n = 0;
+  const rows = $("slist").children;
+  steps.forEach((st, i) => {
+    const ok = stepMatches(st); if (ok) n++;
+    const row = rows[i]; if (!row) return;
+    row.hidden = !ok;
+    if (query && ok) row.querySelector(".txt").innerHTML = hl(rowSnippet(st));
+  });
+  $("count").textContent = filtering() ? `${n} of ${steps.length} steps match · [ ] jump between them` : `${steps.length} steps · ${frames.length} frames`;
+  if (!keepScroll) { drawTimeline(); markList(true); }
+}
+$("slist").onclick = (e) => {
+  const row = e.target.closest(".srow"); if (!row) return;
+  const st = stepIdx.get(Number(row.dataset.step));
+  if (st.noFrame) { viewStep = st.step; show(st.first, true); } else show(st.first);
+  if (window.matchMedia("(max-width: 1400px)").matches) $("steps").classList.remove("open");
+};
+function markList(center) {
+  const stepNo = viewStep ?? frames[cur]?.step;
+  const prev = $("slist").querySelector(".srow.cur");
+  const row = $("slist").querySelector(`.srow[data-step="${stepNo}"]`);
+  if (prev && prev !== row) prev.classList.remove("cur");
+  if (!row) return;
+  row.classList.add("cur");
+  const list = $("slist"), r = row.getBoundingClientRect(), lr = list.getBoundingClientRect();
+  if (center || r.top < lr.top || r.bottom > lr.bottom) list.scrollTop += r.top - lr.top - lr.height / 3;
 }
 
 // ── map ──
@@ -187,24 +556,33 @@ function cellGlyph(cs) {
   if (cs.some((c) => c.blocksMovement)) return ["#", COLORS.wall];
   return ["·", COLORS.feature];
 }
+function targetOf(k) {
+  const t = toolAt.get(k); if (!t) return null;
+  const a = t.args || {}, s = frames[k], p = frames[k - 1];
+  const from = p && p.zoneId === s.zoneId && p.x != null ? p : s;
+  if (a.x != null && a.y != null && a.x >= 0 && a.y >= 0) return { from: [from.x, from.y], to: [a.x, a.y], name: t.name };
+  const d = DIRS[String(a.direction || "").toLowerCase()];
+  if (d && ["attack", "move", "interact"].includes(t.name)) return { from: [from.x, from.y], to: [from.x + d[0], from.y + d[1]], name: t.name };
+  return null;
+}
 let mapGrid = null, mapCell = 10;
 function drawMap(state) {
   const cv = $("map"), ctx = cv.getContext("2d");
   const z = state?.zone || {}, W = z.width || 80, H = z.height || 25;
   const cssW = cv.parentElement.clientWidth || 800;
   mapCell = cssW / W;
-  const dpr = window.devicePixelRatio || 1;
-  cv.width = Math.round(cssW * dpr); cv.height = Math.round(mapCell * H * 1.6 * dpr);
-  cv.style.height = (mapCell * H * 1.6) + "px";
-  ctx.scale(dpr, dpr);
   const ch = mapCell * 1.6;
-  const css = getComputedStyle(document.documentElement);
-  ctx.fillStyle = "#132026"; ctx.fillRect(0, 0, cssW, ch * H);  // explored ground; the game is dark in any theme
-  if (!state?.player) { ctx.fillStyle = "#888"; ctx.fillText("not in game", 10, 20); mapGrid = null; return; }
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(ch * H * dpr);
+  cv.style.height = (ch * H) + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#132026"; ctx.fillRect(0, 0, cssW, ch * H);  // the game is dark in any theme
+  if (!state?.player) { ctx.fillStyle = "#888"; ctx.font = "14px system-ui"; ctx.fillText("not in game at this frame", 10, 20); mapGrid = null; return; }
   const explored = z.explored || [];
   mapGrid = new Map();
   for (const c of state.cells || []) { const k = c.x + "," + c.y; if (!mapGrid.has(k)) mapGrid.set(k, []); mapGrid.get(k).push(c); }
-  ctx.font = `${Math.floor(Math.min(ch, mapCell * 1.7))}px ${css.getPropertyValue("--mono")}`;
+  const mono = cssVar("--mono");
+  ctx.font = `${Math.floor(Math.min(ch, mapCell * 1.7))}px ${mono}`;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const known = explored.length ? explored[y]?.[x] === "1" : true;
@@ -214,10 +592,36 @@ function drawMap(state) {
     const [g, col] = cellGlyph(cs);
     ctx.fillStyle = col; ctx.fillText(g, x * mapCell + mapCell / 2, y * ch + ch / 2);
   }
+  const cx = (x) => x * mapCell + mapCell / 2, cy = (y) => y * ch + ch / 2;
+  // trail: where the player was over the last frames in this zone
+  const snap = frames[cur], pts = [];
+  for (let k = cur; k >= 0 && pts.length < 40; k--) { const s = frames[k]; if (s.zoneId !== snap.zoneId) break; if (s.x != null) pts.unshift([s.x, s.y]); }
+  ctx.lineWidth = Math.max(1.5, mapCell * 0.25); ctx.lineCap = "round";
+  for (let i = 1; i < pts.length; i++) {
+    const jump = Math.max(Math.abs(pts[i][0] - pts[i - 1][0]), Math.abs(pts[i][1] - pts[i - 1][1])) > 2;  // auto_explore, go_to
+    ctx.strokeStyle = `rgba(79,195,161,${(jump ? 0.08 : 0.15) + (jump ? 0.25 : 0.75) * i / pts.length})`;
+    ctx.setLineDash(jump ? [2, 4] : []);
+    ctx.beginPath(); ctx.moveTo(cx(pts[i - 1][0]), cy(pts[i - 1][1])); ctx.lineTo(cx(pts[i][0]), cy(pts[i][1])); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  for (const [x, y] of pts.slice(0, -1)) { ctx.fillStyle = "rgba(79,195,161,.5)"; ctx.fillRect(cx(x) - 1.5, cy(y) - 1.5, 3, 3); }
+  // target of this frame's call
+  const tg = targetOf(cur);
+  if (tg) {
+    const col = FIGHT.has(tg.name) ? "#ff8a50" : tg.name === "go_to" ? "#7fd7ff" : "#c0c8cc";
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(cx(tg.from[0]), cy(tg.from[1])); ctx.lineTo(cx(tg.to[0]), cy(tg.to[1])); ctx.stroke(); ctx.setLineDash([]);
+    const r = Math.max(4, mapCell * 0.8);
+    ctx.beginPath(); ctx.arc(cx(tg.to[0]), cy(tg.to[1]), r, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx(tg.to[0]) - r - 3, cy(tg.to[1])); ctx.lineTo(cx(tg.to[0]) + r + 3, cy(tg.to[1]));
+    ctx.moveTo(cx(tg.to[0]), cy(tg.to[1]) - r - 3); ctx.lineTo(cx(tg.to[0]), cy(tg.to[1]) + r + 3); ctx.stroke();
+    ctx.font = `bold 11px system-ui`; ctx.textAlign = "left"; ctx.fillStyle = col;
+    ctx.fillText(tg.name, Math.min(cx(tg.to[0]) + r + 4, cssW - 60), cy(tg.to[1]) - r - 2); ctx.textAlign = "center";
+  }
   const p = state.player;
   ctx.fillStyle = "rgba(79,195,161,.35)"; ctx.fillRect(p.x * mapCell, p.y * ch, mapCell, ch);
-  ctx.fillStyle = COLORS.player; ctx.font = `bold ${Math.floor(Math.min(ch, mapCell * 1.7))}px ${css.getPropertyValue("--mono")}`;
-  ctx.fillText("@", p.x * mapCell + mapCell / 2, p.y * ch + ch / 2);
+  ctx.fillStyle = COLORS.player; ctx.font = `bold ${Math.floor(Math.min(ch, mapCell * 1.7))}px ${mono}`;
+  ctx.fillText("@", cx(p.x), cy(p.y));
 }
 $("map").addEventListener("mousemove", (e) => {
   const tip = $("tip");
@@ -228,163 +632,437 @@ $("map").addEventListener("mousemove", (e) => {
   if (!cs) { tip.style.display = "none"; return; }
   tip.innerHTML = `(${x},${y}) ` + cs.map((c) => esc(strip(c.name)) + (c.isHostile ? " <b style='color:#ff5f56'>hostile</b>" : "")).join(", ");
   tip.style.display = "block";
-  tip.style.left = Math.min(e.clientX - r.left + 12, r.width - 200) + "px"; tip.style.top = (e.clientY - r.top + 12) + "px";
+  tip.style.left = Math.max(0, Math.min(e.clientX - r.left + 12, r.width - tip.offsetWidth)) + "px"; tip.style.top = (e.clientY - r.top + 14) + "px";
 });
 $("map").addEventListener("mouseleave", () => $("tip").style.display = "none");
 
-// ── panels ──
-function stepEvents(step) { return events.filter((e) => e.step === step); }
-function memoryAt(f) {
-  const ev = frames[f]; let m = null;
-  for (const e of events) { if (e.type === "memory") m = e; if (e === ev) break; }
-  return m;
+// ── view tabs ──
+const VIEWS = ["screen", "map", "split"];
+let view = store.get("view", "split");
+function setView(v) {
+  view = v; store.set("view", v);
+  $("views").className = v === "split" ? "split" : "v-" + v;
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+  if (frames.length) show(cur);
 }
-function renderStep(f) {
-  const snap = frames[f];
-  const evs = stepEvents(snap.step);
-  const llm = evs.find((e) => e.type === "llm");
-  const tools = evs.filter((e) => e.type === "tool");
-  let html = `<h2>Step ${snap.step}${snap.step === 0 ? " (start)" : ""}</h2>`;
-  if (snap.step === 0) html += `<div class="muted">Start of the run: the game state the model was first shown. Play with ▶ or the arrow keys.</div>`;
+$("tabs").onclick = (e) => { const b = e.target.closest("button"); if (b) setView(b.dataset.v); };
+
+// ── panels ──
+const KIND_COL = { damage: "--l-damage", fight: "--l-fight", popup: "--l-popup", zone: "--l-zone", nudge: "--l-nudge", summary: "--l-summary",
+  error: "--l-error", level: "--l-level", annotation: "--l-annotation", death: "--bad", heal: "--good", idle: "--muted" };
+function kindChips(set) { return [...set].map((k) => `<span style="background:var(${KIND_COL[k] || "--muted"})">${k === "annotation" ? "note" : k}</span>`).join(""); }
+function renderStep(st, f) {
+  const snapIndex = viewStep == null ? frames[f]?.index : null;
+  const llm = st.llm;
+  let html = `<h2>Step ${st.step}${st.step === 0 ? " · start" : ""} <span class="kinds">${kindChips(st.kinds)}</span><span class="sp"></span>` +
+    (llm ? `<span class="muted" style="text-transform:none;letter-spacing:0">${llm.latency ?? "?"}s · ${fmtK(llm.usage?.prompt_tokens)} in / ${fmtK(llm.usage?.completion_tokens)} out</span>` : "") + `</h2>`;
+  if (st.step === 0) html += `<div class="muted">Start of the run: the game state the model was first shown. Play with ▶ or the arrow keys.</div>`;
+  if (st.noFrame) html += `<div class="muted" style="font-size:12px">This step made no game call, so it has no frame of its own; the game view shows the frame before it.</div>`;
   if (llm) {
-    if (llm.reasoning) html += `<details ${llm.text ? "" : "open"}><summary>Thinking (${llm.reasoning.length} chars, ${llm.latency}s)</summary><div class="reasoning">${esc(llm.reasoning)}</div></details>`;
+    if (llm.reasoning) html += `<details ${llm.text ? "" : "open"}><summary>Thinking (${llm.reasoning.length} chars)</summary><div class="reasoning">${esc(llm.reasoning)}</div></details>`;
     if (llm.text) html += `<div class="thought">${esc(llm.text)}</div>`;
+    if (!llm.text && !llm.reasoning) html += `<div class="muted" style="font-size:12px">(no text or thinking — tool calls only)</div>`;
   }
-  for (const t of tools) {
-    const isCur = t.snapshot === snap.index;
-    html += `<div class="call ${isCur ? "current" : ""} ${t.is_error ? "err" : ""}"><span class="name">${esc(t.name)}</span> ` +
-      `<span class="args">${esc(JSON.stringify(t.args))}</span><pre>${esc(t.result)}</pre></div>`;
+  for (const t of st.tools) {
+    const isCur = t.snapshot != null && t.snapshot === snapIndex;
+    const k = frames.findIndex((s) => s.index === t.snapshot);
+    html += `<div class="call ${isCur ? "current" : ""} ${t.is_error ? "err" : ""}" ${k >= 0 && !isCur ? `data-frame="${k}" title="Show this call's frame"` : ""}>` +
+      `<span class="name">${esc(t.name)}</span> <span class="args">${esc(JSON.stringify(t.args))}</span>` +
+      `<span class="muted" style="font-size:11px;float:right">${t.latency != null ? t.latency + "s" : ""}</span><pre>${esc(t.result)}</pre></div>`;
   }
-  for (const e of evs) {
+  for (const e of st.evs) {
     if (e.type === "nudge") html += `<div class="ev nudge"><b>Harness (${esc(e.kind)}):</b> ${esc(e.text)}</div>`;
     if (e.type === "summary") html += `<div class="ev summary"><b>Context summarized</b> (${e.dropped_steps} old steps dropped)</div>`;
     if (e.type === "error") html += `<div class="ev error"><b>Error (${esc(e.where)}):</b> ${esc(e.message)}</div>`;
-    if (e.type === "setup") html += `<div class="ev summary"><b>Setup: ${esc(e.action)}</b></div>`;
+    if (e.type === "setup") html += `<div class="ev summary"><b>Setup: ${esc(e.action)}</b>${e.action === "choose character" ? " " + esc(e.result || "") : ""}</div>`;
+    if (e.type === "auto_popup") html += `<div class="ev summary"><b>Popups accepted by the harness:</b><ul style="margin:4px 0 0 18px;padding:0">${(e.messages || []).map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>`;
+    if (e.type === "autosave") html += `<div class="ev summary">Autosaved.</div>`;
     if (e.type === "lessons") html += `<div class="ev summary"><b>Lessons written:</b><pre>${esc(e.text)}</pre></div>`;
     if (e.type === "run_end") html += `<div class="ev ${e.outcome === "died" ? "error" : "summary"}"><b>Run ended:</b> ${esc(e.outcome)}</div>`;
   }
   $("stepcard").innerHTML = html;
-  const m = memoryAt(f);
+  // reviewer note
+  const a = annotations[st.step];
+  if (document.activeElement !== $("ann")) $("ann").value = a?.text || "";
+  $("ann").dataset.step = st.step;
+  $("annstate").textContent = a ? `saved ${a.updated || ""}` : "";
+  // memory, with notes added since the previous frame highlighted
+  const m = memAt[f], pm = f > 0 ? memAt[f - 1] : null;
+  const oldNotes = new Set(pm?.notes || []);
   $("memcard").innerHTML = `<h2>Memory at this point</h2>` + (m ?
-    `<div><b>Goal:</b> ${esc(m.goal || "—")}</div>` +
-    (m.notes?.length ? `<ol class="notes">${m.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>` : `<div class="muted">No notes.</div>`) +
+    `<div><b>Goal:</b> ${esc(m.goal || "—")}${pm && pm.goal !== m.goal ? ` <span class="badge info">changed</span>` : ""}</div>` +
+    (m.notes?.length ? `<ol class="notes">${m.notes.map((n) => `<li class="${pm && !oldNotes.has(n) ? "added" : ""}">${esc(n)}</li>`).join("")}</ol>` : `<div class="muted">No notes.</div>`) +
     (m.summary ? `<details><summary>The story so far</summary><div class="reasoning">${esc(m.summary)}</div></details>` : "")
     : `<div class="muted">Empty.</div>`);
 }
+$("stepcard").onclick = (e) => { const c = e.target.closest(".call[data-frame]"); if (c && !e.target.closest("pre")) show(Number(c.dataset.frame)); };
+
 function renderStats(state, snap) {
   const p = state?.player || {};
   const hp = p.hp ?? snap.hp, max = p.hpMax ?? snap.hpMax;
   $("hpfill").style.width = max ? Math.max(0, Math.min(100, 100 * hp / max)) + "%" : "0";
-  const items = [["HP", `${hp ?? "?"}/${max ?? "?"}`], ["Lvl", p.level], ["XP", p.xpNext ? `${p.xp}/${p.xpNext}` : p.xp],
+  $("hpfill").style.background = max && hp / max < 0.35 ? "var(--bad)" : "";
+  const items = [["HP", `${hp ?? "?"}/${max ?? "?"}`], ["Lvl", p.level ?? snap.level], ["XP", p.xpNext ? `${p.xp}/${p.xpNext}` : p.xp ?? snap.xp],
     ["AV", p.av], ["DV", p.dv], ["Pos", p.x != null ? `${p.x},${p.y}` : ""], ["Zone", strip(state?.zone?.name || snap.zone)],
-    ["Food", strip(p.hunger)], ["Water", strip(p.thirst)], ["Screen", state?.screen], ["Popup", strip(snap.popup)]];
+    ["Food", strip(p.hunger)], ["Water", strip(p.thirst)], ["Effects", (state?.effects || []).map((x) => strip(x.name || x)).join(", ")],
+    ["Screen", state?.screen || snap.screen], ["Popup", strip(snap.popup).slice(0, 80)]];
   $("stats").innerHTML = items.filter(([, v]) => v !== undefined && v !== null && v !== "")
     .map(([k, v]) => `<span><span class="muted">${k}</span> <b>${esc(v)}</b></span>`).join("");
 }
-let prevMsgs = [];
+function frameDiff(f, state, prev) {
+  const s = frames[f], p = frames[f - 1], out = [];
+  if (!p) return out;
+  if (s.hp != null && p.hp != null && s.hp !== p.hp) out.push([`${s.hp > p.hp ? "+" : ""}${s.hp - p.hp} HP`, s.hp < p.hp ? "bad" : "good"]);
+  if (s.level != null && p.level != null && s.level > p.level) out.push([`level ${s.level}!`, "good"]);
+  if ((s.xp || 0) > (p.xp || 0)) out.push([`+${s.xp - (p.xp || 0)} XP`, "good"]);
+  if (s.zoneId !== p.zoneId && s.zone) out.push([`→ ${strip(s.zone)}`, "info"]);
+  else if (s.x != null && p.x != null && (s.x !== p.x || s.y !== p.y)) out.push([`moved ${Math.max(Math.abs(s.x - p.x), Math.abs(s.y - p.y))} to (${s.x},${s.y})`, "muted"]);
+  if (state && prev) {
+    for (const key of ["inventory", "effects"]) {
+      const a = (prev[key] || []).map((x) => baseName(x.name ?? x)), b = (state[key] || []).map((x) => baseName(x.name ?? x));
+      b.filter((n) => !a.includes(n)).slice(0, 3).forEach((n) => out.push([`+ ${n}`, key === "inventory" ? "good" : "info"]));
+      a.filter((n) => !b.includes(n)).slice(0, 3).forEach((n) => out.push([`− ${n}`, "muted"]));
+    }
+  }
+  const m = memAt[f], pm = memAt[f - 1];
+  if (m && pm && m !== pm) {
+    if ((m.goal || "") !== (pm.goal || "")) out.push(["goal changed", "info"]);
+    const added = (m.notes || []).filter((n) => !(pm.notes || []).includes(n)).length, removed = (pm.notes || []).filter((n) => !(m.notes || []).includes(n)).length;
+    if (added) out.push([`+${added} note${added > 1 ? "s" : ""}`, "info"]);
+    if (removed) out.push([`−${removed} note${removed > 1 ? "s" : ""}`, "muted"]);
+    if ((m.summary || "") !== (pm.summary || "")) out.push(["context summarized", "info"]);
+  }
+  if (s.popup && s.popup !== p.popup) out.push(["popup opened", "info"]);
+  return out;
+}
 function renderMsgs(state, prevState) {
   const msgs = (state?.messages || []).map(strip);
   const before = new Set((prevState?.messages || []).map(strip));
   $("msgs").innerHTML = msgs.slice(-14).map((m) => `<div class="${before.has(m) ? "" : "new"}">${esc(m)}</div>`).join("") || "<span class='muted'>None.</span>";
 }
 
-async function show(f) {
+let urlTimer = null;
+async function show(f, keepViewStep) {
   if (!frames.length) return;
+  if (!keepViewStep) viewStep = null;
   cur = Math.max(0, Math.min(frames.length - 1, f));
   $("slider").value = cur;
   const snap = frames[cur];
   $("pos").textContent = `frame ${cur + 1}/${frames.length} · step ${snap.step} · ${fmtTime(snap.t)}`;
   if (snap.frame) { $("shot").hidden = false; $("noshot").hidden = true; $("shot").src = `files/${encodeURIComponent(runId)}/${snap.frame}`; }
   else { $("shot").hidden = true; $("noshot").hidden = false; }
-  renderStep(cur);
+  const st = stepIdx.get(viewStep ?? snap.step);
+  renderStep(st, cur);
+  markList(); markTimeline();
+  clearTimeout(urlTimer);
+  urlTimer = setTimeout(() => history.replaceState(null, "", `?run=${encodeURIComponent(runId)}&frame=${cur + 1}`), 300);
   const [state, prev] = await Promise.all([getState(cur), cur > 0 ? getState(cur - 1) : null]);
-  if (cur !== Number($("slider").value)) return;  // user moved on while loading
-  drawMap(state); renderStats(state, snap); renderMsgs(state, prev);
+  if (cur !== Number($("slider").value)) return;  // moved on while loading
+  if (view !== "screen") drawMap(state);
+  renderStats(state, snap); renderMsgs(state, prev);
+  $("diff").innerHTML = frameDiff(cur, state, prev).map(([t, c]) => `<span class="badge ${c}">${esc(t)}</span>`).join("") || `<span class="muted" style="font-size:12px">No change since the previous frame.</span>`;
   for (let i = 1; i <= 3; i++) getState(cur + i);
-  markTimeline();
 }
 
 // ── timeline ──
+const TL_W = 1000, TL_HP = 34, TL_LANE = 10, TL_H = TL_HP + LANES.length * TL_LANE + 2;
+$("tllabels").innerHTML = `<div>HP</div>` + LANES.map(([k, l]) => `<div style="color:var(--l-${k})">${l}</div>`).join("");
+const tlX = (k) => (k / Math.max(1, frames.length - 1)) * TL_W;
 function drawTimeline() {
-  const svg = $("tl"), W = 1000, H = 70, n = Math.max(1, frames.length - 1);
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const css = getComputedStyle(document.documentElement);
-  let pts = frames.map((s, i) => `${(i / n) * W},${H - 8 - (s.hpMax ? (s.hp / s.hpMax) : 0) * (H - 16)}`).join(" ");
-  let marks = "";
-  const stepFrame = (step) => { const i = frames.findIndex((s) => s.step >= step); return i < 0 ? frames.length - 1 : i; };
-  for (const e of events) {
-    const color = e.type === "nudge" ? css.getPropertyValue("--warn") : e.type === "summary" ? css.getPropertyValue("--info") :
-      e.type === "error" || (e.type === "run_end" && e.outcome === "died") ? css.getPropertyValue("--bad") : null;
-    if (!color) continue;
-    const x = (stepFrame(e.step) / n) * W;
-    marks += `<line x1="${x}" x2="${x}" y1="0" y2="10" stroke="${color}" stroke-width="3"><title>${esc(e.type)}: ${esc(e.kind || e.where || e.outcome || "")}</title></line>`;
+  const svg = $("tl");
+  svg.setAttribute("viewBox", `0 0 ${TL_W} ${TL_H}`);
+  const hpPts = frames.map((s, i) => `${tlX(i).toFixed(1)},${(TL_HP - 2 - (s.hpMax ? s.hp / s.hpMax : 0) * (TL_HP - 6)).toFixed(1)}`);
+  let out = `<rect x="0" y="0" width="${TL_W}" height="${TL_HP}" fill="var(--panel2)"/>` +
+    `<polygon points="0,${TL_HP} ${hpPts.join(" ")} ${TL_W},${TL_HP}" fill="var(--hp)" opacity=".18"/>` +
+    `<polyline points="${hpPts.join(" ")}" fill="none" stroke="var(--hp)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  LANES.forEach(([k], li) => {
+    const y = TL_HP + 2 + li * TL_LANE;
+    if (li % 2 === 0) out += `<rect x="0" y="${y}" width="${TL_W}" height="${TL_LANE}" fill="var(--panel2)" opacity=".6"/>`;
+    let d = "";
+    kinds.forEach((ks, i) => { if (ks.has(k)) d += `M${tlX(i).toFixed(1)} ${y + 1}v${TL_LANE - 2}`; });
+    if (d) out += `<path d="${d}" stroke="var(--l-${k})" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
+  });
+  kinds.forEach((ks, i) => { if (ks.has("death")) out += `<line x1="${tlX(i)}" x2="${tlX(i)}" y1="0" y2="${TL_H}" stroke="var(--bad)" stroke-width="3" vector-effect="non-scaling-stroke"/>`; });
+  if (filtering()) {  // dim the frames whose step doesn't match the search/filter
+    let d = "";
+    frames.forEach((s, i) => { const st = stepIdx.get(s.step); if (st && stepMatches(st)) d += `M${tlX(i).toFixed(1)} ${TL_HP - 4}v4`; });
+    out += `<path d="${d}" stroke="var(--note)" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
   }
-  frames.forEach((s, i) => { if (i && s.level !== frames[i - 1].level && s.level != null) {
-    const x = (i / n) * W; marks += `<line x1="${x}" x2="${x}" y1="0" y2="${H}" stroke="${css.getPropertyValue("--accent")}" stroke-dasharray="3 3"><title>level ${s.level}</title></line>`; } });
-  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="${css.getPropertyValue("--hp")}" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
-    marks + `<line id="cursor" x1="0" x2="0" y1="0" y2="${H}" stroke="${css.getPropertyValue("--text")}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  out += `<line id="hover" x1="-10" x2="-10" y1="0" y2="${TL_H}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 2" vector-effect="non-scaling-stroke"/>` +
+    `<line id="cursor" x1="0" x2="0" y1="0" y2="${TL_H}" stroke="var(--text)" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  svg.innerHTML = out;
+  markTimeline();
 }
 function markTimeline() {
   const c = document.getElementById("cursor"); if (!c) return;
-  const x = (cur / Math.max(1, frames.length - 1)) * 1000; c.setAttribute("x1", x); c.setAttribute("x2", x);
+  const x = tlX(cur); c.setAttribute("x1", x); c.setAttribute("x2", x);
 }
-$("tl").addEventListener("click", (e) => { const r = e.currentTarget.getBoundingClientRect(); show(Math.round(((e.clientX - r.left) / r.width) * (frames.length - 1))); });
+const tlFrameAt = (e) => { const r = $("tl").getBoundingClientRect(); return Math.max(0, Math.min(frames.length - 1, Math.round(((e.clientX - r.left) / r.width) * (frames.length - 1)))); };
+$("tl").addEventListener("click", (e) => show(tlFrameAt(e)));
+$("tl").addEventListener("mousemove", (e) => {
+  const k = tlFrameAt(e), s = frames[k], st = stepIdx.get(s.step), tip = $("tltip");
+  const h = document.getElementById("hover"); if (h) { h.setAttribute("x1", tlX(k)); h.setAttribute("x2", tlX(k)); }
+  const t = toolAt.get(k);
+  const ks = [...kinds[k]].filter((x) => x !== "idle");
+  tip.innerHTML = (s.frame ? `<img src="files/${encodeURIComponent(runId)}/${s.frame}" alt="">` : "") +
+    `<div><b>step ${s.step}</b> · frame ${k + 1} · ${fmtTime(s.t)} · HP ${s.hp ?? "?"}/${s.hpMax ?? "?"}</div>` +
+    (ks.length ? `<div class="kinds" style="margin:3px 0">${kindChips(new Set(ks))}</div>` : "") +
+    (t ? `<div style="font-family:var(--mono)">${esc(t.name)} ${esc(JSON.stringify(t.args)).slice(0, 80)}</div>` : "") +
+    (annotations[s.step] ? `<div style="color:var(--note)">✎ ${esc(annotations[s.step].text.slice(0, 120))}</div>` : "") +
+    `<div class="muted">${esc((st?.llm?.text || st?.llm?.reasoning || "").slice(0, 140))}</div>`;
+  tip.style.display = "block";
+  const w = tip.offsetWidth, hgt = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(e.clientX - w / 2, innerWidth - w - 8)) + "px";
+  tip.style.top = Math.max(8, $("tl").getBoundingClientRect().top - hgt - 8) + "px";
+});
+$("tl").addEventListener("mouseleave", () => { $("tltip").style.display = "none"; const h = document.getElementById("hover"); if (h) { h.setAttribute("x1", -10); h.setAttribute("x2", -10); } });
 
-// ── controls ──
-function stop() { clearInterval(timer); timer = null; $("play").textContent = "▶"; }
-function play() {
-  if (timer) return stop();
-  $("play").textContent = "⏸";
-  timer = setInterval(() => { if (cur >= frames.length - 1) { if (!$("follow").checked) stop(); return; } show(cur + 1); }, Number($("speed").value));
+// ── navigation ──
+function jumpEvent(dir) {
+  for (let k = cur + dir; k >= 0 && k < frames.length; k += dir) {
+    if (filtering()) {
+      const st = stepIdx.get(frames[k].step);
+      if (st && stepMatches(st) && frames[k].step !== frames[cur].step) return show(stepIdx.get(frames[k].step).first);
+    } else if ([...kinds[k]].some((x) => NOTABLE.has(x))) return show(k);
+  }
 }
-$("play").onclick = play;
-$("speed").onchange = () => { if (timer) { stop(); play(); } };
+function jumpStep(dir) {
+  const i = steps.findIndex((st) => st.step === (viewStep ?? frames[cur].step));
+  for (let j = i + dir; j >= 0 && j < steps.length; j += dir) {
+    const st = steps[j];
+    if (st.noFrame) { viewStep = st.step; return show(st.first, true); }
+    if (st.first !== cur) return show(st.first);
+  }
+}
+
+// ── playback (smart: slower on fights and events, faster through idle frames) ──
+function stopPlay() { playing = false; clearTimeout(timer); timer = null; $("play").textContent = "▶"; }
+function schedule() {
+  clearTimeout(timer);
+  if (!playing) return;
+  let ms = 1000 / Number($("speed").value);
+  if ($("smart").checked) ms *= paceOf(cur);
+  timer = setTimeout(async () => {
+    if (cur >= frames.length - 1) { if (!$("follow").checked) return stopPlay(); return schedule(); }
+    await show(cur + 1); schedule();
+  }, ms);
+}
+function togglePlay() { if (playing) return stopPlay(); playing = true; $("play").textContent = "⏸"; schedule(); }
+$("play").onclick = togglePlay;
+$("speed").value = String(store.get("speed", "1"));
+$("speed").onchange = () => { store.set("speed", $("speed").value); schedule(); };
+$("smart").checked = store.get("smart", false);
+$("smart").onchange = () => store.set("smart", $("smart").checked);
 $("first").onclick = () => show(0); $("last").onclick = () => show(frames.length - 1);
 $("prev").onclick = () => show(cur - 1); $("next").onclick = () => show(cur + 1);
+$("prevEv").onclick = () => jumpEvent(-1); $("nextEv").onclick = () => jumpEvent(1);
 $("slider").oninput = (e) => show(Number(e.target.value));
-document.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
-  if (e.key === " ") { e.preventDefault(); play(); }
-  else if (e.key === "ArrowRight") { e.preventDefault(); show(cur + 1); }
-  else if (e.key === "ArrowLeft") { e.preventDefault(); show(cur - 1); }
-  else if (e.key === "Home") show(0); else if (e.key === "End") show(frames.length - 1);
-});
-window.addEventListener("resize", () => show(cur));
+$("stepsDrawerBtn").onclick = () => $("steps").classList.toggle("open");
 
+// ── reviewer notes ──
+async function saveAnnotation() {
+  const step = Number($("ann").dataset.step), text = $("ann").value;
+  if ((annotations[step]?.text || "") === text.trim()) return;
+  $("annstate").textContent = "saving…";
+  try {
+    const r = await fetch("api/annotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: runId, step, text }) });
+    if (!r.ok) throw new Error(await r.text());
+    annotations = await r.json();
+    buildModel(); renderList(); drawTimeline();
+    $("annstate").textContent = annotations[step] ? "saved" : "deleted";
+  } catch (err) { $("annstate").innerHTML = `<span style="color:var(--bad)">not saved: ${esc(err.message)}</span>`; }
+}
+$("annsave").onclick = saveAnnotation;
+$("ann").addEventListener("blur", saveAnnotation);
+$("ann").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveAnnotation(); $("ann").blur(); } e.stopPropagation(); });
+
+// ── MP4 export ──
+let exportPolling = false;
+function exportLength() {
+  if (!frames.length) return;
+  const sp = Number($("xspeed").value);
+  const secs = kinds.reduce((a, _, k) => a + ($("xsmart").checked ? paceOf(k) : 1), 0) / sp;
+  $("xlen").textContent = `≈ ${fmtTime(secs)} long`;
+}
+["xspeed", "xsmart"].forEach((id) => $(id).addEventListener("change", exportLength));
+async function exportPoll(start) {
+  const id = encodeURIComponent(runId);
+  const url = start ? `api/export?id=${id}&speed=${$("xspeed").value}&smart=${$("xsmart").checked ? 1 : 0}&ann=${$("xann").checked ? 1 : 0}` : `api/export_status?id=${id}`;
+  let r;
+  try { r = await (await fetch(url)).json(); } catch { $("xstatus").textContent = "server not reachable"; return; }
+  const running = r.jobs.filter((j) => j.state === "running");
+  const failed = r.jobs.filter((j) => j.state === "error");
+  $("xstatus").innerHTML = running.map((j) => `${esc(j.name)}: ${j.total ? `${j.done}/${j.total}` : "starting…"}`).join("<br>") +
+    failed.map((j) => `<div style="color:var(--bad)">${esc(j.name)}: ${esc(j.error)}</div>`).join("");
+  $("xfiles").innerHTML = r.files.length ? `<div class="muted" style="margin-top:6px">Exports of this run:</div>` +
+    r.files.map((f) => `<a href="${f.url}" download>${esc(f.name)}</a> <span class="muted" style="font-size:12px">${(f.bytes / 1e6).toFixed(1)} MB · ${esc(f.modified)}</span>`).join("") : "";
+  $("exportBtn").textContent = running.length ? `Exporting… ▾` : r.files.length ? `Export MP4 (${r.files.length}) ▾` : "Export MP4 ▾";
+  if (running.length && !exportPolling) { exportPolling = true; setTimeout(() => { exportPolling = false; exportPoll(false); }, 1000); }
+}
+$("xgo").onclick = () => exportPoll(true);
+function toggleExport(force) {
+  const p = $("exportPop"); p.hidden = force !== undefined ? !force : !p.hidden;
+  if (!p.hidden) { exportLength(); exportPoll(false); }
+}
+$("exportBtn").onclick = (e) => { e.stopPropagation(); toggleExport(); };
+document.addEventListener("click", (e) => { if (!$("exportPop").hidden && !e.target.closest("#exportwrap")) toggleExport(false); });
+
+// ── keyboard ──
+function toggleHelp(force) { $("help").hidden = force !== undefined ? !force : !$("help").hidden; }
+$("helpBtn").onclick = () => toggleHelp();
+$("help").onclick = (e) => { if (e.target === $("help")) toggleHelp(false); };
+document.addEventListener("keydown", (e) => {
+  const tag = e.target.tagName;
+  if (e.key === "Escape") { toggleHelp(false); toggleExport(false); $("steps").classList.remove("open"); if (tag === "INPUT") e.target.blur(); return; }
+  if ((tag === "INPUT" && e.target.type !== "range" && e.target.type !== "checkbox") || tag === "TEXTAREA" || tag === "SELECT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "?") return toggleHelp();
+  if (e.key === "t" || e.key === "T") return cycleTheme();
+  if (!runId) return;
+  const k = e.key;
+  if (k === " ") { e.preventDefault(); togglePlay(); }
+  else if (k === "ArrowRight" && e.shiftKey || k === "j") { e.preventDefault(); jumpStep(1); }
+  else if (k === "ArrowLeft" && e.shiftKey || k === "k") { e.preventDefault(); jumpStep(-1); }
+  else if (k === "ArrowRight") { e.preventDefault(); show(cur + 1); }
+  else if (k === "ArrowLeft") { e.preventDefault(); show(cur - 1); }
+  else if (k === "]") jumpEvent(1); else if (k === "[") jumpEvent(-1);
+  else if (k === "Home") show(0); else if (k === "End") show(frames.length - 1);
+  else if (k === "/") { e.preventDefault(); $("steps").classList.add("open"); $("q").focus(); }
+  else if (k === "v" || k === "V") setView(VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]);
+  else if (k === "s" || k === "S") { $("smart").checked = !$("smart").checked; store.set("smart", $("smart").checked); }
+  else if (k === "a" || k === "A") { e.preventDefault(); $("ann").focus(); }
+  else if (k === "l" || k === "L") $("steps").classList.toggle("open");
+  else if (k === "e" || k === "E") toggleExport();
+});
+let resizeTimer = null;
+window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => show(cur, true), 150); });
+
+// ── loading a run ──
+async function loadRun() {
+  const data = await (await fetch("api/run?id=" + encodeURIComponent(runId))).json();
+  meta = data.meta; events = data.events; annotations = data.annotations || {};
+  buildModel();
+  const t = meta.tokens ? `${fmtK(meta.tokens.prompt)} in / ${fmtK(meta.tokens.completion)} out` : "";
+  const maxLvl = Math.max(0, ...frames.map((s) => s.level || 0));
+  $("meta").innerHTML = [["", meta.label || meta.run_id], ["model", meta.model], ["outcome", meta.outcome || "running…"], ["steps", meta.steps ?? steps.length],
+    ["time", meta.duration_s ? fmtTime(meta.duration_s) : ""], ["max lvl", maxLvl || ""], ["tokens", t]]
+    .filter(([, v]) => v !== "" && v != null).map(([k, v]) => `<span class="chip">${k} <b>${esc(v)}</b></span>`).join("");
+  document.title = `${meta.label || runId} · Qud replay`;
+  $("slider").max = Math.max(0, frames.length - 1);
+  renderList(); drawTimeline();
+}
 async function poll() {
   if (meta.ended) return;
   const atEnd = cur >= frames.length - 1;
   await loadRun();
-  if ($("follow").checked && atEnd) show(frames.length - 1); else markTimeline();
+  if ($("follow").checked && atEnd) show(frames.length - 1); else show(cur, true);
   setTimeout(poll, 3000);
 }
 
-// ── MP4 export ──
-async function exportStatus(start) {
-  const q = "id=" + encodeURIComponent(runId) + (start ? "&spf=" + $("spf").value : "");
-  const job = await (await fetch((start ? "api/export?" : "api/export_status?") + q)).json();
-  const st = $("exportstatus");
-  if (job.state === "running") {
-    $("export").disabled = true;
-    st.textContent = job.total ? `rendering ${job.done}/${job.total}…` : "starting…";
-    setTimeout(() => exportStatus(false), 1000);
-  } else {
-    $("export").disabled = false;
-    $("export").textContent = job.file ? "Re-export MP4" : "Export MP4";
-    st.innerHTML = job.state === "error" ? `<span style="color:var(--bad)">${esc(job.error)}</span>`
-      : job.file ? `<a href="${job.file}" download>download replay.mp4</a>` : "";
-  }
+// ── run list ──
+function sparkline(hp) {
+  if (!hp?.length) return "";
+  const n = Math.max(1, hp[hp.length - 1][0]);
+  const pts = hp.map(([st, , h, m]) => `${(st / n * 300).toFixed(1)},${(32 - (m ? h / m : 0) * 28).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 300 34" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--hp)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
 }
-$("export").onclick = () => exportStatus(true);
+let runs = [];
+async function showList() {
+  document.body.classList.remove("viewing");
+  $("list").hidden = false;
+  runs = await (await fetch("api/runs")).json();
+  if (!runs.length) { $("list").innerHTML = "<p class='muted'>No runs yet. Start one with <code>uv run python -m harness play</code>.</p>"; return; }
+  const sel = new Set();
+  $("list").innerHTML = `<div class="cards">` + runs.map((r) => {
+    const s = r.summary || {}, id = encodeURIComponent(r.id);
+    const outcome = r.outcome || (r.ended ? "ended" : r.idle_s != null && r.idle_s > 300 ? "unfinished" : "running");
+    const img = (f, cls) => f ? `<img class="${cls}" loading="lazy" src="files/${id}/${f}" alt="">` : "";
+    return `<div class="rcard" data-id="${esc(r.id)}">
+      <div class="thumb" data-open>${img(s.thumb_last, "last")}${img(s.thumb_first, "first")}<span class="outcome ${esc(outcome)}">${esc(outcome)}</span></div>
+      <div class="body">
+        <div class="title" data-open>${esc(r.label || r.id)}</div>
+        <div class="sub">${esc(r.model || "")} · ${esc(r.started || "")}${r.label ? ` · <span title="${esc(r.id)}">${esc(r.id.slice(0, 15))}</span>` : ""}</div>
+        <div class="grid">
+          <span class="muted">steps<b>${r.steps ?? "–"}</b></span><span class="muted">max level<b>${s.max_level ?? "–"}</b></span><span class="muted">zones<b>${s.zones?.length ?? "–"}</b></span>
+          <span class="muted">time<b>${r.duration_s ? fmtTime(r.duration_s) : "–"}</b></span><span class="muted">tokens<b>${r.tokens ? fmtK(r.tokens.prompt + r.tokens.completion) : "–"}</b></span><span class="muted">nudges<b>${s.nudges ?? "–"}</b></span>
+        </div>
+        ${sparkline(s.hp)}
+        <div class="zones" title="${esc((s.zones || []).join(" → "))}">${esc((s.zones || []).join(" → ") || "no zones")}</div>
+        <div class="foot"><label class="muted"><input type="checkbox" data-cmp> compare</label>${s.annotations ? `<span style="color:var(--note)">✎ ${s.annotations}</span>` : ""}<span style="margin-left:auto"><a href="?run=${id}">open →</a></span></div>
+      </div></div>`;
+  }).join("") + `</div><div id="cmpbar" hidden><div class="box"><span id="cmptext"></span><button class="btn" id="cmpgo">Compare</button></div></div>`;
+  $("list").onclick = (e) => {
+    const card = e.target.closest(".rcard"); if (!card) return;
+    if (e.target.closest("[data-open]")) location.search = "?run=" + encodeURIComponent(card.dataset.id);
+  };
+  $("list").onchange = (e) => {
+    if (!e.target.matches("[data-cmp]")) return;
+    const id = e.target.closest(".rcard").dataset.id;
+    if (e.target.checked) sel.add(id); else sel.delete(id);
+    if (sel.size > 2) { const first = [...sel][0]; sel.delete(first); document.querySelector(`.rcard[data-id="${CSS.escape(first)}"] [data-cmp]`).checked = false; }
+    $("cmpbar").hidden = !sel.size;
+    $("cmptext").textContent = sel.size === 2 ? "2 runs selected" : "pick one more run to compare";
+    $("cmpgo").disabled = sel.size !== 2;
+  };
+  document.addEventListener("click", (e) => { if (e.target.id === "cmpgo") location.search = "?compare=" + [...sel].map(encodeURIComponent).join(","); });
+}
 
+// ── compare two runs ──
+async function showCompare(ids) {
+  $("compare").hidden = false;
+  const all = await (await fetch("api/runs")).json();
+  const [a, b] = ids.map((id) => all.find((r) => r.id === id));
+  if (!a || !b) { $("compare").innerHTML = `<p>Couldn't find both runs. <a href="?">Back to the list</a></p>`; return; }
+  const sa = a.summary || {}, sb = b.summary || {};
+  const rows = [
+    ["outcome", a.outcome || (a.ended ? "ended" : "unfinished"), b.outcome || (b.ended ? "ended" : "unfinished")], ["model", a.model, b.model], ["started", a.started, b.started],
+    ["steps", a.steps, b.steps, 1], ["duration", a.duration_s && fmtTime(a.duration_s), b.duration_s && fmtTime(b.duration_s)],
+    ["max level", sa.max_level, sb.max_level, 1], ["max XP", sa.max_xp, sb.max_xp, 1], ["zones visited", sa.zones?.length, sb.zones?.length, 1],
+    ["final HP", a.final ? `${a.final.hp}/${a.final.hpMax}` : "", b.final ? `${b.final.hp}/${b.final.hpMax}` : ""],
+    ["prompt tokens", fmtK(a.tokens?.prompt), fmtK(b.tokens?.prompt)], ["completion tokens", fmtK(a.tokens?.completion), fmtK(b.tokens?.completion)],
+    ["harness nudges", sa.nudges, sb.nudges, -1], ["tool errors", sa.tool_errors, sb.tool_errors, -1], ["errors", sa.errors, sb.errors, -1],
+    ["context summaries", sa.summaries, sb.summaries], ["reviewer notes", sa.annotations, sb.annotations]];
+  const better = (x, y, dir) => dir && x != null && y != null && x !== y && (dir > 0 ? x > y : x < y);
+  const table = `<table class="kv"><tr><th></th><th class="c-a">A · ${esc(a.label || a.id)}</th><th class="c-b">B · ${esc(b.label || b.id)}</th></tr>` +
+    rows.map(([k, x, y, dir]) => `<tr><td class="muted">${k}</td><td class="${better(x, y, dir) ? "better" : ""}">${esc(x ?? "–")}</td><td class="${better(y, x, dir) ? "better" : ""}">${esc(y ?? "–")}</td></tr>`).join("") + `</table>`;
+  const curve = (hp, n, col) => `<polyline points="${(hp || []).map(([st, , h, m]) => `${(st / n * 1000).toFixed(1)},${(195 - (m ? h / m : 0) * 185).toFixed(1)}`).join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  const n = Math.max(1, ...[sa.hp, sb.hp].map((h) => h?.length ? h[h.length - 1][0] : 1));
+  const chart = `<svg viewBox="0 0 1000 200" preserveAspectRatio="none" style="width:100%;height:200px;background:var(--panel2);border-radius:6px">
+    ${[0.25, 0.5, 0.75].map((f) => `<line x1="0" x2="1000" y1="${195 - f * 185}" y2="${195 - f * 185}" stroke="var(--line)" vector-effect="non-scaling-stroke"/>`).join("")}
+    ${curve(sa.hp, n, "var(--accent)")}${curve(sb.hp, n, "var(--info)")}</svg>
+    <div class="muted" style="font-size:12px;display:flex;justify-content:space-between"><span>step 0</span><span>HP % by step (<span class="c-a">A</span>, <span class="c-b">B</span>)</span><span>step ${n}</span></div>`;
+  const tools = [...new Set([...Object.keys(sa.tools || {}), ...Object.keys(sb.tools || {})])]
+    .sort((x, y) => ((sb.tools?.[y] || 0) + (sa.tools?.[y] || 0)) - ((sb.tools?.[x] || 0) + (sa.tools?.[x] || 0))).slice(0, 14);
+  const tmax = Math.max(1, ...tools.map((t) => Math.max(sa.tools?.[t] || 0, sb.tools?.[t] || 0)));
+  const bars = `<div class="bars">` + tools.map((t) => `<div><span style="font-family:var(--mono)">${esc(t)}</span>` +
+    `<span style="display:flex;justify-content:flex-end;gap:4px;align-items:center"><span class="muted">${sa.tools?.[t] || 0}</span><span class="bar a" style="width:${(sa.tools?.[t] || 0) / tmax * 85}%"></span></span>` +
+    `<span style="display:flex;gap:4px;align-items:center"><span class="bar b" style="width:${(sb.tools?.[t] || 0) / tmax * 85}%"></span><span class="muted">${sb.tools?.[t] || 0}</span></span></div>`).join("") + `</div>`;
+  const thumb = (r, s) => s.thumb_last ? `<a href="?run=${encodeURIComponent(r.id)}"><img src="files/${encodeURIComponent(r.id)}/${s.thumb_last}" style="width:100%;border-radius:6px;display:block" alt="last frame"></a>` : "";
+  $("compare").innerHTML = `<p><a href="?">← All runs</a></p>
+    <div class="cmpgrid"><div class="card"><h2 class="c-a">A · last frame</h2>${thumb(a, sa)}</div><div class="card"><h2 class="c-b">B · last frame</h2>${thumb(b, sb)}</div></div>
+    <div class="card">${table}</div>
+    <div class="card"><h2>HP over the run</h2>${chart}</div>
+    <div class="cmpgrid">
+      <div class="card"><h2>Tool calls (<span class="c-a">A</span> | <span class="c-b">B</span>)</h2>${bars}</div>
+      <div class="card"><h2>Zones visited</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+        <ol class="c-a" style="margin:0;padding-left:18px">${(sa.zones || []).map((z) => `<li><span style="color:var(--text)">${esc(z)}</span></li>`).join("")}</ol>
+        <ol class="c-b" style="margin:0;padding-left:18px">${(sb.zones || []).map((z) => `<li><span style="color:var(--text)">${esc(z)}</span></li>`).join("")}</ol></div></div>
+    </div>`;
+}
+
+// ── start ──
 (async () => {
+  const cmp = params.get("compare");
+  if (cmp) return showCompare(cmp.split(",").slice(0, 2));
   if (!runId) return showList();
-  $("exportbox").hidden = false;
-  exportStatus(false);
+  document.body.classList.add("viewing");
   $("viewer").hidden = false;
+  $("exportwrap").hidden = false;
+  setView(view);
   await loadRun();
+  exportPoll(false);
   if (!meta.ended) { $("follow").checked = true; await show(frames.length - 1); setTimeout(poll, 3000); }
   else await show(Number(params.get("frame") || 1) - 1);
+  markList(true);
 })();
 </script>
 </body>

@@ -1,8 +1,12 @@
 """Render a recorded run to MP4: one 1920x1080 frame per snapshot, with the game screenshot,
-the map drawn from the recorded state, stats, the model's step (thinking, text, tool calls and
-results), its memory, recent messages and an HP timeline.
+the map drawn from the recorded state, stats, what changed since the previous frame, the model's
+step (thinking, text, tool calls and results), its memory, recent messages and an event timeline.
 
-    python -m harness export <run> [--seconds-per-frame 1.0] [--out file.mp4]
+    python -m harness export <run> [--speed 2] [--smart] [--annotations] [--out file.mp4]
+
+`--speed` scales the base pace of one second per frame; `--smart` lingers on fights, damage and
+other events and skips quickly over idle stretches (the same rule as the viewer's smart playback);
+`--annotations` burns the reviewer's notes from the viewer into the frames.
 
 Frames are drawn with Pillow and piped to ffmpeg (libx264), which must be on PATH.
 """
@@ -51,7 +55,16 @@ def font(kind: str, size: int):
 
 
 def strip(s) -> str:
-    return re.sub(r"&[a-zA-Z]", "", re.sub(r"\{\{[^|}]*\|([^}]*)\}\}", r"\1", str(s or "")))
+    """Remove Qud colour markup ({{B|text}}, possibly nested, and &X codes)."""
+    s, prev = str(s or ""), None
+    while s != prev:
+        s, prev = re.sub(r"\{\{[^|{}]*\|([^{}]*)\}\}", r"\1", s), s
+    return re.sub(r"&[a-zA-Z]", "", s)
+
+
+def _base_name(name: str) -> str:
+    """An item or effect name without the details that change as it's used (charges, drams, stack size)."""
+    return re.sub(r"\s*(\[[^\]]*\]|\([^)]*\)|x\d+)", "", strip(name)).strip()
 
 
 def wrap(text: str, f, width: int) -> list[str]:
@@ -125,7 +138,7 @@ def _glyph(cs: list[dict]) -> tuple[str, tuple]:
     return "·", GLYPH["feature"]
 
 
-def draw_map(d, state: dict, box) -> None:
+def draw_map(d, state: dict, box, trail: list[tuple[int, int]] | None = None) -> None:
     x0, y0, x1, y1 = box
     d.rectangle(box, fill=(19, 32, 38))
     z = (state or {}).get("zone") or {}
@@ -149,6 +162,13 @@ def draw_map(d, state: dict, box) -> None:
             if (x, y) in grid:
                 g, col = _glyph(grid[(x, y)])
                 d.text((cx + cw / 2, cy + ch / 2), g, font=f, fill=col, anchor="mm")
+    if trail and len(trail) > 1:  # recent path in this zone, oldest first
+        pts = [(x0 + tx * cw + cw / 2, y0 + ty * ch + ch / 2) for tx, ty in trail]
+        for n in range(1, len(pts)):
+            shade = int(60 + 140 * n / len(pts))
+            jump = max(abs(trail[n][0] - trail[n - 1][0]), abs(trail[n][1] - trail[n - 1][1])) > 2
+            d.line((pts[n - 1], pts[n]), fill=(shade // 3, shade // 2, shade // 2) if jump else
+                   (shade // 2, shade, int(shade * 0.85)), width=1 if jump else 2)
     p = state["player"]
     px, py = x0 + p["x"] * cw, y0 + p["y"] * ch
     d.rectangle((px, py, px + cw, py + ch), fill=(40, 90, 78))
@@ -166,14 +186,163 @@ def load_run(run_dir: Path) -> tuple[dict, list[dict]]:
     return meta, events
 
 
+# Tools that only look at things or touch the model's own memory; a frame from one of these with no
+# change in position, HP, zone or popup counts as idle for smart pacing.
+PASSIVE_TOOLS = {"get_state", "get_map", "note", "forget_note", "set_goal", "list_skills", "trade_list", "look"}
+FIGHT_TOOLS = {"attack", "fire", "use_ability"}
+# Seconds-per-frame multipliers for smart pacing, strongest kind wins (see frame_kinds).
+PACE = {"death": 3.0, "damage": 2.0, "fight": 2.0, "level": 1.75, "annotation": 2.0, "zone": 1.4, "popup": 1.25,
+        "nudge": 1.25, "error": 1.25, "idle": 0.3}
+# Timeline lanes, top to bottom: (kind, label, colour)
+LANES = [("damage", "damage", (224, 90, 90)), ("fight", "fight", (240, 130, 80)), ("popup", "popup", (190, 150, 230)),
+         ("zone", "zone", (90, 168, 224)), ("nudge", "nudge", (224, 160, 64)), ("summary", "summary", (120, 150, 170)),
+         ("error", "error", (255, 70, 70)), ("level", "level", (79, 195, 161)), ("annotation", "note", (240, 220, 90))]
+
+
+def frame_kinds(frames: list[dict], events: list[dict], annotations: dict | None = None) -> list[set[str]]:
+    """What happened at each snapshot: damage, heal, fight, popup, zone, nudge, summary, error, level, death,
+    annotation, idle. Mirrors frameKinds() in viewer/index.html."""
+    kinds: list[set[str]] = [set() for _ in frames]
+    if not frames:
+        return kinds
+    by_index = {s["index"]: k for k, s in enumerate(frames)}
+    last_for_step: dict[int, int] = {}
+    for k, s in enumerate(frames):
+        last_for_step[s["step"]] = k
+
+    def frame_of_step(step: int) -> int:
+        best = 0
+        for st, k in last_for_step.items():
+            if st <= step and k > best:
+                best = k
+        return best
+    tool_at: dict[int, dict] = {}
+    for e in events:
+        t = e.get("type")
+        if t == "tool" and e.get("snapshot") in by_index:
+            k = by_index[e["snapshot"]]
+            tool_at[k] = e
+            if e.get("name") in FIGHT_TOOLS:
+                kinds[k].add("fight")
+            if e.get("is_error"):
+                kinds[k].add("error")
+        elif t in ("nudge", "summary", "error"):
+            kinds[frame_of_step(e.get("step", 0))].add(t)
+        elif t == "run_end" and e.get("outcome") == "died":
+            kinds[-1].add("death")
+    for step in (annotations or {}):
+        try:
+            st = int(step)
+        except ValueError:
+            continue
+        for k, s in enumerate(frames):
+            if s["step"] == st:
+                kinds[k].add("annotation")
+    for k, s in enumerate(frames):
+        p = frames[k - 1] if k else None
+        if s.get("dead"):
+            kinds[k].add("death")
+        if p is None:
+            continue
+        if s.get("hp") is not None and p.get("hp") is not None:
+            if s["hp"] < p["hp"]:
+                kinds[k].add("damage")
+            elif s["hp"] > p["hp"]:
+                kinds[k].add("heal")
+        if s.get("zoneId") and p.get("zoneId") and s["zoneId"] != p["zoneId"]:
+            kinds[k].add("zone")
+        if s.get("popup") and s.get("popup") != p.get("popup"):
+            kinds[k].add("popup")
+        if s.get("level") is not None and p.get("level") is not None and s["level"] > p["level"]:
+            kinds[k].add("level")
+        tool = tool_at.get(k)
+        still = (s.get("x"), s.get("y"), s.get("hp"), s.get("zoneId"), s.get("popup")) == \
+                (p.get("x"), p.get("y"), p.get("hp"), p.get("zoneId"), p.get("popup"))
+        if still and not kinds[k] and (tool is None or tool.get("name") in PASSIVE_TOOLS or tool.get("name") == "wait"):
+            kinds[k].add("idle")
+    return kinds
+
+
+def pace(kinds: set[str]) -> float:
+    """Smart-pacing multiplier for one frame."""
+    if "idle" in kinds:
+        return PACE["idle"]
+    return max([PACE[k] for k in kinds if k in PACE] or [1.0])
+
+
+def changes(snap: dict, prev_snap: dict | None, state: dict, prev_state: dict | None,
+            mem: dict | None, prev_mem: dict | None) -> list[tuple[str, str]]:
+    """What changed since the previous frame, as (text, kind) badges. Mirrors frameDiff() in the viewer."""
+    out: list[tuple[str, str]] = []
+    if not prev_snap:
+        return out
+    if snap.get("hp") is not None and prev_snap.get("hp") is not None and snap["hp"] != prev_snap["hp"]:
+        dh = snap["hp"] - prev_snap["hp"]
+        out.append((f"{dh:+d} HP", "bad" if dh < 0 else "good"))
+    if snap.get("level") is not None and prev_snap.get("level") is not None and snap["level"] > prev_snap["level"]:
+        out.append((f"level {snap['level']}!", "good"))
+    if (snap.get("xp") or 0) > (prev_snap.get("xp") or 0):
+        out.append((f"+{snap['xp'] - (prev_snap.get('xp') or 0)} XP", "good"))
+    if snap.get("zoneId") != prev_snap.get("zoneId") and snap.get("zone"):
+        out.append((f"→ {strip(snap['zone'])}", "info"))
+    elif snap.get("x") is not None and prev_snap.get("x") is not None and \
+            (snap["x"], snap["y"]) != (prev_snap["x"], prev_snap["y"]):
+        dist = max(abs(snap["x"] - prev_snap["x"]), abs(snap["y"] - prev_snap["y"]))
+        out.append((f"moved {dist} to ({snap['x']},{snap['y']})", "muted"))
+    if prev_state is not None and state:
+        def names(st, key):
+            return [_base_name(x.get("name") if isinstance(x, dict) else x) for x in (st.get(key) or [])]
+        for key in ("inventory", "effects"):
+            a, b = names(prev_state, key), names(state, key)
+            gained = [n for n in b if n not in a]
+            lost = [n for n in a if n not in b]
+            for n in gained[:3]:
+                out.append((f"+ {n}", "good" if key == "inventory" else "info"))
+            for n in lost[:3]:
+                out.append((f"− {n}", "muted"))
+    if mem is not None and prev_mem is not None and mem is not prev_mem:
+        if (mem.get("goal") or "") != (prev_mem.get("goal") or ""):
+            out.append(("goal changed", "info"))
+        a, b = prev_mem.get("notes") or [], mem.get("notes") or []
+        added, removed = len([n for n in b if n not in a]), len([n for n in a if n not in b])
+        if added:
+            out.append((f"+{added} note" + ("s" if added > 1 else ""), "info"))
+        if removed:
+            out.append((f"−{removed} note" + ("s" if removed > 1 else ""), "muted"))
+        if (mem.get("summary") or "") != (prev_mem.get("summary") or ""):
+            out.append(("context summarized", "info"))
+    return out
+
+
+def export_name(speed: float = 1.0, smart: bool = False, annotations: bool = False) -> str:
+    """Default file name for an export, so exports with different settings sit side by side."""
+    sp = f"{speed:g}".replace(".", "_")
+    return f"replay_{sp}x" + ("_smart" if smart else "") + ("_notes" if annotations else "") + ".mp4"
+
+
 class Renderer:
-    def __init__(self, run_dir: Path):
+    def __init__(self, run_dir: Path, annotations: bool = False):
         self.dir = run_dir
         self.meta, self.events = load_run(run_dir)
         self.frames = [e for e in self.events if e["type"] == "snapshot"]
         self.by_step: dict[int, list[dict]] = {}
         for e in self.events:
             self.by_step.setdefault(e["step"], []).append(e)
+        self.notes: dict[str, dict] = {}
+        if annotations:
+            try:
+                self.notes = json.loads((run_dir / "annotations.json").read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+        self.kinds = frame_kinds(self.frames, self.events, self.notes)
+        # memory event in force at each frame
+        self.mem: list[dict | None] = []
+        mem = None
+        for e in self.events:
+            if e["type"] == "memory":
+                mem = e
+            elif e["type"] == "snapshot":
+                self.mem.append(mem)
 
     def _state(self, snap: dict) -> dict:
         try:
@@ -182,13 +351,7 @@ class Renderer:
             return {}
 
     def _memory_at(self, i: int) -> dict | None:
-        target, mem = self.frames[i], None
-        for e in self.events:
-            if e["type"] == "memory":
-                mem = e
-            if e is target:
-                break
-        return mem
+        return self.mem[i]
 
     def render(self, i: int, prev_state: dict | None = None) -> tuple[Image.Image, dict]:
         snap = self.frames[i]
@@ -230,14 +393,35 @@ class Renderer:
             x += int(font("sans", 15).getlength(k)) + 6
             d.text((x, 698), str(v), font=font("bold", 15), fill=TEXT)
             x += int(font("bold", 15).getlength(str(v))) + 18
-        draw_map(d, state, (28, 722, 1124, 996))
+        trail = []
+        for s in self.frames[max(0, i - 40):i + 1]:
+            if s.get("zoneId") == snap.get("zoneId") and s.get("x") is not None:
+                trail.append((s["x"], s["y"]))
+            else:
+                trail = []
+        draw_map(d, state, (28, 722, 1124, 996), trail)
 
         # right: step, memory, messages
         evs = self.by_step.get(snap["step"], [])
         llm = next((e for e in evs if e["type"] == "llm"), None)
         tools = [e for e in evs if e["type"] == "tool"]
         _panel(d, (1152, 56, 1904, 640), f"Step {snap['step']}" + (" — start" if snap["step"] == 0 else ""))
-        b = Block(d, 1168, 88, 720, 628)
+        y = 84
+        badges = changes(snap, self.frames[i - 1] if i else None, state, prev_state,
+                         self.mem[i], self.mem[i - 1] if i else None)
+        x = 1168
+        for text, kind in badges:
+            f = font("bold", 14)
+            w = int(f.getlength(text)) + 16
+            if x + w > 1888:
+                x, y = 1168, y + 26
+                if y > 160:
+                    break
+            col = {"bad": BAD, "good": HP, "info": INFO}.get(kind, MUTED)
+            d.rounded_rectangle((x, y, x + w, y + 22), radius=11, outline=col, width=1)
+            d.text((x + 8, y + 3), text, font=f, fill=col)
+            x += w + 6
+        b = Block(d, 1168, y + (30 if badges else 4), 720, 628)
         if llm:
             if llm.get("reasoning"):
                 b.text("Thinking: " + llm["reasoning"].replace("\n", " "), font("sans", 15), MUTED, max_lines=7)
@@ -269,44 +453,76 @@ class Renderer:
         for msg in msgs[-6:]:
             b.text(msg, font("mono", 13), TEXT if msg not in before else MUTED, max_lines=1, gap=0)
 
+        note = self.notes.get(str(snap["step"]))
+        if note and note.get("text"):
+            f = font("bold", 18)
+            lines = wrap("Reviewer: " + note["text"], f, 1060)[:3]
+            top = 656 - 12 - len(lines) * 24
+            overlay = Image.new("RGBA", (1104, len(lines) * 24 + 12), (40, 34, 10, 225))
+            img.paste(overlay, (24, top), overlay)
+            d.rectangle((24, top, 28, top + len(lines) * 24 + 12), fill=(240, 220, 90))
+            for n, line in enumerate(lines):
+                d.text((38, top + 6 + n * 24), line, font=f, fill=(250, 235, 150))
+
         self._timeline(d, i)
         return img, state
 
     def _timeline(self, d, i: int) -> None:
-        x0, y0, x1, y1 = 16, 1016, 1904, 1068
+        x0, y0, x1, y1 = 16, 1016, 1904, 1072
         d.rounded_rectangle((x0, y0, x1, y1), radius=8, fill=PANEL, outline=LINE)
         n = max(1, len(self.frames) - 1)
-        xs = lambda k: x0 + 8 + (x1 - x0 - 16) * k / n
-        pts = [(xs(k), y1 - 6 - (s["hp"] / s["hpMax"] if s.get("hpMax") else 0) * (y1 - y0 - 12))
+        lx0 = x0 + 8
+        xs = lambda k: lx0 + (x1 - 8 - lx0) * k / n
+        # HP curve in the top half, event ticks in a strip below it
+        hy0, hy1 = y0 + 4, y0 + 30
+        pts = [(xs(k), hy1 - (s["hp"] / s["hpMax"] if s.get("hpMax") else 0) * (hy1 - hy0))
                for k, s in enumerate(self.frames) if s.get("hp") is not None]
         if len(pts) > 1:
             d.line(pts, fill=HP, width=2)
-        for k, s in enumerate(self.frames):
-            if k and s.get("level") is not None and s.get("level") != self.frames[k - 1].get("level"):
-                d.line((xs(k), y0, xs(k), y1), fill=ACCENT, width=1)
+        lane_h = (y1 - 4 - (hy1 + 4)) / len(LANES)
+        for li, (kind, _, col) in enumerate(LANES):
+            ly = hy1 + 4 + li * lane_h
+            for k, ks in enumerate(self.kinds):
+                if kind in ks:
+                    d.rectangle((xs(k) - 1, ly, xs(k) + 1, ly + max(1, lane_h - 0.5)), fill=col)
+        for k, ks in enumerate(self.kinds):
+            if "death" in ks:
+                d.line((xs(k), y0 + 2, xs(k), y1 - 2), fill=BAD, width=3)
         cx = xs(i)
         d.line((cx, y0 + 2, cx, y1 - 2), fill=TEXT, width=2)
 
 
-def export(run_dir: Path, out: Path | None = None, seconds_per_frame: float = 1.0, fps: int = 30,
+def export(run_dir: Path, out: Path | None = None, seconds_per_frame: float = 1.0, speed: float = 1.0,
+           smart: bool = False, annotations: bool = False, fps: int | None = None,
            progress: Callable[[int, int], None] | None = None) -> Path:
+    """Render the run to MP4. Each snapshot is shown for seconds_per_frame / speed seconds, scaled per frame
+    by pace() when smart is set. Returns the output path (default: <run>/replay_<speed>x[_smart][_notes].mp4)."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("ffmpeg not found on PATH")
-    r = Renderer(run_dir)
+    if seconds_per_frame <= 0 or speed <= 0:
+        raise ValueError("seconds_per_frame and speed must be positive")
+    r = Renderer(run_dir, annotations=annotations)
     if not r.frames:
         raise RuntimeError("the run has no snapshots")
-    out = out or run_dir / "replay.mp4"
-    tmp = out.with_suffix(".part.mp4")
+    out = out or run_dir / export_name(speed, smart, annotations)
+    tmp = out.with_name(out.stem + ".part.mp4")
+    base = seconds_per_frame / speed
+    durations = [base * (pace(k) if smart else 1.0) for k in r.kinds]
+    # Frames go in at a fixed rate and are repeated to make up each one's duration; 10 fps is fine-grained
+    # enough for pacing and cheap to encode (the picture only changes once per snapshot).
+    fps = fps or min(30, max(10, round(1 / min(durations))))
     cmd = [ffmpeg, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
-           "-framerate", f"{1 / seconds_per_frame:.6f}", "-i", "-", "-r", str(fps), "-c:v", "libx264",
-           "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)]
+           "-framerate", str(fps), "-i", "-", "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+           "-tune", "stillimage", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     prev = None
     try:
         for i in range(len(r.frames)):
             img, prev = r.render(i, prev)
-            proc.stdin.write(img.tobytes())
+            data = img.tobytes()
+            for _ in range(max(1, round(durations[i] * fps))):
+                proc.stdin.write(data)
             if progress:
                 progress(i + 1, len(r.frames))
         proc.stdin.close()

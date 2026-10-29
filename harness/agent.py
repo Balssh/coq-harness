@@ -28,6 +28,13 @@ DEFAULT_OBJECTIVE = ("Explore the world, talk with friendly and neutral NPCs, ta
 _SCREEN_OK = {"respond_popup", "close_menu", "get_state", "get_map", "trade_list", "trade_select", "trade_offer",
               "list_skills", "learn_skill", "raise_attribute"}
 
+class _BackAtMenu(Exception):
+    """The game fell back to the main menu while we waited for a new game."""
+
+
+# Places a new character should not enter before this level (one reminder each per run).
+ZONE_GATES = [("Red Rock", 2)]
+
 _DEATH = re.compile(r"\byou (have )?died\b|\byou are dead\b", re.I)
 
 
@@ -36,7 +43,8 @@ class Config:
     objective: str = DEFAULT_OBJECTIVE
     max_steps: int = 300
     max_minutes: float = 0.0          # 0 = no time limit
-    new_game: bool = False            # from the main menu: new random character instead of continuing
+    new_game: bool = False            # from the main menu: start a new character instead of continuing
+    character: str = "choose"         # new games: "choose" (the model picks, presets preferred), "random", or a preset name
     screenshots: bool = True
     shot_width: int = 1280
     keep_steps: int = 30              # steps kept verbatim in the context before summarizing
@@ -59,6 +67,19 @@ def _brief(state: dict) -> dict:
             "zoneId": (state.get("zone") or {}).get("id"), "screen": state.get("screen"),
             "popup": (popup.get("title") or popup.get("message") or "")[:120] if popup else "",
             "segment": (state.get("time") or {}).get("segment"), "dead": bool(state.get("isDead"))}
+
+
+_MARKUP = re.compile(r"\{\{[^|{}]*\||\}\}|&[a-zA-Z]|\^[a-zA-Z]")
+_ACCEPT_BUTTONS = {"accept", "ok", "close", "continue", "done"}
+
+
+def _is_message_popup(popup: dict | None) -> bool:
+    """A popup that only informs: no options, no text input, and at most an Accept/OK button."""
+    if not popup or popup.get("options") or popup.get("hasInput"):
+        return False
+    buttons = {str(b.get("command", "")).lower() for b in popup.get("buttons") or []}
+    msg = str(popup.get("message") or "")
+    return buttons <= _ACCEPT_BUTTONS and "?" not in msg[-80:]
 
 
 def _is_dead(state: dict) -> bool:
@@ -96,6 +117,9 @@ class Agent:
         self.journal = Journal(cfg.journal)
         self.history: list[list[dict]] = []
         self.opening = ""
+        self._gates_warned: set[str] = set()
+        self._walking = 0
+        self.people: dict[str, dict[str, tuple]] = {}  # zone id -> name -> last seen (x, y)
         self.step = 0
         self.n_snap = 0
         self.last_state: dict = {}
@@ -123,6 +147,7 @@ class Agent:
         self.rec.event("snapshot", self.step, index=idx, label=label, frame=frame, **_brief(state))
         if "error" not in state:
             self.last_state = state
+            self._remember_people(state)
         return state
 
     def _record_memory(self) -> None:
@@ -131,7 +156,27 @@ class Agent:
     # ── context ────────────────────────────────────────────────────────
 
     def _system(self) -> str:
-        return self.system_static + "\n\n" + self.memory.block()
+        return self.system_static + "\n\n" + self.memory.block() + self._people_block()
+
+    def _remember_people(self, state: dict) -> None:
+        """Map memory for named, non-hostile creatures (villagers, merchants): the state only lists
+        creatures in sight, so remember where each was last seen in each zone."""
+        zone = (state.get("zone") or {}).get("id")
+        if not zone:
+            return
+        seen = self.people.setdefault(zone, {})
+        for c in state.get("cells") or []:
+            name = str(c.get("name") or "")
+            if c.get("isCreature") and not c.get("isHostile") and name[:1].isupper():
+                seen[name] = (c.get("x"), c.get("y"))
+
+    def _people_block(self) -> str:
+        zone = (self.last_state.get("zone") or {}).get("id")
+        seen = self.people.get(zone or "", {})
+        if not seen:
+            return ""
+        return ("\n\nNamed people seen in this zone (last known position; they move around): "
+                + "; ".join(f"{n} ({x},{y})" for n, (x, y) in seen.items()))
 
     def _messages(self) -> list[dict]:
         msgs = [{"role": "system", "content": self._system()}, {"role": "user", "content": self.opening}]
@@ -200,6 +245,17 @@ class Agent:
         elif self.game.is_game_tool(call.name):
             text, err = await self.game.call(call.name, call.arguments)
             state = await self._snapshot(call.name)
+            if state and not _is_dead(state) and _is_message_popup(state.get("popup")):
+                blocked = "popup is open" in text[:150]
+                note, state = await self._accept_messages(state)
+                if blocked and not state.get("popup"):  # the call never ran; run it now
+                    text, err = await self.game.call(call.name, call.arguments)
+                    state = await self._snapshot(call.name)
+                    text = note + "\n\n" + text
+                else:
+                    # The result shows the popup that has just been accepted; keep only its first line.
+                    first = text.splitlines()[0] if text else ""
+                    text = ("" if "POPUP OPEN" in first else first + "\n\n") + note
         else:
             text, err = f"Unknown tool {call.name!r}.", True
         self.rec.event("tool", self.step, id=call.id, name=call.name, args=call.arguments, result=text,
@@ -209,6 +265,31 @@ class Agent:
         self._calls.append(f"{call.name}{json.dumps(call.arguments, sort_keys=True)} -> "
                            f"{(b['zoneId'], b['x'], b['y'], b['hp'], b['segment'], b['screen'], b['popup'])}")
         return state
+
+    async def _accept_messages(self, state: dict) -> tuple[str, dict]:
+        """Accept plain message popups (lore, quest steps, XP, level-up notices) for the model and
+        hand it their text: answering each one cost a whole step. Popups that ask something stay."""
+        seen = []
+        for _ in range(8):
+            popup = state.get("popup")
+            if _is_dead(state) or not _is_message_popup(popup):
+                break
+            seen.append(" ".join(f"{popup.get('title') or ''} {popup.get('message') or ''}".split()))
+            await self.game.call("respond_popup", {"dismiss": True})
+            await asyncio.sleep(0.4)  # chained popups open a moment later
+            state = await self._snapshot("auto-accept popup")
+        self.rec.event("auto_popup", self.step, messages=seen)
+        text = "[harness] Message popup(s) accepted for you:\n" + "\n".join(f"- {_MARKUP.sub('', m)[:600]}" for m in seen)
+        popup = state.get("popup")
+        if popup:
+            opts = "; ".join(f"{o.get('n')}. {' '.join(str(o.get('text', '')).split())}" for o in popup.get("options") or [])
+            btns = ", ".join(b.get("command", "") for b in popup.get("buttons") or [])
+            text += (f"\nAnother popup needs your answer: {_MARKUP.sub('', popup.get('title') or '')} "
+                     f"{_MARKUP.sub('', popup.get('message') or '')[:800]}"
+                     + (f"\nOptions: {opts}" if opts else "") + (f"\nButtons: {btns}" if btns else ""))
+        else:
+            text += "\nNo popup is open now."
+        return text, state
 
     def _nudge(self, step_msgs: list[dict], text: str, kind: str) -> None:
         self.rec.event("nudge", self.step, kind=kind, text=text)
@@ -275,10 +356,27 @@ class Agent:
         if zone_after and zone_before and zone_after != zone_before:
             name = (self.last_state.get("zone") or {}).get("name", "")
             self._nudge(step_msgs, f"You are now in a new zone: {name}. get_state / get_map show what's here.", "zone")
+            level = (self.last_state.get("player") or {}).get("level") or 0
+            for place, min_level in ZONE_GATES:
+                if place.lower() in name.lower() and level < min_level and zone_after not in self._gates_warned:
+                    self._gates_warned.add(zone_after)
+                    self._nudge(step_msgs, f"CAUTION: {place} is dangerous for a level-{level} character; the "
+                                f"plan is level {min_level}+ first. Go back toward Joppa and level up on weaker "
+                                "creatures unless you have a strong reason; deeper in, hulking baboons and giant "
+                                "amoebas kill level-1 characters.", "gate")
         self.history.append(step_msgs)
         self._watchdog(step_msgs)
 
     def _watchdog(self, step_msgs: list[dict]) -> None:
+        # Walking tile by tile with nothing hostile around: one step per tile burns the step budget.
+        names = [m["name"] for m in step_msgs if m["role"] == "tool"]
+        calm = not any(c.get("isCreature") and c.get("isHostile") for c in self.last_state.get("cells") or [])
+        self._walking = self._walking + 1 if names and set(names) <= {"move", "get_map"} and calm else 0
+        if self._walking >= 6:
+            self._nudge(self.history[-1], "TIP: you have walked one tile per turn for 6 turns with no hostiles in "
+                        "sight. `go_to(x, y)` walks a whole route in one call (it stops if something happens), and "
+                        "`auto_explore` explores unknown parts of the zone and stops when a hostile appears.", "walking")
+            self._walking = 0
         b = _brief(self.last_state)
         self._progress.append((b["zoneId"], b["x"], b["y"], b["hp"], b["segment"], b["screen"], b["popup"]))
         if len(self._progress) >= 8 and len(set(self._progress[-8:])) == 1:
@@ -300,12 +398,28 @@ class Agent:
         if "error" in state:
             raise SystemExit(f"Can't read the game state: {state['error']}\n"
                              "Is Qud running with the CoQ MCP Bridge mod? (Player.log: '[mcp] MCP server listening')")
+        if _is_dead(state) or state.get("screen") == "GameSummaryScreen":
+            # The last character died: get past "You died" and the summary screen to the menu.
+            for _ in range(20):
+                if state.get("inMainMenu") or state.get("screen") == "MainMenu":
+                    break
+                if state.get("popup"):
+                    await self.game.call("respond_popup", {"dismiss": True})
+                elif state.get("screen") not in (None, "", "Stage"):
+                    await self.game.call("close_menu")
+                await asyncio.sleep(1.5)
+                state = await self.game.raw_state()
+            self.rec.event("setup", 0, action="leave death screens", result=str(state.get("screen")), is_error=False)
         # At the main menu the state still carries the last game's player, so check the menu first.
         at_menu = bool(state.get("inMainMenu")) or state.get("screen") == "MainMenu"
         if not at_menu and state.get("inGame") and state.get("player"):
             if not self.cfg.new_game:
                 return state
             # Keep the loaded character: save it and go to the menu, then roll a new one.
+            for _ in range(5):  # quit_to_menu refuses while a popup is open
+                if not (await self.game.raw_state()).get("popup"):
+                    break
+                await self.game.call("respond_popup", {"dismiss": True})
             text, err = await self.game.call("quit_to_menu", timeout=120)
             self.rec.event("setup", 0, action="quit_to_menu", result=text[:2000], is_error=err)
             print(f"[setup] quit_to_menu: {text.splitlines()[0] if text else ''}")
@@ -319,8 +433,7 @@ class Agent:
         else:
             actions = ["continue_game"]
         if actions == ["new game"]:
-            await self._new_game()
-            return await self._wait_in_game()
+            return await self._new_game_fallback()
         for name in actions:
             text, err = await self.game.call(name)
             self.rec.event("setup", 0, action=name, result=text[:2000], is_error=err)
@@ -332,15 +445,26 @@ class Agent:
         return await self._wait_in_game()
 
     async def _new_game_fallback(self) -> dict:
-        await self._new_game()
-        return await self._wait_in_game()
+        # Right after Qud launches its data can still be loading, and building the world then
+        # fails back to the main menu; the second try works.
+        for attempt in range(3):
+            await self._new_game()
+            try:
+                return await self._wait_in_game()
+            except _BackAtMenu:
+                self.rec.event("setup", 0, action="new game", result="world generation failed; back at the "
+                               "main menu, retrying", is_error=True)
+                print("[setup] world generation failed, retrying")
+                await asyncio.sleep(10)
+        raise SystemExit("Could not start a new game: world generation kept failing.")
 
     async def _new_game(self) -> None:
         """start_new_game + chargen_auto. Right after Qud launches the menu can ignore the first
         start_new_game, which shows up as chargen_auto finding no character builder; retry then."""
+        preset = await self._choose_character()
         for attempt in range(3):
             for name in ("start_new_game", "chargen_auto"):
-                text, err = await self.game.call(name)
+                text, err = await self.game.call(name, {"preset": preset} if name == "chargen_auto" else None)
                 self.rec.event("setup", 0, action=name, result=text[:2000], is_error=err)
                 print(f"[setup] {name}: {text.splitlines()[0][:150] if text else ''}")
                 if "EmbarkBuilder not found" in text:
@@ -352,14 +476,44 @@ class Agent:
             await asyncio.sleep(3)
         raise SystemExit("Could not start a new game: the character builder never opened.")
 
+    async def _choose_character(self) -> str:
+        """Which character to roll: the model picks from the game's presets unless the config names one."""
+        if self.cfg.character.lower() != "choose":
+            return self.cfg.character
+        presets, err = await self.game.call("chargen_presets")
+        if err or presets.startswith("FAILED") or not presets.strip():
+            self.rec.event("setup", 0, action="chargen_presets", result=presets[:1000], is_error=True)
+            return "random"
+        names = [line.split(" (", 1)[0] for line in presets.splitlines() if " (" in line]
+        lessons = self.journal.recent(2000)
+        prompt = (PROMPTS / "character.md").read_text(encoding="utf-8").format(
+            presets=presets, journal=f"\nLessons from your earlier runs:\n{lessons}\n" if lessons else "")
+        choice, why = "random", ""
+        try:
+            reply = await self._write("You choose characters for a Caves of Qud run.", prompt)
+            first, _, why = reply.text.strip().partition("\n")
+            first = first.strip().strip("`*#. ").lower()
+            choice = next((n for n in names if n.lower() == first),
+                          next((n for n in names if n.lower() in first), "random"))
+            self.rec.event("setup", 0, action="choose character", result=f"{choice}: {why.strip()}"[:1000],
+                           is_error=False, thinking=reply.reasoning[:4000] if reply.reasoning else "")
+        except Exception as e:
+            self.rec.event("error", 0, where="choose character", message=str(e))
+        print(f"[setup] character: {choice}")
+        return choice
+
     async def _wait_in_game(self, timeout: float = 300.0) -> dict:
         """Wait for the game to be playable. A new game shows "You embark for the caves of Qud" on
         top of the world-generation screen; accept it here. After that Qud is already waiting for
         the first move, although the world-generation view stays up until a turn passes."""
         deadline = time.monotonic() + timeout
+        at_menu = 0
         while time.monotonic() < deadline:
             state = await self.game.raw_state()
             stack = str(state.get("viewStack") or "")
+            at_menu = at_menu + 1 if stack == "MainMenu" else 0
+            if at_menu >= 8:
+                raise _BackAtMenu()
             if state.get("popup") and "WorldCreationProgress" in stack:
                 text, _ = await self.game.call("respond_popup", {"dismiss": True})
                 self.rec.event("setup", 0, action="accept embark popup", result=text[:500], is_error=False)
@@ -441,6 +595,13 @@ class Agent:
                 await self._snapshot("start")
                 text, _ = await game.call("get_state")
                 self.opening = "The game is running. Here is the full current state:\n\n" + text
+                p = (self.last_state or {}).get("player") or {}
+                if p.get("level") == 1 and not p.get("xp"):
+                    self.opening += ("\n\nThis is a brand-new character. Follow the Opening plan in your "
+                                     "instructions, starting with getting to know your character.")
+                    self.memory.goal = self.memory.goal or ("Opening: learn my character, sweep Joppa (explore, "
+                                                            "talk to everyone, take quests), gear up, then "
+                                                            "reach level 2 near Joppa before Red Rock.")
                 self._record_memory()
                 started = time.monotonic()
                 while not self.stop_reason:
